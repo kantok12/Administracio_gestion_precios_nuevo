@@ -3,6 +3,7 @@ const dotenv = require('dotenv');
 const userRoutes = require('./routes/userRoutes');
 const productRoutes = require('./routes/productRoutes');
 const { fetchCurrencyValuesController, fetchProducts } = require('./controllers/productController');
+const { port } = require('./config/env');
 
 dotenv.config();
 
@@ -48,5 +49,4 @@ const initializeCache = async () => {
 // Inicializar caché al arrancar el servidor
 initializeCache();
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(port, () => console.log(`Server running on port ${port}`));

@@ -1,4 +1,6 @@
 const { fetchAvailableProducts, fetchFilteredProducts, fetchCurrencyValues } = require('../utils/fetchProducts');
+const fs = require('fs');
+const path = require('path');
 
 let cachedProducts = [];
 let currencyCache = {
@@ -13,6 +15,19 @@ let currencyCache = {
     fecha: null
   }
 };
+
+const CACHE_FILE = path.join(__dirname, '../productsCache.json');
+
+// Cargar cache desde disco al iniciar
+if (fs.existsSync(CACHE_FILE)) {
+  try {
+    const data = fs.readFileSync(CACHE_FILE, 'utf-8');
+    cachedProducts = JSON.parse(data);
+    console.log('Cache de productos cargado desde disco.');
+  } catch (err) {
+    console.error('Error al leer el cache de productos:', err);
+  }
+}
 
 // Función para actualizar automáticamente los valores de las divisas
 const updateCurrencyValues = async () => {
@@ -42,6 +57,15 @@ setInterval(updateCurrencyValues, TWENTY_FOUR_HOURS);
 // Ejecutar la primera actualización inmediatamente
 updateCurrencyValues();
 
+const saveCacheToDisk = () => {
+  try {
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cachedProducts, null, 2), 'utf-8');
+    //console.log('Cache de productos guardado en disco.');
+  } catch (err) {
+    console.error('Error al guardar el cache de productos:', err);
+  }
+};
+
 // @desc    Fetch products from webhook and cache them
 // @route   GET /api/products/fetch
 // @access  Public
@@ -49,6 +73,7 @@ const fetchProducts = async (req, res) => {
   try {
     const products = await fetchAvailableProducts();
     cachedProducts = products; // Cache the products
+    saveCacheToDisk();
     res.status(200).json({ message: 'Products fetched and cached successfully', products });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -178,7 +203,7 @@ const resetCache = async (req, res) => {
     // Obtener nuevos datos de productos
     const products = await fetchAvailableProducts();
     cachedProducts = products;
-
+    saveCacheToDisk();
     res.status(200).json({
       message: 'Cache reset successfully',
       cache: {
@@ -204,7 +229,7 @@ const clearCache = async (req, res) => {
       dollar: { value: null, last_update: null, fecha: null },
       euro: { value: null, last_update: null, fecha: null }
     };
-
+    saveCacheToDisk();
     res.status(200).json({
       message: 'Cache cleared successfully',
       cache: {

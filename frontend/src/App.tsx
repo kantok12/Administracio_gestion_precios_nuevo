@@ -1,0 +1,212 @@
+import React, { useState, useEffect } from 'react';
+import { Info, PlusCircle, Settings } from 'lucide-react';
+
+// Interfaces
+interface Producto {
+  codigo_producto: string;
+  nombre_del_producto: string;
+  Descripcion: string;
+  Modelo: string;
+  categoria?: string;
+  pf_eur?: string;
+  dimensiones?: string;
+}
+
+const sidebarMenu = [
+  { label: 'DASHBOARD', icon: '🏠' },
+  { label: 'EQUIPOS', icon: '🛠️', selected: true },
+  { label: 'ADMIN', icon: '👤' },
+];
+
+export default function App() {
+  // ----------- Estados principales -----------
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('todas');
+  const [categorias, setCategorias] = useState<string[]>(['todas']);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    fetch('http://localhost:3000/api/products/cache/all')
+      .then(res => res.json())
+      .then(data => {
+        setProductos(data.products.data);
+        const uniqueCategories = [
+          'todas',
+          ...Array.from(new Set((data.products.data || []).map((p: Producto) => p.categoria).filter(Boolean)))
+        ];
+        setCategorias(uniqueCategories as string[]);
+      });
+  }, []);
+
+  // Filtro y paginación
+  const filteredProducts = productos.filter(producto => {
+    const matchesSearch =
+      producto.nombre_del_producto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      producto.codigo_producto.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = categoriaSeleccionada === 'todas' || producto.categoria === categoriaSeleccionada;
+    return matchesSearch && matchesCategory;
+  });
+  const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f4f6fa', fontFamily: 'Roboto, Arial, sans-serif', display: 'flex' }}>
+      {/* Sidebar visual */}
+      <aside style={{ width: 220, background: '#fff', borderRight: '1px solid #e3e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 0 0 0', minHeight: '100vh' }}>
+        {/* Logo */}
+        <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#e3f2fd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 24 }}>🏢</span>
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 20, color: '#1976d2', lineHeight: 1 }}>Eco<br /><span style={{ color: '#43a047', fontWeight: 400 }}>Alliance</span></div>
+        </div>
+        {/* Menú */}
+        <nav style={{ width: '100%' }}>
+          {sidebarMenu.map((item) => (
+            <div key={item.label} style={{
+              padding: '12px 32px',
+              background: item.selected ? '#e3f2fd' : 'transparent',
+              color: item.selected ? '#1976d2' : '#222',
+              fontWeight: item.selected ? 700 : 500,
+              borderLeft: item.selected ? '4px solid #1976d2' : '4px solid transparent',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              fontSize: 16,
+            }}>
+              <span>{item.icon}</span> {item.label}
+            </div>
+          ))}
+        </nav>
+        <div style={{ flex: 1 }} />
+        <div style={{ padding: 24, fontSize: 14, color: '#888', borderTop: '1px solid #e3e8f0', width: '100%' }}>⚙️ CONFIGURACIÓN</div>
+      </aside>
+      {/* Main content */}
+      <main style={{ flex: 1, padding: '0 0 0 0', minHeight: '100vh', background: '#f4f6fa' }}>
+        {/* Header */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #e3e8f0', padding: '32px 40px 16px 40px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h1 style={{ fontSize: 28, color: '#222', margin: 0, fontWeight: 700, letterSpacing: 1 }}>EQUIPOS</h1>
+          {/* Buscador y filtro */}
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 8 }}>
+            <input
+              type="text"
+              placeholder="Buscar por código o nombre..."
+              value={searchTerm}
+              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              style={{ padding: 12, borderRadius: 8, border: '1px solid #d1d5db', flex: 1, fontSize: 16, background: '#f8fafc' }}
+            />
+            <select
+              value={categoriaSeleccionada}
+              onChange={e => { setCategoriaSeleccionada(e.target.value); setCurrentPage(1); }}
+              style={{ padding: 12, borderRadius: 8, border: '1px solid #d1d5db', fontSize: 16, background: '#f8fafc' }}
+            >
+              {categorias.map(cat => (
+                <option key={cat} value={cat}>{cat === 'todas' ? 'Todas las categorías' : cat}</option>
+              ))}
+            </select>
+            <button style={{ background: '#fff', color: '#1976d2', border: '1px solid #1976d2', borderRadius: 8, padding: '10px 22px', fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
+              <Settings size={20} /> Actualizar
+            </button>
+          </div>
+        </div>
+        {/* Tabla de productos */}
+        <div style={{ margin: '32px 40px', background: '#fff', borderRadius: 12, boxShadow: '0 2px 8px #0001', padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '18px 24px', borderBottom: '1px solid #e3e8f0', fontSize: 16, color: '#555', fontWeight: 500 }}>
+            Mostrando {filteredProducts.length} equipos
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff' }}>
+            <thead style={{ background: '#f8fafc' }}>
+              <tr>
+                <th style={th}>Código</th>
+                <th style={th}>Nombre</th>
+                <th style={th}>Descripción</th>
+                <th style={th}>Modelo</th>
+                <th style={th}>Categoría</th>
+                <th style={th}>Precio (EUR)</th>
+                <th style={th}>Dimensiones</th>
+                <th style={th}>Ver Detalle</th>
+                <th style={th}>Opcionales</th>
+                <th style={th}>Configurar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedProducts.map((p) => (
+                <tr key={p.codigo_producto}>
+                  <td style={td}>{p.codigo_producto}</td>
+                  <td style={td}>{p.nombre_del_producto}</td>
+                  <td style={td}>{p.Descripcion}</td>
+                  <td style={td}>{p.Modelo}</td>
+                  <td style={td}><span style={{ background: '#f1f5fb', color: '#1976d2', borderRadius: 16, padding: '2px 14px', fontWeight: 600, fontSize: 14 }}>{p.categoria}</span></td>
+                  <td style={td}>{p.pf_eur}</td>
+                  <td style={td}>{p.dimensiones}</td>
+                  <td style={{ ...td, textAlign: 'center' }}><button style={iconBtn}><Info size={18} /></button></td>
+                  <td style={{ ...td, textAlign: 'center' }}><button style={iconBtn}><PlusCircle size={18} /></button></td>
+                  <td style={{ ...td, textAlign: 'center' }}><button style={iconBtn}><Settings size={18} /></button></td>
+                </tr>
+              ))}
+              {paginatedProducts.length === 0 && (
+                <tr>
+                  <td colSpan={10} style={{ ...td, textAlign: 'center', color: '#888' }}>No hay productos para mostrar.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {/* Paginación visual */}
+        <div style={{ margin: '0 40px 32px 40px', display: 'flex', justifyContent: 'center', gap: 8 }}>
+          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={btnPag}>&lt;</button>
+          <span style={{ alignSelf: 'center', fontWeight: 600 }}>{currentPage} / {totalPages || 1}</span>
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} style={btnPag}>&gt;</button>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+const th = {
+  padding: '12px 8px',
+  fontWeight: 600,
+  background: '#f8fafc',
+  borderBottom: '2px solid #e3e8f0',
+  textAlign: 'left' as const,
+  fontSize: 15,
+};
+
+const td = {
+  padding: '10px 8px',
+  borderBottom: '1px solid #f1f1f1',
+  background: '#fff',
+  fontSize: 15,
+};
+
+const btnPag = {
+  padding: '6px 14px',
+  borderRadius: 4,
+  border: '1px solid #1976d2',
+  background: '#1976d2',
+  color: '#fff',
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontSize: 16,
+  minWidth: 36,
+  outline: 'none',
+  transition: 'background 0.2s',
+  margin: '0 2px',
+  opacity: 1,
+};
+
+const iconBtn = {
+  background: '#e3e8f0',
+  border: 'none',
+  borderRadius: 4,
+  padding: 6,
+  margin: '0 2px',
+  cursor: 'pointer',
+  transition: 'background 0.2s',
+  color: '#1976d2',
+  fontSize: 15,
+  verticalAlign: 'middle',
+};
