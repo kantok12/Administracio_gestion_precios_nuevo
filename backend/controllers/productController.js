@@ -228,19 +228,33 @@ const readProductsFromFile = () => {
 // @route   GET /api/products/cache/all
 // @access  Public
 const getAllCachedValues = (req, res) => {
-  // Leer productos directamente del archivo en cada petición
-  const productsFromFile = readProductsFromFile();
-
-  const cache = {
-    currencies: currencyCache,
-    products: {
-      total: productsFromFile.length,
-      data: productsFromFile
-    }
-  };
-  
-  console.log(`Enviando respuesta al frontend con ${productsFromFile.length} productos`);
-  res.status(200).json(cache);
+  try {
+    // Leer productos directamente del archivo en cada petición
+    const productsFromFile = readProductsFromFile();
+    
+    // Estructura de respuesta estandarizada
+    const response = {
+      success: true,
+      data: {
+        currencies: currencyCache,
+        products: {
+          total: productsFromFile.length,
+          data: productsFromFile
+        }
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log(`Enviando respuesta al frontend con ${productsFromFile.length} productos`);
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error al obtener valores del caché:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener valores del caché',
+      message: error.message
+    });
+  }
 };
 
 // @desc    Reset all cache and fetch fresh data
@@ -321,7 +335,11 @@ const getProductDetail = async (req, res) => {
     const { codigo, modelo, categoria } = req.query;
 
     if (!codigo) {
-      return res.status(400).json({ message: 'El código del producto es requerido' });
+      return res.status(400).json({
+        success: false,
+        error: 'Parámetros inválidos',
+        message: 'El código del producto es requerido'
+      });
     }
 
     // Primero buscar en el caché
@@ -331,8 +349,12 @@ const getProductDetail = async (req, res) => {
     if (productFromCache) {
       console.log(`Producto encontrado en caché: ${codigo}`);
       return res.status(200).json({
-        source: 'cache',
-        product: productFromCache
+        success: true,
+        data: {
+          source: 'cache',
+          product: productFromCache
+        },
+        timestamp: new Date().toISOString()
       });
     }
 
@@ -344,48 +366,99 @@ const getProductDetail = async (req, res) => {
     if (products && products.length > 0) {
       const product = products[0];
       return res.status(200).json({
-        source: 'webhook',
-        product
+        success: true,
+        data: {
+          source: 'webhook',
+          product
+        },
+        timestamp: new Date().toISOString()
       });
     }
 
-    return res.status(404).json({ message: 'Producto no encontrado' });
+    return res.status(404).json({
+      success: false,
+      error: 'Producto no encontrado',
+      message: `No se encontró el producto con código ${codigo}`
+    });
 
   } catch (error) {
     console.error('Error al obtener detalle del producto:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener detalle del producto',
+      message: error.message
+    });
   }
 };
 
-// @desc    Get optional products from webhook
-// @route   GET /api/products/optional
+// @desc    Get optional products
+// @route   GET /api/products/opcionales
 // @access  Public
 const getOptionalProducts = async (req, res) => {
   try {
     const { codigo, modelo, categoria } = req.query;
 
-    if (!codigo && !modelo && !categoria) {
-      return res.status(400).json({ 
-        message: 'Se requiere al menos un parámetro de búsqueda (codigo, modelo o categoria)' 
+    if (!codigo || !modelo || !categoria) {
+      return res.status(400).json({
+        success: false,
+        error: 'Parámetros inválidos',
+        message: 'Se requieren los parámetros: codigo, modelo y categoria'
       });
     }
 
-    // Consultar productos opcionales al webhook
+    // Loguear los parámetros para depuración
     console.log('Consultando productos opcionales con parámetros:', { codigo, modelo, categoria });
+
     const query = { codigo, modelo, categoria };
-    const products = await fetchFilteredProducts(query);
-
-    // Filtrar productos que coincidan con los criterios pero no sean el producto principal
-    const optionalProducts = products.filter(p => p.codigo_producto !== codigo);
-
-    return res.status(200).json({
-      total: optionalProducts.length,
-      products: optionalProducts
-    });
-
+    
+    try {
+      const products = await fetchFilteredProducts(query);
+      console.log(`Se encontraron ${products.length} productos opcionales`);
+      
+      return res.status(200).json({
+        success: true,
+        data: {
+          total: products.length,
+          products
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (fetchError) {
+      console.error('Error específico en fetchFilteredProducts:', fetchError);
+      
+      // Intentar con endpoint alternativo si está disponible
+      try {
+        console.log('Intentando obtener productos del caché como alternativa...');
+        const cachedProducts = readProductsFromFile();
+        
+        // Filtrar productos relacionados por categoría
+        const relatedProducts = cachedProducts.filter(p => p.categoria === categoria);
+        
+        console.log(`Se encontraron ${relatedProducts.length} productos relacionados en el caché`);
+        
+        return res.status(200).json({
+          success: true,
+          data: {
+            total: relatedProducts.length,
+            products: relatedProducts,
+            source: 'cache'
+          },
+          message: 'Usando datos del caché como alternativa',
+          timestamp: new Date().toISOString()
+        });
+      } catch (cacheError) {
+        console.error('Error al intentar usar el caché como alternativa:', cacheError);
+        throw fetchError; // Propagar el error original
+      }
+    }
   } catch (error) {
     console.error('Error al obtener productos opcionales:', error);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      success: false,
+      error: 'Error al obtener productos opcionales',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 

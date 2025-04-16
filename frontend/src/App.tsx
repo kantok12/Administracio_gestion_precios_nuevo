@@ -16,7 +16,28 @@ interface Producto {
 }
 
 interface ApiResponse {
-  products: Producto[];
+  success: boolean;
+  data: {
+    currencies: {
+      dollar: {
+        value: number | null;
+        last_update: string | null;
+        fecha: string | null;
+      };
+      euro: {
+        value: number | null;
+        last_update: string | null;
+        fecha: string | null;
+      };
+    };
+    products: {
+      total: number;
+      data: Producto[];
+    };
+  };
+  timestamp: string;
+  message?: string;
+  error?: string;
 }
 
 interface EspecificacionTecnica {
@@ -69,15 +90,32 @@ export default function App() {
   const handleVerDetalle = async (producto: Producto) => {
     setLoadingDetail(producto.codigo_producto || null);
     try {
+      // Verificar que tenemos el código de producto
+      if (!producto.codigo_producto) {
+        throw new Error('El código de producto es requerido');
+      }
+
+      console.log(`Obteniendo detalles para producto ${producto.codigo_producto}`);
       const response = await fetch(`http://localhost:5001/api/products/detail?codigo=${producto.codigo_producto}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Error del servidor: ${response.status}`);
+      }
+      
       const data = await response.json();
       
-      if (data.product) {
-        setDetalleProducto(data.product);
+      // Verificar la estructura de respuesta y extraer el producto
+      if (data.success && data.data) {
+        setDetalleProducto(data.data.product);
         setShowDetalleModal(true);
+        console.log('Detalles del producto recibidos:', data.data.product);
+      } else {
+        throw new Error('Producto no encontrado o formato de respuesta inválido');
       }
     } catch (error) {
       console.error('Error al obtener detalles del producto:', error);
+      // Opcionalmente mostrar una notificación de error al usuario
     } finally {
       setLoadingDetail(null);
     }
@@ -91,14 +129,85 @@ export default function App() {
     setShowModal(true);
 
     try {
-      const response = await fetch(`http://localhost:5001/api/products/optional?codigo=${producto.codigo_producto}`);
-      if (!response.ok) throw new Error('Error al obtener opcionales');
+      // Verificar que tenemos todos los parámetros requeridos
+      if (!producto.codigo_producto || !producto.Modelo || !producto.categoria) {
+        throw new Error('Faltan parámetros requeridos (código, modelo o categoría)');
+      }
+
+      // Codificar los parámetros para la URL correctamente
+      const params = new URLSearchParams();
+      params.append('codigo', producto.codigo_producto);
+      params.append('modelo', producto.Modelo);
+      params.append('categoria', producto.categoria);
+
+      const url = `http://localhost:5001/api/products/opcionales?${params.toString()}`;
+      console.log('Consultando opcionales:', url);
       
-      const data: OpcionalesResponse = await response.json();
-      setOpcionalesData(data.products);
+      // Usar AbortController para establecer un timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos de timeout
+      
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        // Limpiamos el timeout ya que recibimos respuesta
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Error del servidor: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Verificar la estructura de respuesta y extraer los productos
+        if (data.success && data.data) {
+          console.log(`Respuesta de opcionales recibida:`, data);
+          
+          // Si los datos vienen del caché, mostrar un mensaje
+          if (data.data.source === 'cache') {
+            console.log('Los datos mostrados provienen del caché como alternativa al webhook');
+          }
+          
+          setOpcionalesData(data.data.products);
+          console.log(`Se encontraron ${data.data.total} productos opcionales`);
+        } else {
+          throw new Error('Formato de respuesta inválido');
+        }
+      } catch (fetchError: any) {
+        // Si es un error de timeout o un problema de red, intentamos usar los productos del caché
+        if (fetchError.name === 'AbortError' || (fetchError.message && fetchError.message.includes('network'))) {
+          console.log('Timeout o error de red, mostrando productos similares del caché');
+          
+          // Mostrar productos de la misma categoría como alternativa
+          const productosSimilares = productosOriginales.filter(
+            p => p.categoria === producto.categoria && p.codigo_producto !== producto.codigo_producto
+          );
+          
+          if (productosSimilares.length > 0) {
+            setOpcionalesData(productosSimilares);
+            console.log(`Mostrando ${productosSimilares.length} productos similares del caché`);
+            // Notificar al usuario que estamos mostrando alternativas
+            setOpcionalesError('No se pudieron cargar los opcionales exactos. Mostrando alternativas similares.');
+            return;
+          }
+        }
+        
+        // Si no podemos ofrecer alternativas, propagar el error
+        throw fetchError;
+      }
     } catch (error) {
       console.error('Error al obtener opcionales:', error);
       setOpcionalesError(error instanceof Error ? error.message : 'Error desconocido');
+      // Mostrar mensaje amigable
+      if (error instanceof Error && error.message.includes('Failed to fetch')) {
+        setOpcionalesError('Error de conexión con el servidor. Por favor, inténtelo de nuevo más tarde.');
+      }
     } finally {
       setOpcionalesLoading(false);
       setLoadingOpcionales(null);
@@ -125,46 +234,23 @@ export default function App() {
     console.log("Obteniendo productos del caché...");
     
     try {
-      // Usamos la URL correcta para obtener los productos del caché
       const res = await fetch('http://localhost:5001/api/products/cache/all');
       if (!res.ok) throw new Error(`Error en la respuesta del servidor: ${res.status}`);
       
-      const data = await res.json();
-      console.log("Datos recibidos del caché:", data);
+      const response: ApiResponse = await res.json();
+      console.log("Datos recibidos del caché:", response);
       
-      // Verificamos la estructura de la respuesta
-      if (!data) {
-        throw new Error('Respuesta vacía del servidor');
+      // Verificar si la respuesta es exitosa
+      if (!response.success) {
+        throw new Error(response.message || 'Error en la respuesta del servidor');
       }
       
-      // Estructura correcta basada en productController.js:
-      // { currencies: {...}, products: { total: n, data: [...] } }
-      let productosRecibidos = [];
-      
-      // Comprobamos si tenemos la estructura esperada
-      if (data.products && Array.isArray(data.products.data)) {
-        productosRecibidos = data.products.data;
-        console.log(`Se encontraron ${productosRecibidos.length} productos en la estructura products.data`);
-      } 
-      // Comprobamos estructura alternativa (array directo)
-      else if (Array.isArray(data.products)) {
-        productosRecibidos = data.products;
-        console.log(`Se encontraron ${productosRecibidos.length} productos en products (array directo)`);
-      }
-      // Comprobamos si los productos están en la raíz
-      else if (Array.isArray(data)) {
-        productosRecibidos = data;
-        console.log(`Se encontraron ${productosRecibidos.length} productos en la raíz de la respuesta`);
-      }
-      else {
-        console.error('Estructura de respuesta inválida:', data);
-        throw new Error('La respuesta del servidor no tiene el formato esperado. Se esperaba un array de productos.');
-      }
+      // Obtener productos de la estructura correcta
+      const productosRecibidos = response.data.products.data;
+      console.log(`Se encontraron ${productosRecibidos.length} productos`);
       
       // Extraer categorías únicas para el filtro
       const todasCategorias = ['Todas las categorías'];
-      
-      // Ahora nos aseguramos que productosRecibidos es un array antes de usar forEach
       productosRecibidos.forEach((producto: Producto) => {
         if (producto.categoria && !todasCategorias.includes(producto.categoria)) {
           todasCategorias.push(producto.categoria);
