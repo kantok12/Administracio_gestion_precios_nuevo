@@ -8,7 +8,9 @@ const {
   getCachedDollarValue, 
   getCachedEuroValue,
   getAllCachedValues,
-  clearCache 
+  clearCache,
+  getProductDetail,
+  getOptionalProducts
 } = require('../controllers/productController');
 
 // Route to fetch products from webhook
@@ -34,5 +36,11 @@ router.get('/cache/all', getAllCachedValues);
 
 // Route to clear all cache
 router.delete('/cache', clearCache);
+
+// Endpoint para obtener detalle de producto
+router.get('/detail', getProductDetail);
+
+// Endpoint para consultar productos opcionales
+router.get('/optional', getOptionalProducts);
 
 module.exports = router;

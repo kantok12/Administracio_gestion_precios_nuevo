@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import React from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
@@ -10,10 +10,9 @@ document.documentElement.style.color = '#000000';
 document.body.style.backgroundColor = '#ffffff';
 document.body.style.color = '#000000';
 
-// Añadir logs para depuración
+// Logs para depuración
 console.log('Iniciando aplicación...');
 
-// Intentar encontrar el elemento root
 const rootElement = document.getElementById('root');
 console.log('Elemento root encontrado:', rootElement);
 
@@ -23,9 +22,9 @@ if (rootElement) {
     console.log('Root creado con éxito');
     
     root.render(
-      <StrictMode>
+      <React.StrictMode>
         <App />
-      </StrictMode>,
+      </React.StrictMode>
     );
     
     console.log('Aplicación renderizada');
@@ -53,8 +52,8 @@ if (rootElement) {
   
   const root = createRoot(newRoot);
   root.render(
-    <StrictMode>
+    <React.StrictMode>
       <App />
-    </StrictMode>,
+    </React.StrictMode>
   );
 }

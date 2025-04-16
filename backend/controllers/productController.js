@@ -1,6 +1,7 @@
 const { fetchAvailableProducts, fetchFilteredProducts, fetchCurrencyValues } = require('../utils/fetchProducts');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 
 let cachedProducts = [];
 let currencyCache = {
@@ -16,7 +17,8 @@ let currencyCache = {
   }
 };
 
-const CACHE_FILE = path.join(__dirname, '../productsCache.json');
+// Modificar la ruta para apuntar al nuevo archivo en la carpeta data
+const CACHE_FILE = path.join(__dirname, '../data/productsCache.json');
 
 // Cargar cache desde disco al iniciar
 if (fs.existsSync(CACHE_FILE)) {
@@ -311,6 +313,82 @@ const clearCache = async (req, res) => {
   }
 };
 
+// @desc    Get product detail from cache or webhook
+// @route   GET /api/products/detail
+// @access  Public
+const getProductDetail = async (req, res) => {
+  try {
+    const { codigo, modelo, categoria } = req.query;
+
+    if (!codigo) {
+      return res.status(400).json({ message: 'El código del producto es requerido' });
+    }
+
+    // Primero buscar en el caché
+    const productsFromCache = readProductsFromFile();
+    const productFromCache = productsFromCache.find(p => p.codigo_producto === codigo);
+
+    if (productFromCache) {
+      console.log(`Producto encontrado en caché: ${codigo}`);
+      return res.status(200).json({
+        source: 'cache',
+        product: productFromCache
+      });
+    }
+
+    // Si no está en caché, consultar al webhook
+    console.log(`Producto no encontrado en caché, consultando webhook: ${codigo}`);
+    const query = { codigo, modelo, categoria };
+    const products = await fetchFilteredProducts(query);
+
+    if (products && products.length > 0) {
+      const product = products[0];
+      return res.status(200).json({
+        source: 'webhook',
+        product
+      });
+    }
+
+    return res.status(404).json({ message: 'Producto no encontrado' });
+
+  } catch (error) {
+    console.error('Error al obtener detalle del producto:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get optional products from webhook
+// @route   GET /api/products/optional
+// @access  Public
+const getOptionalProducts = async (req, res) => {
+  try {
+    const { codigo, modelo, categoria } = req.query;
+
+    if (!codigo && !modelo && !categoria) {
+      return res.status(400).json({ 
+        message: 'Se requiere al menos un parámetro de búsqueda (codigo, modelo o categoria)' 
+      });
+    }
+
+    // Consultar productos opcionales al webhook
+    console.log('Consultando productos opcionales con parámetros:', { codigo, modelo, categoria });
+    const query = { codigo, modelo, categoria };
+    const products = await fetchFilteredProducts(query);
+
+    // Filtrar productos que coincidan con los criterios pero no sean el producto principal
+    const optionalProducts = products.filter(p => p.codigo_producto !== codigo);
+
+    return res.status(200).json({
+      total: optionalProducts.length,
+      products: optionalProducts
+    });
+
+  } catch (error) {
+    console.error('Error al obtener productos opcionales:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = { 
   fetchProducts, 
   getCachedProducts, 
@@ -320,5 +398,7 @@ module.exports = {
   getCachedEuroValue,
   getAllCachedValues,
   resetCache,
-  clearCache 
+  clearCache,
+  getProductDetail,
+  getOptionalProducts
 };

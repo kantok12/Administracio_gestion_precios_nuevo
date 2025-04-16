@@ -1,429 +1,1215 @@
 import React, { useState, useEffect } from 'react';
-import { Info, PlusCircle, Settings, RefreshCw } from 'lucide-react';
+import { Search, Filter, X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 
 // Interfaces
 interface Producto {
-  codigo_producto: string;
-  nombre_del_producto: string;
-  Descripcion: string;
-  Modelo: string;
+  codigo_producto?: string;
+  nombre_del_producto?: string;
+  Descripcion?: string;
+  Modelo?: string;
   categoria?: string;
-  pf_eur?: string;
+  pf_eur?: string | number;
   dimensiones?: string;
+  PESO?: string | null;
+  transporte_nacional?: string;
+  ay?: string;
 }
 
 interface ApiResponse {
-  currencies: {
-    dollar: { value: string | null; fecha: string | null; last_update: string | null };
-    euro: { value: string | null; fecha: string | null; last_update: string | null };
-  };
-  products: {
-    total: number;
-    data: Producto[];
-  };
+  products: Producto[];
 }
 
-const sidebarMenu = [
-  { label: 'DASHBOARD', icon: '🏠' },
-  { label: 'EQUIPOS', icon: '🛠️', selected: true },
-  { label: 'ADMIN', icon: '👤' },
-];
+interface EspecificacionTecnica {
+  caracteristica: string;
+  especificacion: string;
+}
 
+// Interfaz para la respuesta de opcionales
+interface OpcionalesResponse {
+  total: number;
+  products: Producto[];
+}
+
+// Versión funcional con diseño simplificado
 export default function App() {
-  // ----------- Estados principales -----------
+  // Estados principales
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [productosOriginales, setProductosOriginales] = useState<Producto[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('todas');
-  const [categorias, setCategorias] = useState<string[]>(['todas']);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastFetched, setLastFetched] = useState<string>('');
-  const itemsPerPage = 10;
-  const [resetting, setResetting] = useState(false);
 
-  // Función para cargar productos
-  const fetchProductos = () => {
-    setLoading(true);
-    setError(null);
-    
-    console.log('Iniciando fetch a /api/products/cache/all en puerto 5001');
-    
-    fetch('http://localhost:5001/api/products/cache/all', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      // Importante para CORS
-      mode: 'cors',
-      credentials: 'same-origin'
-    })
-      .then(res => {
-        console.log('Respuesta recibida:', res.status);
-        if (!res.ok) {
-          throw new Error(`Error en la respuesta del servidor: ${res.status} ${res.statusText}`);
-        }
-        return res.json();
-      })
-      .then((data: ApiResponse) => {
-        console.log('Datos recibidos:', data);
-        console.log('Total de productos:', data.products?.total);
-        console.log('Productos en data:', data.products?.data?.length);
-        
-        if (!data.products || !data.products.data) {
-          throw new Error('La respuesta no contiene productos');
-        }
-        
-        setProductos(data.products.data);
-        setLastFetched(new Date().toLocaleTimeString());
-        
-        // Extraer categorías únicas
-        const uniqueCategories = [
-          'todas',
-          ...Array.from(new Set((data.products.data || [])
-            .map(p => p.categoria)
-            .filter(Boolean)))
-        ];
-        setCategorias(uniqueCategories as string[]);
-      })
-      .catch(err => {
-        console.error('Error al cargar productos:', err);
-        setError(err.message);
-        setProductos([]);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  };
+  // Filtro por categoría
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('Todas las categorías');
+  const [categorias, setCategorias] = useState<string[]>(['Todas las categorías']);
+  
+  // Estado para indicar cuántos elementos se están mostrando
+  const [totalMostrado, setTotalMostrado] = useState(0);
 
-  // Función para forzar un fetch directo desde el archivo sin usar cache
-  const fetchDirect = () => {
-    setLoading(true);
-    setError(null);
-    
-    console.log('Solicitando productos directamente desde el archivo en puerto 5001...');
-    
-    fetch('http://localhost:5001/api/products/fetch', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      // Importante para CORS
-      mode: 'cors',
-      credentials: 'same-origin'
-    })
-      .then(res => {
-        console.log('Respuesta de fetch directo recibida:', res.status);
-        if (!res.ok) {
-          throw new Error(`Error al obtener productos: ${res.status} ${res.statusText}`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        console.log('Productos obtenidos correctamente:', data);
-        // Después de obtener productos, cargamos los del cache (que deberían incluir los nuevos)
-        fetchProductos();
-      })
-      .catch(err => {
-        console.error('Error al obtener productos:', err);
-        setError(`Error al obtener productos: ${err.message}`);
-        // Intentamos recuperar los productos aunque falle el fetch directo
-        fetchProductos();
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  };
+  // Estado para botones de acción
+  const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const [loadingOpcionales, setLoadingOpcionales] = useState<string | null>(null);
+  const [loadingSettings, setLoadingSettings] = useState<string | null>(null);
 
-  // Función para hacer un reset de cache y obtener datos frescos
-  const resetCache = () => {
-    setResetting(true);
-    setError(null);
-    
-    console.log('Solicitando reset de cache al backend en puerto 5001...');
-    
-    // Utilizamos fetch con POST para llamar al endpoint de reset
-    fetch('http://localhost:5001/api/products/cache/reset', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Encabezados para CORS (por si acaso)
-        'Access-Control-Allow-Origin': '*',
+  // Estado para modal
+  const [showModal, setShowModal] = useState(false);
+  const [productoSeleccionado, setProductoSeleccionado] = useState<Producto | null>(null);
+
+  // Nuevo estado para el modal de detalles
+  const [showDetalleModal, setShowDetalleModal] = useState(false);
+  const [detalleProducto, setDetalleProducto] = useState<Producto | null>(null);
+
+  // Estado para opcionales
+  const [opcionalesLoading, setOpcionalesLoading] = useState(false);
+  const [opcionalesError, setOpcionalesError] = useState<string | null>(null);
+  const [opcionalesData, setOpcionalesData] = useState<Producto[]>([]);
+
+  // ========== Funciones ==========
+  // Funciones para manejar los botones
+  const handleVerDetalle = async (producto: Producto) => {
+    setLoadingDetail(producto.codigo_producto || null);
+    try {
+      const response = await fetch(`http://localhost:5001/api/products/detail?codigo=${producto.codigo_producto}`);
+      const data = await response.json();
+      
+      if (data.product) {
+        setDetalleProducto(data.product);
+        setShowDetalleModal(true);
       }
-    })
-      .then(res => {
-        console.log('Respuesta de reset recibida:', res.status);
-        if (!res.ok) {
-          throw new Error(`Error al resetear el cache: ${res.status} ${res.statusText}`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        console.log('Cache reseteado correctamente:', data);
-        // Después de resetear, cargamos los productos
-        fetchProductos();
-      })
-      .catch(err => {
-        console.error('Error al resetear cache:', err);
-        setError(`Error al resetear cache: ${err.message}`);
-        // Intentamos recuperar los productos aunque falle el reset
-        fetchProductos();
-      })
-      .finally(() => {
-        setResetting(false);
-      });
+    } catch (error) {
+      console.error('Error al obtener detalles del producto:', error);
+    } finally {
+      setLoadingDetail(null);
+    }
   };
 
-  // Cargar productos al iniciar
+  const handleOpcionales = async (producto: Producto) => {
+    setLoadingOpcionales(producto.codigo_producto || null);
+    setOpcionalesLoading(true);
+    setOpcionalesError(null);
+    setProductoSeleccionado(producto);
+    setShowModal(true);
+
+    try {
+      const response = await fetch(`http://localhost:5001/api/products/optional?codigo=${producto.codigo_producto}`);
+      if (!response.ok) throw new Error('Error al obtener opcionales');
+      
+      const data: OpcionalesResponse = await response.json();
+      setOpcionalesData(data.products);
+    } catch (error) {
+      console.error('Error al obtener opcionales:', error);
+      setOpcionalesError(error instanceof Error ? error.message : 'Error desconocido');
+    } finally {
+      setOpcionalesLoading(false);
+      setLoadingOpcionales(null);
+    }
+  };
+
+  const handleConfigurar = (producto: Producto) => {
+    setLoadingSettings(producto.codigo_producto || null);
+    setTimeout(() => {
+      console.log("Configurar producto:", producto.codigo_producto);
+      setLoadingSettings(null);
+    }, 500);
+  };
+  
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setProductoSeleccionado(null);
+  };
+  
+  // Carga inicial de productos (equipos) desde el caché
+  const fetchProductos = async () => {
+    setLoading(true);
+    setError(null);
+    console.log("Obteniendo productos del caché...");
+    
+    try {
+      // Usamos la URL correcta para obtener los productos del caché
+      const res = await fetch('http://localhost:5001/api/products/cache/all');
+      if (!res.ok) throw new Error(`Error en la respuesta del servidor: ${res.status}`);
+      
+      const data = await res.json();
+      console.log("Datos recibidos del caché:", data);
+      
+      // Verificamos la estructura de la respuesta
+      if (!data) {
+        throw new Error('Respuesta vacía del servidor');
+      }
+      
+      // Estructura correcta basada en productController.js:
+      // { currencies: {...}, products: { total: n, data: [...] } }
+      let productosRecibidos = [];
+      
+      // Comprobamos si tenemos la estructura esperada
+      if (data.products && Array.isArray(data.products.data)) {
+        productosRecibidos = data.products.data;
+        console.log(`Se encontraron ${productosRecibidos.length} productos en la estructura products.data`);
+      } 
+      // Comprobamos estructura alternativa (array directo)
+      else if (Array.isArray(data.products)) {
+        productosRecibidos = data.products;
+        console.log(`Se encontraron ${productosRecibidos.length} productos en products (array directo)`);
+      }
+      // Comprobamos si los productos están en la raíz
+      else if (Array.isArray(data)) {
+        productosRecibidos = data;
+        console.log(`Se encontraron ${productosRecibidos.length} productos en la raíz de la respuesta`);
+      }
+      else {
+        console.error('Estructura de respuesta inválida:', data);
+        throw new Error('La respuesta del servidor no tiene el formato esperado. Se esperaba un array de productos.');
+      }
+      
+      // Extraer categorías únicas para el filtro
+      const todasCategorias = ['Todas las categorías'];
+      
+      // Ahora nos aseguramos que productosRecibidos es un array antes de usar forEach
+      productosRecibidos.forEach((producto: Producto) => {
+        if (producto.categoria && !todasCategorias.includes(producto.categoria)) {
+          todasCategorias.push(producto.categoria);
+        }
+      });
+      
+      setCategorias(todasCategorias);
+      setProductos(productosRecibidos);
+      setProductosOriginales(productosRecibidos);
+      setTotalMostrado(productosRecibidos.length);
+      
+    } catch (error) {
+      console.error('Error al cargar productos del caché:', error);
+      setError(error instanceof Error ? error.message : 'Error desconocido al acceder al caché');
+      setProductos([]);
+      setProductosOriginales([]);
+      setTotalMostrado(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Cargar datos al inicio
   useEffect(() => {
+    console.log("Iniciando carga de productos...");
     fetchProductos();
   }, []);
+  
+  // Filtrar productos cuando cambia búsqueda o categoría
+  useEffect(() => {
+    let productosFiltrados = [...productosOriginales];
+    
+    // Filtrar por término de búsqueda
+    if (searchTerm) {
+      productosFiltrados = productosFiltrados.filter(
+        producto => 
+          producto.codigo_producto?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+          producto.nombre_del_producto?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Filtrar por categoría
+    if (categoriaSeleccionada !== 'Todas las categorías') {
+      productosFiltrados = productosFiltrados.filter(
+        producto => producto.categoria === categoriaSeleccionada
+      );
+    }
+    
+    setProductos(productosFiltrados);
+    setTotalMostrado(productosFiltrados.length);
+  }, [searchTerm, categoriaSeleccionada, productosOriginales]);
 
-  // Filtro y paginación
-  const filteredProducts = productos.filter(producto => {
-    const matchesSearch =
-      producto.nombre_del_producto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      producto.codigo_producto?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoriaSeleccionada === 'todas' || producto.categoria === categoriaSeleccionada;
-    return matchesSearch && matchesCategory;
-  });
-  const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  // Agregar el useEffect para manejar la tecla ESC
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (showModal) {
+          handleCloseModal();
+        }
+        if (showDetalleModal) {
+          handleCloseDetalleModal();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleEscKey);
+    return () => {
+      window.removeEventListener('keydown', handleEscKey);
+    };
+  }, [showModal, showDetalleModal]);
+
+  // Agregar función para cerrar el modal de detalles
+  const handleCloseDetalleModal = () => {
+    setShowDetalleModal(false);
+    setDetalleProducto(null);
+  };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f4f6fa', fontFamily: 'Roboto, Arial, sans-serif', display: 'flex' }}>
-      {/* Sidebar visual */}
-      <aside style={{ width: 220, background: '#fff', borderRight: '1px solid #e3e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 0 0 0', minHeight: '100vh' }}>
-        {/* Logo */}
-        <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#e3f2fd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 24 }}>🏢</span>
-          </div>
-          <div style={{ fontWeight: 700, fontSize: 20, color: '#1976d2', lineHeight: 1 }}>Eco<br /><span style={{ color: '#43a047', fontWeight: 400 }}>Alliance</span></div>
-        </div>
-        {/* Menú */}
-        <nav style={{ width: '100%' }}>
-          {sidebarMenu.map((item) => (
-            <div key={item.label} style={{
-              padding: '12px 32px',
-              background: item.selected ? '#e3f2fd' : 'transparent',
-              color: item.selected ? '#1976d2' : '#222',
-              fontWeight: item.selected ? 700 : 500,
-              borderLeft: item.selected ? '4px solid #1976d2' : '4px solid transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              fontSize: 16,
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: '#f9fafb', 
+      display: 'flex',
+      fontFamily: 'Arial, sans-serif'
+    }}>
+      {/* Sidebar */}
+      <aside style={{ 
+        width: '240px', 
+        backgroundColor: 'white', 
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)', 
+        display: 'flex', 
+        flexDirection: 'column'
+      }}>
+        <div style={{ padding: '16px' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center'
+          }}>
+            <div style={{ 
+              width: '40px', 
+              height: '40px', 
+              backgroundColor: '#1e88e5', 
+              borderRadius: '50%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              color: 'white', 
+              fontWeight: 'bold' 
             }}>
-              <span>{item.icon}</span> {item.label}
+              EA
             </div>
-          ))}
-        </nav>
-        <div style={{ flex: 1 }} />
-        <div style={{ padding: 24, fontSize: 14, color: '#888', borderTop: '1px solid #e3e8f0', width: '100%' }}>⚙️ CONFIGURACIÓN</div>
-      </aside>
-      {/* Main content */}
-      <main style={{ flex: 1, padding: '0 0 0 0', minHeight: '100vh', background: '#f4f6fa' }}>
-        {/* Header */}
-        <div style={{ background: '#fff', borderBottom: '1px solid #e3e8f0', padding: '32px 40px 16px 40px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <h1 style={{ fontSize: 28, color: '#222', margin: 0, fontWeight: 700, letterSpacing: 1 }}>EQUIPOS</h1>
-          {/* Buscador y filtro */}
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 8 }}>
-            <input
-              type="text"
-              placeholder="Buscar por código o nombre..."
-              value={searchTerm}
-              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              style={{ padding: 12, borderRadius: 8, border: '1px solid #d1d5db', flex: 1, fontSize: 16, background: '#f8fafc' }}
-            />
-            <select
-              value={categoriaSeleccionada}
-              onChange={e => { setCategoriaSeleccionada(e.target.value); setCurrentPage(1); }}
-              style={{ padding: 12, borderRadius: 8, border: '1px solid #d1d5db', fontSize: 16, background: '#f8fafc' }}
-            >
-              {categorias.map(cat => (
-                <option key={cat} value={cat}>{cat === 'todas' ? 'Todas las categorías' : cat}</option>
-              ))}
-            </select>
-            <button 
-              onClick={fetchProductos} 
-              disabled={loading}
-              style={{ background: '#fff', color: '#1976d2', border: '1px solid #1976d2', borderRadius: 8, padding: '10px 22px', fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}
-            >
-              <RefreshCw size={20} /> {loading ? 'Actualizando...' : 'Actualizar'}
-            </button>
-            <button 
-              onClick={resetCache} 
-              disabled={resetting || loading}
-              style={{ background: '#1976d2', color: '#fff', border: '1px solid #1976d2', borderRadius: 8, padding: '10px 22px', fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}
-            >
-              <Settings size={20} /> {resetting ? 'Reseteando...' : 'Reset Cache'}
-            </button>
-            <button 
-              onClick={fetchDirect} 
-              disabled={loading}
-              style={{ background: '#43a047', color: '#fff', border: '1px solid #43a047', borderRadius: 8, padding: '10px 22px', fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}
-            >
-              <Settings size={20} /> Cargar del Backend
-            </button>
+            <div style={{ marginLeft: '8px' }}>
+              <div style={{ color: '#1e88e5', fontWeight: 'bold' }}>Eco</div>
+              <div style={{ color: '#1e88e5' }}>Alliance</div>
+            </div>
           </div>
         </div>
-        
-        {/* Estado de carga o error */}
-        {loading && (
-          <div style={{ margin: '20px 40px', padding: '15px', background: '#f0f7ff', borderRadius: 8, border: '1px solid #bbd9ff' }}>
-            Cargando productos...
+
+        <nav style={{ marginTop: '32px', flex: '1' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            padding: '12px 16px', 
+            fontSize: '14px', 
+            fontWeight: '500'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="9"></rect>
+              <rect x="14" y="3" width="7" height="5"></rect>
+              <rect x="14" y="12" width="7" height="9"></rect>
+              <rect x="3" y="16" width="7" height="5"></rect>
+            </svg>
+            DASHBOARD
           </div>
-        )}
-        
-        {error && (
-          <div style={{ margin: '20px 40px', padding: '15px', background: '#ffefef', borderRadius: 8, border: '1px solid #ffcaca' }}>
-            <strong>Error:</strong> {error}. <button onClick={fetchProductos} style={{ background: 'none', border: 'none', color: '#1976d2', textDecoration: 'underline', cursor: 'pointer' }}>Reintentar</button>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            padding: '12px 16px', 
+            fontSize: '14px', 
+            fontWeight: '500',
+            backgroundColor: '#e3f2fd',
+            color: '#1e88e5',
+            borderLeft: '4px solid #1e88e5'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20V10"></path>
+              <path d="M18 20V4"></path>
+              <path d="M6 20v-8"></path>
+            </svg>
+            EQUIPOS
           </div>
-        )}
-        
-        {lastFetched && (
-          <div style={{ margin: '10px 40px 0', fontSize: 14, color: '#666' }}>
-            Última actualización: {lastFetched}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            padding: '12px 16px', 
+            fontSize: '14px', 
+            fontWeight: '500'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            ADMIN
           </div>
-        )}
-        
-        {/* Área de diagnóstico para depuración */}
-        <div style={{ margin: '20px 40px', padding: '15px', background: '#f5f5f5', borderRadius: 8, fontSize: 14 }}>
-          <details>
-            <summary style={{ fontWeight: 'bold', cursor: 'pointer' }}>Información de diagnóstico</summary>
-            <div style={{ marginTop: 10 }}>
-              <p>Estado: {loading ? 'Cargando' : error ? 'Error' : 'Listo'}</p>
-              <p>Productos cargados: {productos.length}</p>
-              <p>Categorías detectadas: {categorias.join(', ')}</p>
-              <p>URL de API: http://localhost:5001/api/products/cache/all</p>
-              <p>Última actualización: {lastFetched || 'Nunca'}</p>
-              {error && <p style={{ color: 'red' }}>Error: {error}</p>}
-              <hr style={{ margin: '10px 0', border: '1px solid #ddd' }} />
-              <div>
-                <button 
-                  onClick={() => { window.open('http://localhost:5001/api/products/cache/all', '_blank'); }}
-                  style={{ background: '#f0f0f0', border: '1px solid #ccc', borderRadius: 4, padding: '5px 10px', marginRight: 10 }}
+        </nav>
+
+        <div style={{ padding: '16px', marginTop: 'auto', borderTop: '1px solid #eee' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            padding: '8px 16px', 
+            fontSize: '14px', 
+            fontWeight: '500',
+            borderRadius: '4px'
+          }}>
+            CONFIGURACIÓN
+          </div>
+        </div>
+      </aside>
+
+      {/* Panel Principal */}
+      <main style={{ 
+        flex: '1', 
+        overflow: 'auto',
+        animation: 'fadeIn 0.5s ease-out' 
+      }}>
+        <div style={{ padding: '24px' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>EQUIPOS</h1>
+
+          {/* Barra de búsqueda con animación */}
+          <div style={{ 
+            display: 'flex', 
+            marginBottom: '24px', 
+            gap: '16px', 
+            alignItems: 'center',
+            animation: 'slideIn 0.5s ease-out'
+          }}>
+            <div style={{ 
+              position: 'relative', 
+              flex: '1' 
+            }}>
+              <div style={{ 
+                position: 'absolute', 
+                top: '50%', 
+                left: '12px', 
+                transform: 'translateY(-50%)', 
+                color: '#9CA3AF',
+                pointerEvents: 'none'
+              }}>
+                {/* Icono de búsqueda */}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Buscar por código o nombre..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px 8px 40px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    right: '12px',
+                    transform: 'translateY(-50%)',
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#9CA3AF',
+                    padding: '0',
+                    fontSize: '16px'
+                  }}
                 >
-                  Ver JSON directo
+                  ×
                 </button>
-                <button 
-                  onClick={() => { resetCache(); }}
-                  style={{ background: '#f0f0f0', border: '1px solid #ccc', borderRadius: 4, padding: '5px 10px' }}
-                >
-                  Forzar reset de cache
-                </button>
-                <button 
-                  onClick={() => { fetchDirect(); }}
-                  style={{ background: '#f0f0f0', border: '1px solid #ccc', borderRadius: 4, padding: '5px 10px', marginRight: 10 }}
-                >
-                  Fetch directo
-                </button>
+              )}
+            </div>
+            
+            {/* Filtro de categoría */}
+            <div style={{ position: 'relative' }}>
+              <select
+                value={categoriaSeleccionada}
+                onChange={(e) => setCategoriaSeleccionada(e.target.value)}
+                style={{
+                  appearance: 'none',
+                  backgroundColor: 'white',
+                  border: '1px solid #D1D5DB',
+                  padding: '8px 36px 8px 12px',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                {categorias.map((cat, idx) => (
+                  <option key={idx} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                right: '12px',
+                transform: 'translateY(-50%)',
+                pointerEvents: 'none'
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
               </div>
             </div>
-          </details>
-        </div>
-        
-        {/* Tabla de productos */}
-        <div style={{ margin: '32px 40px', background: '#fff', borderRadius: 12, boxShadow: '0 2px 8px #0001', padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '18px 24px', borderBottom: '1px solid #e3e8f0', fontSize: 16, color: '#555', fontWeight: 500 }}>
-            Mostrando {filteredProducts.length} equipos
-          </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff' }}>
-            <thead style={{ background: '#f8fafc' }}>
-              <tr>
-                <th style={th}>Código</th>
-                <th style={th}>Nombre</th>
-                <th style={th}>Descripción</th>
-                <th style={th}>Modelo</th>
-                <th style={th}>Categoría</th>
-                <th style={th}>Precio (EUR)</th>
-                <th style={th}>Dimensiones</th>
-                <th style={th}>Ver Detalle</th>
-                <th style={th}>Opcionales</th>
-                <th style={th}>Configurar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedProducts.map((p) => (
-                <tr key={p.codigo_producto}>
-                  <td style={td}>{p.codigo_producto}</td>
-                  <td style={td}>{p.nombre_del_producto}</td>
-                  <td style={td}>{p.Descripcion}</td>
-                  <td style={td}>{p.Modelo}</td>
-                  <td style={td}><span style={{ background: '#f1f5fb', color: '#1976d2', borderRadius: 16, padding: '2px 14px', fontWeight: 600, fontSize: 14 }}>{p.categoria}</span></td>
-                  <td style={td}>{p.pf_eur}</td>
-                  <td style={td}>{p.dimensiones}</td>
-                  <td style={{ ...td, textAlign: 'center' }}><button style={iconBtn}><Info size={18} /></button></td>
-                  <td style={{ ...td, textAlign: 'center' }}><button style={iconBtn}><PlusCircle size={18} /></button></td>
-                  <td style={{ ...td, textAlign: 'center' }}><button style={iconBtn}><Settings size={18} /></button></td>
-                </tr>
-              ))}
-              {paginatedProducts.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={10} style={{ ...td, textAlign: 'center', color: '#888' }}>
-                    {error ? 'Error al cargar productos' : 'No hay productos para mostrar.'}
-                  </td>
-                </tr>
+            
+            {/* Botón Actualizar con animación */}
+            <button
+              onClick={fetchProductos}
+              className="button-hover"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: 'white',
+                border: '1px solid #1e88e5',
+                color: '#1e88e5',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {loading ? (
+                <>
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    border: '2px solid #E5E7EB',
+                    borderTopColor: '#1e88e5',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }}></div>
+                  Actualizando...
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 4v6h-6"></path>
+                    <path d="M1 20v-6h6"></path>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
+                    <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path>
+                  </svg>
+                  Actualizar Caché
+                </>
               )}
-            </tbody>
-          </table>
-        </div>
-        {/* Paginación visual */}
-        <div style={{ margin: '0 40px 32px 40px', display: 'flex', justifyContent: 'center', gap: 8 }}>
-          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={btnPag}>&lt;</button>
-          <span style={{ alignSelf: 'center', fontWeight: 600 }}>{currentPage} / {totalPages || 1}</span>
-          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} style={btnPag}>&gt;</button>
+            </button>
+          </div>
+          
+          {/* Estado de carga con animación */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '16px',
+            animation: 'fadeIn 0.5s ease-out'
+          }}>
+            <div style={{ fontSize: '14px', color: '#6B7280' }}>
+              {loading 
+                ? "Cargando equipos del caché..." 
+                : `Mostrando ${totalMostrado} ${totalMostrado === 1 ? 'equipo' : 'equipos'} del caché`
+              }
+            </div>
+          </div>
+
+          {/* Tabla con animación */}
+          <div style={{ 
+            backgroundColor: 'white', 
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)', 
+            borderRadius: '6px', 
+            overflow: 'hidden',
+            animation: 'slideIn 0.5s ease-out'
+          }}>
+            {loading ? (
+              <div style={{ 
+                padding: '32px', 
+                textAlign: 'center', 
+                color: '#6B7280',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '16px'
+              }}>
+                <div style={{
+                  width: '24px',
+                  height: '24px',
+                  border: '2px solid #E5E7EB',
+                  borderTopColor: '#1e88e5',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+                <p>Cargando equipos desde el caché...</p>
+                <p style={{ fontSize: '13px', color: '#9CA3AF' }}>
+                  Este proceso puede tardar unos segundos
+                </p>
+              </div>
+            ) : error ? (
+              <div style={{ 
+                padding: '32px', 
+                textAlign: 'center', 
+                color: '#EF4444'
+              }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 16px' }}>
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="15" y1="9" x2="9" y2="15"></line>
+                  <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                <p style={{ marginBottom: '8px', fontWeight: '500', fontSize: '18px' }}>
+                  Error al cargar el caché de equipos
+                </p>
+                <p style={{ marginBottom: '16px', fontSize: '14px' }}>{error}</p>
+                <button
+                  onClick={fetchProductos}
+                  style={{
+                    backgroundColor: '#FEE2E2',
+                    color: '#EF4444',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  Reintentar carga del caché
+                </button>
+              </div>
+            ) : productos.length === 0 ? (
+              <div style={{ 
+                padding: '32px', 
+                textAlign: 'center', 
+                color: '#6B7280'
+              }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 16px', color: '#9CA3AF' }}>
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+                <p style={{ marginBottom: '8px', fontWeight: '500', fontSize: '18px' }}>
+                  No hay equipos en el caché
+                </p>
+                <p style={{ marginBottom: '16px', fontSize: '14px' }}>
+                  El caché de productos está vacío o los filtros aplicados no devuelven resultados.
+                </p>
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setCategoriaSeleccionada('Todas las categorías');
+                    fetchProductos();
+                  }}
+                  style={{
+                    backgroundColor: '#E5E7EB',
+                    color: '#4B5563',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  Limpiar filtros y actualizar
+                </button>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ 
+                  width: '100%', 
+                  borderCollapse: 'collapse', 
+                  fontSize: '14px' 
+                }}>
+                  <thead>
+                    <tr style={{
+                        backgroundColor: '#f3f4f6',
+                        borderBottom: '1px solid #e5e7eb',
+                        fontWeight: 'bold',
+                        color: '#374151'
+                      }}>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', width: '80px' }}>Código</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Nombre</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Descripción</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Modelo</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Categoría</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Ver Detalle</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Opcionales</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Configurar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productos.map((producto, index) => (
+                      <tr 
+                        key={index}
+                        className="table-row"
+                        style={{
+                          backgroundColor: index % 2 === 0 ? 'white' : '#f9fafb',
+                          borderBottom: '1px solid #e5e7eb'
+                        }}
+                      >
+                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.codigo_producto || '-'}</td>
+                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.nombre_del_producto || '-'}</td>
+                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.Descripcion || '-'}</td>
+                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.Modelo || '-'}</td>
+                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.categoria || '-'}</td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                          <button
+                            className="button-hover"
+                            style={{
+                              padding: '8px',
+                              backgroundColor: 'white',
+                              color: '#1d4ed8',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '32px',
+                              height: '32px',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onClick={() => handleVerDetalle(producto)}
+                            disabled={loadingDetail === producto.codigo_producto}
+                          >
+                            {loadingDetail === producto.codigo_producto ? (
+                              <div style={{
+                                width: '14px',
+                                height: '14px',
+                                border: '2px solid #E5E7EB',
+                                borderTopColor: '#1d4ed8',
+                                borderRadius: '50%',
+                                animation: 'spin 1s linear infinite'
+                              }}></div>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="16"></line>
+                                <line x1="8" y1="12" x2="16" y2="12"></line>
+                              </svg>
+                            )}
+                          </button>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                          <button
+                            className="button-hover"
+                            style={{
+                              padding: '8px',
+                              backgroundColor: 'white',
+                              color: '#059669',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '32px',
+                              height: '32px',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onClick={() => handleOpcionales(producto)}
+                            disabled={loadingOpcionales === producto.codigo_producto}
+                          >
+                            {loadingOpcionales === producto.codigo_producto ? (
+                              <div style={{
+                                width: '14px',
+                                height: '14px',
+                                border: '2px solid #E5E7EB',
+                                borderTopColor: '#059669',
+                                borderRadius: '50%',
+                                animation: 'spin 1s linear infinite'
+                              }}></div>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="8" y1="12" x2="16" y2="12"></line>
+                                <polyline points="12 8 16 12 12 16"></polyline>
+                              </svg>
+                            )}
+                          </button>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                          <button
+                            className="button-hover"
+                            style={{
+                              padding: '8px',
+                              backgroundColor: 'white',
+                              color: '#d97706',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '32px',
+                              height: '32px',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onClick={() => handleConfigurar(producto)}
+                            disabled={loadingSettings === producto.codigo_producto}
+                          >
+                            {loadingSettings === producto.codigo_producto ? (
+                              <div style={{
+                                width: '14px',
+                                height: '14px',
+                                border: '2px solid #E5E7EB',
+                                borderTopColor: '#d97706',
+                                borderRadius: '50%',
+                                animation: 'spin 1s linear infinite'
+                              }}></div>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <path d="M9 9h6v6H9z"></path>
+                              </svg>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {productos.length === 0 && (
+                      <tr>
+                        <td colSpan={8} style={{ padding: '16px', textAlign: 'center' }}>
+                          No se encontraron productos.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </main>
+      
+      {/* Modal de Opcionales */}
+      {showModal && productoSeleccionado && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50
+        }}>
+          <div className="modal-content hover-scale" style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            width: '90%',
+            maxWidth: '800px',
+            maxHeight: '85vh',
+            overflow: 'hidden',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+          }}>
+            <div style={{
+              padding: '16px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '1px solid #E5E7EB',
+              backgroundColor: '#EBF8FF'
+            }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e88e5' }}>
+                Opcionales: {productoSeleccionado.nombre_del_producto}
+              </h2>
+              <button
+                onClick={handleCloseModal}
+                className="button-hover"
+                style={{
+                  backgroundColor: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  color: '#1e40af'
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <div style={{
+              padding: '24px',
+              overflow: 'auto',
+              maxHeight: 'calc(85vh - 64px)',
+              backgroundColor: '#F9FAFB'
+            }}>
+              {opcionalesLoading ? (
+                <div style={{
+                  backgroundColor: 'white',
+                  padding: '48px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  borderRadius: '8px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    border: '3px solid #E5E7EB',
+                    borderTopColor: '#1e88e5',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    marginBottom: '16px'
+                  }}></div>
+                  <p style={{ fontSize: '18px', fontWeight: '500', color: '#4B5563', marginBottom: '8px' }}>
+                    Cargando opcionales...
+                  </p>
+                  <p style={{ color: '#6B7280' }}>
+                    Por favor espere mientras obtenemos los opcionales
+                  </p>
+                </div>
+              ) : opcionalesError ? (
+                <div style={{
+                  backgroundColor: 'white',
+                  padding: '48px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  borderRadius: '8px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                }}>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px' }}>
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12" y2="16"></line>
+                  </svg>
+                  <p style={{ fontSize: '18px', fontWeight: '500', color: '#EF4444', marginBottom: '8px' }}>
+                    Error al cargar opcionales
+                  </p>
+                  <p style={{ color: '#6B7280' }}>
+                    {opcionalesError}
+                  </p>
+                </div>
+              ) : opcionalesData.length === 0 ? (
+                <div style={{
+                  backgroundColor: 'white',
+                  padding: '48px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  borderRadius: '8px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                }}>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px' }}>
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                  </svg>
+                  <p style={{ fontSize: '18px', fontWeight: '500', color: '#4B5563', marginBottom: '8px' }}>
+                    No hay opcionales disponibles
+                  </p>
+                  <p style={{ color: '#6B7280' }}>
+                    Este producto no tiene opcionales registrados
+                  </p>
+                </div>
+              ) : (
+                <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f3f4f6' }}>
+                        <th style={{ padding: '12px 16px', textAlign: 'left' }}>Código</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left' }}>Nombre</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left' }}>Descripción</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left' }}>Modelo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {opcionalesData.map((opcional, index) => (
+                        <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                          <td style={{ padding: '12px 16px' }}>{opcional.codigo_producto || '-'}</td>
+                          <td style={{ padding: '12px 16px' }}>{opcional.nombre_del_producto || '-'}</td>
+                          <td style={{ padding: '12px 16px' }}>{opcional.Descripcion || '-'}</td>
+                          <td style={{ padding: '12px 16px' }}>{opcional.Modelo || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalles */}
+      {showDetalleModal && detalleProducto && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div className="modal-content hover-scale" style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            width: '90%',
+            maxWidth: '800px',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            position: 'relative',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+          }}>
+            <div style={{
+              padding: '16px 24px',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#EBF8FF'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e88e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="16" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12" y2="8"/>
+                </svg>
+                <h2 style={{
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: '#1e88e5'
+                }}>Especificaciones Técnicas</h2>
+              </div>
+              <button
+                onClick={handleCloseDetalleModal}
+                className="button-hover"
+                style={{
+                  backgroundColor: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  color: '#1e40af'
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <div style={{ 
+              padding: '24px',
+              overflow: 'auto',
+              maxHeight: 'calc(85vh - 64px)',
+              backgroundColor: '#F9FAFB'
+            }}>
+              <table style={{
+                width: '100%',
+                borderCollapse: 'collapse'
+              }}>
+                <tbody>
+                  <tr style={{ backgroundColor: '#f8f9fa' }}>
+                    <td style={{
+                      padding: '12px 16px',
+                      fontWeight: '500',
+                      width: '30%',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>NOMBRE COMERCIAL</td>
+                    <td style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>{detalleProducto.nombre_del_producto || '-'}</td>
+                  </tr>
+                  <tr>
+                    <td style={{
+                      padding: '12px 16px',
+                      fontWeight: '500',
+                      width: '30%',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>FAMILIA</td>
+                    <td style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>{detalleProducto.categoria || '-'}</td>
+                  </tr>
+                  <tr style={{ backgroundColor: '#f8f9fa' }}>
+                    <td style={{
+                      padding: '12px 16px',
+                      fontWeight: '500',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>ELEMENTO DE CORTE</td>
+                    <td style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>Disco simple</td>
+                  </tr>
+                  <tr>
+                    <td style={{
+                      padding: '12px 16px',
+                      fontWeight: '500',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>DIÁMETRO DE ENTRADA</td>
+                    <td style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/diámetro de entrada de (\d+)/i)?.[1] + 'mm' : '-'}</td>
+                  </tr>
+                  <tr style={{ backgroundColor: '#f8f9fa' }}>
+                    <td style={{
+                      padding: '12px 16px',
+                      fontWeight: '500',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>GARGANTA DE ALIMENTACIÓN</td>
+                    <td style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/garganta de (\d+x\d+)/i)?.[1] + 'mm' : '-'}</td>
+                  </tr>
+                  <tr>
+                    <td style={{
+                      padding: '12px 16px',
+                      fontWeight: '500',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>MÉTODO DE DESPLAZAMIENTO</td>
+                    <td style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/garganta de (\d+x\d+)/i)?.[1] : '-'}</td>
+                  </tr>
+                  <tr style={{ backgroundColor: '#f8f9fa' }}>
+                    <td style={{
+                      padding: '12px 16px',
+                      fontWeight: '500',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>TIPO DE MOTOR</td>
+                    <td style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>{detalleProducto?.nombre_del_producto?.includes('PTO') ? 'Requiere PTO' : 'Motor integrado'}</td>
+                  </tr>
+                  <tr>
+                    <td style={{
+                      padding: '12px 16px',
+                      fontWeight: '500',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>TIPO DE ENGANCHE BOLA/ANILLO/CAT I-CAT II</td>
+                    <td style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>{detalleProducto?.nombre_del_producto?.includes('Cat.') ? detalleProducto.nombre_del_producto.match(/Cat\.\s*(I+)/)?.[1] : '-'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+
+          @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+          }
+
+          @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+          }
+
+          @keyframes shimmer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
+          }
+
+          .loading-shimmer {
+            animation: shimmer 2s infinite linear;
+            background: linear-gradient(to right, #f6f7f8 8%, #edeef1 18%, #f6f7f8 33%);
+            background-size: 1000px 100%;
+          }
+
+          .hover-scale {
+            transition: transform 0.2s ease;
+          }
+
+          .hover-scale:hover {
+            transform: scale(1.02);
+          }
+
+          .fade-in {
+            animation: fadeIn 0.3s ease-in;
+          }
+
+          .slide-in {
+            animation: slideIn 0.5s ease-out;
+          }
+
+          .table-row {
+            transition: background-color 0.2s ease;
+          }
+
+          .table-row:hover {
+            background-color: #f8fafc !important;
+          }
+
+          .button-hover {
+            transition: all 0.2s ease;
+          }
+
+          .button-hover:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background-color: #f3f4f6;
+          }
+
+          .button-hover:active {
+            transform: translateY(0);
+            background-color: #e5e7eb;
+          }
+
+          .modal-overlay {
+            animation: fadeIn 0.2s ease-out;
+          }
+
+          .modal-content {
+            animation: slideIn 0.3s ease-out;
+          }
+        `}
+      </style>
     </div>
   );
 }
-
-const th = {
-  padding: '12px 8px',
-  fontWeight: 600,
-  background: '#f8fafc',
-  borderBottom: '2px solid #e3e8f0',
-  textAlign: 'left' as const,
-  fontSize: 15,
-};
-
-const td = {
-  padding: '10px 8px',
-  borderBottom: '1px solid #f1f1f1',
-  background: '#fff',
-  fontSize: 15,
-};
-
-const btnPag = {
-  padding: '6px 14px',
-  borderRadius: 4,
-  border: '1px solid #1976d2',
-  background: '#1976d2',
-  color: '#fff',
-  fontWeight: 600,
-  cursor: 'pointer',
-  fontSize: 16,
-  minWidth: 36,
-  outline: 'none',
-  transition: 'background 0.2s',
-  margin: '0 2px',
-  opacity: 1,
-};
-
-const iconBtn = {
-  background: '#e3e8f0',
-  border: 'none',
-  borderRadius: 4,
-  padding: 6,
-  margin: '0 2px',
-  cursor: 'pointer',
-  transition: 'background 0.2s',
-  color: '#1976d2',
-  fontSize: 15,
-  verticalAlign: 'middle',
-};

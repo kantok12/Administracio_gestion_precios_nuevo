@@ -1,5 +1,11 @@
 const axios = require('axios');
 
+/**
+ * Obtiene todos los productos disponibles.
+ * Webhook: /webhook/6f697684-4cfc-4bc1-8918-bfffc9f20b9f
+ * Método: GET
+ * Retorna: Array de productos.
+ */
 const fetchAvailableProducts = async () => {
   try {
     const response = await axios.get('https://n8n-807184488368.southamerica-west1.run.app/webhook/6f697684-4cfc-4bc1-8918-bfffc9f20b9f');
@@ -10,6 +16,13 @@ const fetchAvailableProducts = async () => {
   }
 };
 
+/**
+ * Obtiene productos filtrados según los parámetros de consulta.
+ * Webhook: /webhook/ac8b70a7-6be5-4e1a-87b3-3813464dd254
+ * Método: GET
+ * Parámetros: query (filtros de búsqueda)
+ * Retorna: Array de productos filtrados.
+ */
 const fetchFilteredProducts = async (query) => {
   try {
     const response = await axios.get('https://n8n-807184488368.southamerica-west1.run.app/webhook/ac8b70a7-6be5-4e1a-87b3-3813464dd254', {
@@ -22,6 +35,12 @@ const fetchFilteredProducts = async (query) => {
   }
 };
 
+/**
+ * Obtiene el valor actual del dólar.
+ * Webhook: /webhook/8012d60e-8a29-4910-b385-6514edc3d912
+ * Método: GET
+ * Retorna: Objeto con el valor del dólar.
+ */
 const fetchDollarValue = async () => {
   try {
     const response = await axios.get('https://n8n-807184488368.southamerica-west1.run.app/webhook/8012d60e-8a29-4910-b385-6514edc3d912');
@@ -32,6 +51,12 @@ const fetchDollarValue = async () => {
   }
 };
 
+/**
+ * Obtiene los valores actuales de dólar y euro, junto con la fecha.
+ * Webhook: /webhook/8012d60e-8a29-4910-b385-6514edc3d912
+ * Método: GET
+ * Retorna: Array con un objeto que contiene Valor_Dolar, Valor_Euro y Fecha.
+ */
 const fetchCurrencyValues = async () => {
   try {
     console.log('Fetching currency values from webhook...');
