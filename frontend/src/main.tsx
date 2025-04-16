@@ -1,7 +1,10 @@
 import React from 'react'
-import { createRoot } from 'react-dom/client'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import EquiposPanel from './pages/EquiposPanel'
+import AdminPanel from './pages/AdminPanel'
 
 // Forzar modo claro
 document.documentElement.setAttribute('data-color-mode', 'light');
@@ -18,12 +21,20 @@ console.log('Elemento root encontrado:', rootElement);
 
 if (rootElement) {
   try {
-    const root = createRoot(rootElement);
+    const root = ReactDOM.createRoot(rootElement);
     console.log('Root creado con éxito');
     
     root.render(
       <React.StrictMode>
-        <App />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<App />}>
+              <Route index element={<EquiposPanel />} />
+              <Route path="equipos" element={<EquiposPanel />} />
+              <Route path="admin" element={<AdminPanel />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
       </React.StrictMode>
     );
     
@@ -50,10 +61,18 @@ if (rootElement) {
   
   console.log('Elemento root creado dinámicamente');
   
-  const root = createRoot(newRoot);
+  const root = ReactDOM.createRoot(newRoot);
   root.render(
     <React.StrictMode>
-      <App />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<App />}>
+            <Route index element={<EquiposPanel />} />
+            <Route path="equipos" element={<EquiposPanel />} />
+            <Route path="admin" element={<AdminPanel />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
     </React.StrictMode>
   );
 }

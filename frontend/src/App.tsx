@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import type { LucideProps } from 'lucide-react';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 
 // Interfaces
 interface Producto {
@@ -51,8 +53,13 @@ interface OpcionalesResponse {
   products: Producto[];
 }
 
+// Definir tipo para los estilos de los enlaces (para legibilidad)
+type LinkStyle = React.CSSProperties;
+
 // Versión funcional con diseño simplificado
 export default function App() {
+  const location = useLocation(); // Hook para obtener la ruta actual
+
   // Estados principales
   const [productos, setProductos] = useState<Producto[]>([]);
   const [productosOriginales, setProductosOriginales] = useState<Producto[]>([]);
@@ -258,8 +265,8 @@ export default function App() {
       });
       
       setCategorias(todasCategorias);
-      setProductos(productosRecibidos);
       setProductosOriginales(productosRecibidos);
+      setProductos(productosRecibidos);
       setTotalMostrado(productosRecibidos.length);
       
     } catch (error) {
@@ -285,10 +292,12 @@ export default function App() {
     
     // Filtrar por término de búsqueda
     if (searchTerm) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
       productosFiltrados = productosFiltrados.filter(
         producto => 
-          producto.codigo_producto?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-          producto.nombre_del_producto?.toLowerCase().includes(searchTerm.toLowerCase())
+          producto.codigo_producto?.toLowerCase().includes(lowerSearchTerm) || 
+          producto.nombre_del_producto?.toLowerCase().includes(lowerSearchTerm) ||
+          producto.Modelo?.toLowerCase().includes(lowerSearchTerm)
       );
     }
     
@@ -326,6 +335,36 @@ export default function App() {
   const handleCloseDetalleModal = () => {
     setShowDetalleModal(false);
     setDetalleProducto(null);
+  };
+
+  // Estilos base para los enlaces de navegación
+  const baseLinkStyle: LinkStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 16px',
+    fontSize: '14px',
+    fontWeight: 500,
+    textDecoration: 'none',
+    color: '#374151', // Color por defecto
+    borderLeft: '4px solid transparent' // Borde transparente por defecto
+  };
+
+  // Estilos para el enlace activo
+  const activeLinkStyle: LinkStyle = {
+    ...baseLinkStyle,
+    backgroundColor: '#e3f2fd',
+    color: '#1e88e5',
+    borderLeft: '4px solid #1e88e5'
+  };
+
+  // Función para determinar el estilo del enlace
+  const getLinkStyle = (path: string): LinkStyle => {
+    // Considerar /equipos como activo si la ruta es / o /equipos
+    if (path === '/equipos' && (location.pathname === '/' || location.pathname === '/equipos')) {
+        return activeLinkStyle;
+    }
+    return location.pathname === path ? activeLinkStyle : baseLinkStyle;
   };
 
   return (
@@ -369,54 +408,60 @@ export default function App() {
         </div>
 
         <nav style={{ marginTop: '32px', flex: '1' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            padding: '12px 16px', 
-            fontSize: '14px', 
-            fontWeight: '500'
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="9"></rect>
-              <rect x="14" y="3" width="7" height="5"></rect>
-              <rect x="14" y="12" width="7" height="9"></rect>
-              <rect x="3" y="16" width="7" height="5"></rect>
-            </svg>
-            DASHBOARD
-          </div>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            padding: '12px 16px', 
-            fontSize: '14px', 
-            fontWeight: '500',
-            backgroundColor: '#e3f2fd',
-            color: '#1e88e5',
-            borderLeft: '4px solid #1e88e5'
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 20V10"></path>
-              <path d="M18 20V4"></path>
-              <path d="M6 20v-8"></path>
-            </svg>
-            EQUIPOS
-          </div>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            padding: '12px 16px', 
-            fontSize: '14px', 
-            fontWeight: '500'
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-            ADMIN
-          </div>
+          <Link to="/" style={getLinkStyle('/')}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '12px 16px', 
+              fontSize: '14px', 
+              fontWeight: '500'
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="9"></rect>
+                <rect x="14" y="3" width="7" height="5"></rect>
+                <rect x="14" y="12" width="7" height="9"></rect>
+                <rect x="3" y="16" width="7" height="5"></rect>
+              </svg>
+              DASHBOARD
+            </div>
+          </Link>
+          <Link to="/equipos" style={getLinkStyle('/equipos')}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '12px 16px', 
+              fontSize: '14px', 
+              fontWeight: '500',
+              backgroundColor: '#e3f2fd',
+              color: '#1e88e5',
+              borderLeft: '4px solid #1e88e5'
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20V10"></path>
+                <path d="M18 20V4"></path>
+                <path d="M6 20v-8"></path>
+              </svg>
+              EQUIPOS
+            </div>
+          </Link>
+          <Link to="/admin" style={getLinkStyle('/admin')}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '12px 16px', 
+              fontSize: '14px', 
+              fontWeight: '500'
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              ADMIN
+            </div>
+          </Link>
         </nav>
 
         <div style={{ padding: '16px', marginTop: 'auto', borderTop: '1px solid #eee' }}>
@@ -434,789 +479,23 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Panel Principal */}
+      {/* Panel Principal - Aquí se renderizará la ruta activa */}
       <main style={{ 
         flex: '1', 
         overflow: 'auto',
         animation: 'fadeIn 0.5s ease-out' 
       }}>
-        <div style={{ padding: '24px' }}>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>EQUIPOS</h1>
-
-          {/* Barra de búsqueda con animación */}
-          <div style={{ 
-            display: 'flex', 
-            marginBottom: '24px', 
-            gap: '16px', 
-            alignItems: 'center',
-            animation: 'slideIn 0.5s ease-out'
-          }}>
-            <div style={{ 
-              position: 'relative', 
-              flex: '1' 
-            }}>
-              <div style={{ 
-                position: 'absolute', 
-                top: '50%', 
-                left: '12px', 
-                transform: 'translateY(-50%)', 
-                color: '#9CA3AF',
-                pointerEvents: 'none'
-              }}>
-                {/* Icono de búsqueda */}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Buscar por código o nombre..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px 8px 40px',
-                  border: '1px solid #D1D5DB',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  outline: 'none'
-                }}
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  style={{
-                    position: 'absolute',
-                    top: '50%',
-                    right: '12px',
-                    transform: 'translateY(-50%)',
-                    backgroundColor: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: '#9CA3AF',
-                    padding: '0',
-                    fontSize: '16px'
-                  }}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-            
-            {/* Filtro de categoría */}
-            <div style={{ position: 'relative' }}>
-              <select
-                value={categoriaSeleccionada}
-                onChange={(e) => setCategoriaSeleccionada(e.target.value)}
-                style={{
-                  appearance: 'none',
-                  backgroundColor: 'white',
-                  border: '1px solid #D1D5DB',
-                  padding: '8px 36px 8px 12px',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  cursor: 'pointer'
-                }}
-              >
-                {categorias.map((cat, idx) => (
-                  <option key={idx} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-              <div style={{
-                position: 'absolute',
-                top: '50%',
-                right: '12px',
-                transform: 'translateY(-50%)',
-                pointerEvents: 'none'
-              }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </div>
-            </div>
-            
-            {/* Botón Actualizar con animación */}
-            <button
-              onClick={fetchProductos}
-              className="button-hover"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                backgroundColor: 'white',
-                border: '1px solid #1e88e5',
-                color: '#1e88e5',
-                padding: '8px 16px',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              {loading ? (
-                <>
-                  <div style={{
-                    width: '16px',
-                    height: '16px',
-                    border: '2px solid #E5E7EB',
-                    borderTopColor: '#1e88e5',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite'
-                  }}></div>
-                  Actualizando...
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 4v6h-6"></path>
-                    <path d="M1 20v-6h6"></path>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
-                    <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path>
-                  </svg>
-                  Actualizar Caché
-                </>
-              )}
-            </button>
-          </div>
-          
-          {/* Estado de carga con animación */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            marginBottom: '16px',
-            animation: 'fadeIn 0.5s ease-out'
-          }}>
-            <div style={{ fontSize: '14px', color: '#6B7280' }}>
-              {loading 
-                ? "Cargando equipos del caché..." 
-                : `Mostrando ${totalMostrado} ${totalMostrado === 1 ? 'equipo' : 'equipos'} del caché`
-              }
-            </div>
-          </div>
-
-          {/* Tabla con animación */}
-          <div style={{ 
-            backgroundColor: 'white', 
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)', 
-            borderRadius: '6px', 
-            overflow: 'hidden',
-            animation: 'slideIn 0.5s ease-out'
-          }}>
-            {loading ? (
-              <div style={{ 
-                padding: '32px', 
-                textAlign: 'center', 
-                color: '#6B7280',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '16px'
-              }}>
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  border: '2px solid #E5E7EB',
-                  borderTopColor: '#1e88e5',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite'
-                }}></div>
-                <p>Cargando equipos desde el caché...</p>
-                <p style={{ fontSize: '13px', color: '#9CA3AF' }}>
-                  Este proceso puede tardar unos segundos
-                </p>
-              </div>
-            ) : error ? (
-              <div style={{ 
-                padding: '32px', 
-                textAlign: 'center', 
-                color: '#EF4444'
-              }}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 16px' }}>
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="15" y1="9" x2="9" y2="15"></line>
-                  <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-                <p style={{ marginBottom: '8px', fontWeight: '500', fontSize: '18px' }}>
-                  Error al cargar el caché de equipos
-                </p>
-                <p style={{ marginBottom: '16px', fontSize: '14px' }}>{error}</p>
-                <button
-                  onClick={fetchProductos}
-                  style={{
-                    backgroundColor: '#FEE2E2',
-                    color: '#EF4444',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}
-                >
-                  Reintentar carga del caché
-                </button>
-              </div>
-            ) : productos.length === 0 ? (
-              <div style={{ 
-                padding: '32px', 
-                textAlign: 'center', 
-                color: '#6B7280'
-              }}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 16px', color: '#9CA3AF' }}>
-                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                  <line x1="8" y1="21" x2="16" y2="21"></line>
-                  <line x1="12" y1="17" x2="12" y2="21"></line>
-                </svg>
-                <p style={{ marginBottom: '8px', fontWeight: '500', fontSize: '18px' }}>
-                  No hay equipos en el caché
-                </p>
-                <p style={{ marginBottom: '16px', fontSize: '14px' }}>
-                  El caché de productos está vacío o los filtros aplicados no devuelven resultados.
-                </p>
-                <button
-                  onClick={() => {
-                    setSearchTerm('');
-                    setCategoriaSeleccionada('Todas las categorías');
-                    fetchProductos();
-                  }}
-                  style={{
-                    backgroundColor: '#E5E7EB',
-                    color: '#4B5563',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}
-                >
-                  Limpiar filtros y actualizar
-                </button>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ 
-                  width: '100%', 
-                  borderCollapse: 'collapse', 
-                  fontSize: '14px' 
-                }}>
-                  <thead>
-                    <tr style={{
-                        backgroundColor: '#f3f4f6',
-                        borderBottom: '1px solid #e5e7eb',
-                        fontWeight: 'bold',
-                        color: '#374151'
-                      }}>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', width: '80px' }}>Código</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Nombre</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Descripción</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Modelo</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Categoría</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Ver Detalle</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Opcionales</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Configurar</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productos.map((producto, index) => (
-                      <tr 
-                        key={index}
-                        className="table-row"
-                        style={{
-                          backgroundColor: index % 2 === 0 ? 'white' : '#f9fafb',
-                          borderBottom: '1px solid #e5e7eb'
-                        }}
-                      >
-                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.codigo_producto || '-'}</td>
-                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.nombre_del_producto || '-'}</td>
-                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.Descripcion || '-'}</td>
-                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.Modelo || '-'}</td>
-                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.categoria || '-'}</td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          <button
-                            className="button-hover"
-                            style={{
-                              padding: '8px',
-                              backgroundColor: 'white',
-                              color: '#1d4ed8',
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '50%',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: '32px',
-                              height: '32px',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onClick={() => handleVerDetalle(producto)}
-                            disabled={loadingDetail === producto.codigo_producto}
-                          >
-                            {loadingDetail === producto.codigo_producto ? (
-                              <div style={{
-                                width: '14px',
-                                height: '14px',
-                                border: '2px solid #E5E7EB',
-                                borderTopColor: '#1d4ed8',
-                                borderRadius: '50%',
-                                animation: 'spin 1s linear infinite'
-                              }}></div>
-                            ) : (
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="12" y1="8" x2="12" y2="16"></line>
-                                <line x1="8" y1="12" x2="16" y2="12"></line>
-                              </svg>
-                            )}
-                          </button>
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          <button
-                            className="button-hover"
-                            style={{
-                              padding: '8px',
-                              backgroundColor: 'white',
-                              color: '#059669',
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '50%',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: '32px',
-                              height: '32px',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onClick={() => handleOpcionales(producto)}
-                            disabled={loadingOpcionales === producto.codigo_producto}
-                          >
-                            {loadingOpcionales === producto.codigo_producto ? (
-                              <div style={{
-                                width: '14px',
-                                height: '14px',
-                                border: '2px solid #E5E7EB',
-                                borderTopColor: '#059669',
-                                borderRadius: '50%',
-                                animation: 'spin 1s linear infinite'
-                              }}></div>
-                            ) : (
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="8" y1="12" x2="16" y2="12"></line>
-                                <polyline points="12 8 16 12 12 16"></polyline>
-                              </svg>
-                            )}
-                          </button>
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          <button
-                            className="button-hover"
-                            style={{
-                              padding: '8px',
-                              backgroundColor: 'white',
-                              color: '#d97706',
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '50%',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: '32px',
-                              height: '32px',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onClick={() => handleConfigurar(producto)}
-                            disabled={loadingSettings === producto.codigo_producto}
-                          >
-                            {loadingSettings === producto.codigo_producto ? (
-                              <div style={{
-                                width: '14px',
-                                height: '14px',
-                                border: '2px solid #E5E7EB',
-                                borderTopColor: '#d97706',
-                                borderRadius: '50%',
-                                animation: 'spin 1s linear infinite'
-                              }}></div>
-                            ) : (
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                <path d="M9 9h6v6H9z"></path>
-                              </svg>
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {productos.length === 0 && (
-                      <tr>
-                        <td colSpan={8} style={{ padding: '16px', textAlign: 'center' }}>
-                          No se encontraron productos.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
+        <Outlet /> {/* Componente de react-router-dom que renderiza la ruta hija */} 
       </main>
       
-      {/* Modal de Opcionales */}
-      {showModal && productoSeleccionado && (
-        <div className="modal-overlay" style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 50
-        }}>
-          <div className="modal-content hover-scale" style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            width: '90%',
-            maxWidth: '800px',
-            maxHeight: '85vh',
-            overflow: 'hidden',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-          }}>
-            <div style={{
-              padding: '16px 24px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid #E5E7EB',
-              backgroundColor: '#EBF8FF'
-            }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e88e5' }}>
-                Opcionales: {productoSeleccionado.nombre_del_producto}
-              </h2>
-              <button
-                onClick={handleCloseModal}
-                className="button-hover"
-                style={{
-                  backgroundColor: 'white',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '32px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  color: '#1e40af'
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-            <div style={{
-              padding: '24px',
-              overflow: 'auto',
-              maxHeight: 'calc(85vh - 64px)',
-              backgroundColor: '#F9FAFB'
-            }}>
-              {opcionalesLoading ? (
-                <div style={{
-                  backgroundColor: 'white',
-                  padding: '48px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  textAlign: 'center',
-                  borderRadius: '8px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                }}>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    border: '3px solid #E5E7EB',
-                    borderTopColor: '#1e88e5',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                    marginBottom: '16px'
-                  }}></div>
-                  <p style={{ fontSize: '18px', fontWeight: '500', color: '#4B5563', marginBottom: '8px' }}>
-                    Cargando opcionales...
-                  </p>
-                  <p style={{ color: '#6B7280' }}>
-                    Por favor espere mientras obtenemos los opcionales
-                  </p>
-                </div>
-              ) : opcionalesError ? (
-                <div style={{
-                  backgroundColor: 'white',
-                  padding: '48px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  textAlign: 'center',
-                  borderRadius: '8px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                }}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px' }}>
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12" y2="16"></line>
-                  </svg>
-                  <p style={{ fontSize: '18px', fontWeight: '500', color: '#EF4444', marginBottom: '8px' }}>
-                    Error al cargar opcionales
-                  </p>
-                  <p style={{ color: '#6B7280' }}>
-                    {opcionalesError}
-                  </p>
-                </div>
-              ) : opcionalesData.length === 0 ? (
-                <div style={{
-                  backgroundColor: 'white',
-                  padding: '48px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  textAlign: 'center',
-                  borderRadius: '8px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                }}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px' }}>
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="8" y1="12" x2="16" y2="12"></line>
-                  </svg>
-                  <p style={{ fontSize: '18px', fontWeight: '500', color: '#4B5563', marginBottom: '8px' }}>
-                    No hay opcionales disponibles
-                  </p>
-                  <p style={{ color: '#6B7280' }}>
-                    Este producto no tiene opcionales registrados
-                  </p>
-                </div>
-              ) : (
-                <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#f3f4f6' }}>
-                        <th style={{ padding: '12px 16px', textAlign: 'left' }}>Código</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left' }}>Nombre</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left' }}>Descripción</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left' }}>Modelo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {opcionalesData.map((opcional, index) => (
-                        <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                          <td style={{ padding: '12px 16px' }}>{opcional.codigo_producto || '-'}</td>
-                          <td style={{ padding: '12px 16px' }}>{opcional.nombre_del_producto || '-'}</td>
-                          <td style={{ padding: '12px 16px' }}>{opcional.Descripcion || '-'}</td>
-                          <td style={{ padding: '12px 16px' }}>{opcional.Modelo || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Detalles */}
-      {showDetalleModal && detalleProducto && (
-        <div className="modal-overlay" style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000
-        }}>
-          <div className="modal-content hover-scale" style={{
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            width: '90%',
-            maxWidth: '800px',
-            maxHeight: '90vh',
-            overflow: 'auto',
-            position: 'relative',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-          }}>
-            <div style={{
-              padding: '16px 24px',
-              borderBottom: '1px solid #e5e7eb',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              backgroundColor: '#EBF8FF'
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e88e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="16" x2="12" y2="12"/>
-                  <line x1="12" y1="8" x2="12" y2="8"/>
-                </svg>
-                <h2 style={{
-                  margin: 0,
-                  fontSize: '18px',
-                  fontWeight: '600',
-                  color: '#1e88e5'
-                }}>Especificaciones Técnicas</h2>
-              </div>
-              <button
-                onClick={handleCloseDetalleModal}
-                className="button-hover"
-                style={{
-                  backgroundColor: 'white',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '32px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  color: '#1e40af'
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-            <div style={{ 
-              padding: '24px',
-              overflow: 'auto',
-              maxHeight: 'calc(85vh - 64px)',
-              backgroundColor: '#F9FAFB'
-            }}>
-              <table style={{
-                width: '100%',
-                borderCollapse: 'collapse'
-              }}>
-                <tbody>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontWeight: '500',
-                      width: '30%',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>NOMBRE COMERCIAL</td>
-                    <td style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>{detalleProducto.nombre_del_producto || '-'}</td>
-                  </tr>
-                  <tr>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontWeight: '500',
-                      width: '30%',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>FAMILIA</td>
-                    <td style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>{detalleProducto.categoria || '-'}</td>
-                  </tr>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontWeight: '500',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>ELEMENTO DE CORTE</td>
-                    <td style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>Disco simple</td>
-                  </tr>
-                  <tr>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontWeight: '500',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>DIÁMETRO DE ENTRADA</td>
-                    <td style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/diámetro de entrada de (\d+)/i)?.[1] + 'mm' : '-'}</td>
-                  </tr>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontWeight: '500',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>GARGANTA DE ALIMENTACIÓN</td>
-                    <td style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/garganta de (\d+x\d+)/i)?.[1] + 'mm' : '-'}</td>
-                  </tr>
-                  <tr>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontWeight: '500',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>MÉTODO DE DESPLAZAMIENTO</td>
-                    <td style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/garganta de (\d+x\d+)/i)?.[1] : '-'}</td>
-                  </tr>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontWeight: '500',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>TIPO DE MOTOR</td>
-                    <td style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>{detalleProducto?.nombre_del_producto?.includes('PTO') ? 'Requiere PTO' : 'Motor integrado'}</td>
-                  </tr>
-                  <tr>
-                    <td style={{
-                      padding: '12px 16px',
-                      fontWeight: '500',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>TIPO DE ENGANCHE BOLA/ANILLO/CAT I-CAT II</td>
-                    <td style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid #e5e7eb'
-                    }}>{detalleProducto?.nombre_del_producto?.includes('Cat.') ? detalleProducto.nombre_del_producto.match(/Cat\.\s*(I+)/)?.[1] : '-'}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Mantener los estilos globales si es necesario */}
       <style>
         {`
-          @keyframes spin {
+           @keyframes spin { /* ... */ }
+           @keyframes fadeIn { /* ... */ }
+           @keyframes slideIn { /* ... */ }
+           /* ... otros estilos globales ... */
+           @keyframes spin { 
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
