@@ -1,5 +1,6 @@
 const express = require('express');
 const dotenv = require('dotenv');
+const cors = require('cors');
 const userRoutes = require('./routes/userRoutes');
 const productRoutes = require('./routes/productRoutes');
 const { fetchCurrencyValuesController, fetchProducts } = require('./controllers/productController');
@@ -8,6 +9,10 @@ const { port } = require('./config/env');
 dotenv.config();
 
 const app = express();
+
+// Habilitar CORS para todas las rutas (o configura orígenes específicos)
+app.use(cors());
+
 app.use(express.json());
 
 app.use('/api/users', userRoutes);

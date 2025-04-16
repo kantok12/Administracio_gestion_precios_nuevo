@@ -21,11 +21,29 @@ const CACHE_FILE = path.join(__dirname, '../productsCache.json');
 // Cargar cache desde disco al iniciar
 if (fs.existsSync(CACHE_FILE)) {
   try {
-    const data = fs.readFileSync(CACHE_FILE, 'utf-8');
-    cachedProducts = JSON.parse(data);
-    console.log('Cache de productos cargado desde disco.');
+    let data = fs.readFileSync(CACHE_FILE, 'utf-8');
+    
+    // Eliminar BOM (Byte Order Mark) si existe
+    if (data.charCodeAt(0) === 0xFEFF) {
+      data = data.substring(1);
+      console.log('BOM detectado y eliminado del archivo JSON al iniciar');
+    }
+    
+    // Otra forma de eliminar posibles caracteres problemáticos
+    data = data.replace(/^\uFEFF/, '');
+    data = data.trim();
+    
+    try {
+      cachedProducts = JSON.parse(data);
+      console.log(`Cache de productos cargado desde disco. ${cachedProducts.length} productos encontrados.`);
+    } catch (parseError) {
+      console.error(`Error al parsear JSON al iniciar: ${parseError.message}`);
+      console.error(`Contenido problemático: "${data.substring(0, 50)}..."`);
+      cachedProducts = [];
+    }
   } catch (err) {
     console.error('Error al leer el cache de productos:', err);
+    cachedProducts = [];
   }
 }
 
@@ -59,8 +77,12 @@ updateCurrencyValues();
 
 const saveCacheToDisk = () => {
   try {
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(cachedProducts, null, 2), 'utf-8');
-    //console.log('Cache de productos guardado en disco.');
+    if (!fs.existsSync(CACHE_FILE)) {
+      fs.writeFileSync(CACHE_FILE, JSON.stringify(cachedProducts, null, 2), 'utf-8');
+      //console.log('Cache de productos guardado en disco.');
+    } else {
+      //console.log('El archivo de cache ya existe. No se sobreescribe.');
+    }
   } catch (err) {
     console.error('Error al guardar el cache de productos:', err);
   }
@@ -160,18 +182,62 @@ const getCachedEuroValue = (req, res) => {
   }
 };
 
+// Función para leer productos desde el archivo
+const readProductsFromFile = () => {
+  try {
+    console.log(`Intentando leer archivo: ${CACHE_FILE}`);
+    
+    if (!fs.existsSync(CACHE_FILE)) {
+      console.log(`⚠️ Archivo no encontrado: ${CACHE_FILE}`);
+      return [];
+    }
+    
+    let data = fs.readFileSync(CACHE_FILE, 'utf-8');
+    
+    // Eliminar BOM (Byte Order Mark) si existe
+    if (data.charCodeAt(0) === 0xFEFF) {
+      data = data.substring(1);
+      console.log('BOM detectado y eliminado del archivo JSON');
+    }
+    
+    // Otra forma de eliminar posibles caracteres problemáticos al inicio
+    data = data.replace(/^\uFEFF/, '');
+    data = data.trim();
+    
+    console.log(`✅ Archivo leído correctamente, tamaño: ${data.length} bytes`);
+    console.log(`Primeros 20 caracteres: "${data.substring(0, 20)}"`);
+    
+    try {
+      const products = JSON.parse(data);
+      console.log(`✅ JSON parseado correctamente, contiene ${products.length} productos`);
+      return products;
+    } catch (parseError) {
+      console.error(`❌ Error al parsear JSON: ${parseError.message}`);
+      console.error(`Contenido problemático: "${data.substring(0, 50)}..."`);
+      return [];
+    }
+  } catch (err) {
+    console.error(`❌ Error al leer archivo: ${err.message}`);
+    return [];
+  }
+};
+
 // @desc    Get all cached values
 // @route   GET /api/products/cache/all
 // @access  Public
 const getAllCachedValues = (req, res) => {
+  // Leer productos directamente del archivo en cada petición
+  const productsFromFile = readProductsFromFile();
+
   const cache = {
     currencies: currencyCache,
     products: {
-      total: cachedProducts.length,
-      data: cachedProducts
+      total: productsFromFile.length,
+      data: productsFromFile
     }
   };
   
+  console.log(`Enviando respuesta al frontend con ${productsFromFile.length} productos`);
   res.status(200).json(cache);
 };
 
