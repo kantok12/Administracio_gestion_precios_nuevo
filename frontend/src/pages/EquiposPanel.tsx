@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
+import OpcionalesCotizacionModal from '../components/OpcionalesCotizacionModal';
+import DetallesCargaPanel from './DetallesCargaPanel';
 
 // Interfaces (copiadas de App.tsx)
 interface Producto {
@@ -72,6 +74,35 @@ export default function EquiposPanel() {
   const [opcionalesLoading, setOpcionalesLoading] = useState(false);
   const [opcionalesError, setOpcionalesError] = useState<string | null>(null);
   const [opcionalesData, setOpcionalesData] = useState<Producto[]>([]);
+  const [showCotizacionModal, setShowCotizacionModal] = useState(false);
+  const [productoParaCotizar, setProductoParaCotizar] = useState<Producto | null>(null);
+
+  // NUEVOS Estados para Vista/Modal Opcionales (botón Opcionales)
+  const [showVistaOpcionalesModal, setShowVistaOpcionalesModal] = useState(false);
+  const [productoParaVistaOpcionales, setProductoParaVistaOpcionales] = useState<Producto | null>(null);
+  const [vistaOpcionalesData, setVistaOpcionalesData] = useState<Producto[]>([]);
+  const [vistaOpcionalesLoading, setVistaOpcionalesLoading] = useState(false);
+  const [vistaOpcionalesError, setVistaOpcionalesError] = useState<string | null>(null);
+  const [loadingOpcionalesBtn, setLoadingOpcionalesBtn] = useState<string | null>(null);
+
+  // --- NUEVO: Estados para el Flujo de Cotización ---
+  const [pasoCotizacion, setPasoCotizacion] = useState<number>(0); // 0: Tabla Equipos, 1: Detalles Carga, ...
+  const [opcionalesConfirmados, setOpcionalesConfirmados] = useState<Producto[]>([]); // Guarda los opcionales seleccionados
+
+  // --- Estilos Unificados (Basados en Ver Detalle) ---
+  const unifiedModalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1040 };
+  const unifiedModalContentStyle: React.CSSProperties = { backgroundColor: 'white', borderRadius: '8px', width: '90%', maxWidth: '1000px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' };
+  const unifiedHeaderStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#EBF8FF' }; // Azul claro header
+  const unifiedTitleStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontSize: '16px', fontWeight: 600, color: '#1e88e5' }; // Reducido a 16px
+  const unifiedCloseButtonStyle: React.CSSProperties = { backgroundColor: 'white', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', color: '#1e40af' };
+  const unifiedBodyStyle: React.CSSProperties = { flexGrow: 1, overflowY: 'auto', padding: '24px', backgroundColor: '#F9FAFB' }; // Gris claro body
+  const unifiedTableContainerStyle: React.CSSProperties = { overflowX: 'auto' }; // Contenedor tabla por si acaso
+  const unifiedTableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: '13px' };
+  const unifiedThStyle: React.CSSProperties = { padding: '12px 16px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', fontWeight: 600, color: '#374151', backgroundColor: '#f3f4f6' }; // Mantenido (o 13px si se prefiere)
+  const unifiedTdStyle: React.CSSProperties = { padding: '12px 16px', borderBottom: '1px solid #e5e7eb', verticalAlign: 'top', fontSize: '13px', color: '#4B5563' }; // Reducido a 13px
+  const unifiedFooterStyle: React.CSSProperties = { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f8f9fa' }; // Gris claro footer
+  const unifiedSecondaryButtonStyle: React.CSSProperties = { padding: '8px 16px', borderRadius: '6px', border: '1px solid #D1D5DB', backgroundColor: 'white', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 500 }; // Reducido a 13px
+  const unifiedDisabledSecondaryButtonStyle: React.CSSProperties = { ...unifiedSecondaryButtonStyle, backgroundColor: '#F9FAFB', color: '#9CA3AF', cursor: 'not-allowed' };
 
   // Funciones (movidas de App.tsx)
   const handleVerDetalle = async (producto: Producto) => {
@@ -102,85 +133,105 @@ export default function EquiposPanel() {
   };
 
   const handleOpcionales = async (producto: Producto) => {
-    setLoadingOpcionales(producto.codigo_producto || null);
-    setOpcionalesLoading(true);
-    setOpcionalesError(null);
-    setProductoSeleccionado(producto);
-    setShowModal(true);
+    console.log("Obteniendo opcionales (vista simple) para:", producto.codigo_producto);
+    setProductoParaVistaOpcionales(producto);
+    setShowVistaOpcionalesModal(true);
+    
+    setVistaOpcionalesLoading(true);
+    setVistaOpcionalesError(null);
+    setVistaOpcionalesData([]);
+    setLoadingOpcionalesBtn(producto.codigo_producto || null);
 
     try {
       if (!producto.codigo_producto || !producto.Modelo || !producto.categoria) {
-        throw new Error('Faltan parámetros requeridos (código, modelo o categoría)');
+        throw new Error('Faltan parámetros requeridos (código, modelo o categoría) para obtener opcionales');
       }
       const params = new URLSearchParams();
       params.append('codigo', producto.codigo_producto);
       params.append('modelo', producto.Modelo);
       params.append('categoria', producto.categoria);
       const url = `http://localhost:5001/api/products/opcionales?${params.toString()}`;
-      console.log('Consultando opcionales:', url);
+      console.log('Consultando opcionales (vista simple):', url);
+
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); 
-      try {
-        const response = await fetch(url, {
-          signal: controller.signal,
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-        clearTimeout(timeoutId);
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `Error del servidor: ${response.status}`);
-        }
-        const data = await response.json();
-        if (data.success && data.data) {
-          console.log(`Respuesta de opcionales recibida:`, data);
-          if (data.data.source === 'cache') {
-            console.log('Los datos mostrados provienen del caché como alternativa al webhook');
-          }
-          setOpcionalesData(data.data.products);
-          console.log(`Se encontraron ${data.data.total} productos opcionales`);
-        } else {
-          throw new Error('Formato de respuesta inválido');
-        }
-      } catch (fetchError: any) {
-        if (fetchError.name === 'AbortError' || (fetchError.message && fetchError.message.includes('network'))) {
-          console.log('Timeout o error de red, mostrando productos similares del caché');
-          const productosSimilares = productosOriginales.filter(
-            p => p.categoria === producto.categoria && p.codigo_producto !== producto.codigo_producto
-          );
-          if (productosSimilares.length > 0) {
-            setOpcionalesData(productosSimilares);
-            console.log(`Mostrando ${productosSimilares.length} productos similares del caché`);
-            setOpcionalesError('No se pudieron cargar los opcionales exactos. Mostrando alternativas similares.');
-            return;
-          }
-        }
-        throw fetchError;
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error del servidor al obtener opcionales (vista simple): ${response.status}`);
       }
-    } catch (error) {
-      console.error('Error al obtener opcionales:', error);
-      setOpcionalesError(error instanceof Error ? error.message : 'Error desconocido');
-      if (error instanceof Error && error.message.includes('Failed to fetch')) {
-        setOpcionalesError('Error de conexión con el servidor. Por favor, inténtelo de nuevo más tarde.');
+      const data = await response.json();
+
+      if (data.success && data.data && Array.isArray(data.data.products)) {
+        setVistaOpcionalesData(data.data.products);
+      } else {
+        throw new Error('Formato de respuesta de opcionales inválido (vista simple)');
       }
+    } catch (error: any) {
+      console.error('Error al obtener opcionales (vista simple):', error);
+      if (error.name === 'AbortError') {
+         setVistaOpcionalesError('La solicitud tardó demasiado.');
+      } else if (error.message.includes('Failed to fetch')) {
+        setVistaOpcionalesError('Error de conexión al obtener opcionales.');
+      } else {
+         setVistaOpcionalesError(error instanceof Error ? error.message : 'Error desconocido');
+      }
+      setVistaOpcionalesData([]);
     } finally {
-      setOpcionalesLoading(false);
-      setLoadingOpcionales(null);
+      setVistaOpcionalesLoading(false);
+      setLoadingOpcionalesBtn(null);
     }
   };
 
-  const handleConfigurar = (producto: Producto) => {
+  const handleConfigurar = async (producto: Producto) => {
+    console.log("Abriendo selección de opcionales para:", producto.nombre_del_producto);
+    setProductoParaCotizar(producto);
+    setOpcionalesLoading(true); // Mostrar loading en el modal mientras carga
+    setOpcionalesError(null);
+    setOpcionalesData([]);
+    setShowCotizacionModal(true); // Abrir el modal de selección
     setLoadingSettings(producto.codigo_producto || null);
-    setTimeout(() => {
-      console.log("Configurar producto:", producto.codigo_producto);
-      setLoadingSettings(null);
-    }, 500);
+
+    try {
+      if (!producto.codigo_producto || !producto.Modelo || !producto.categoria) {
+         throw new Error('Faltan parámetros requeridos (código, modelo o categoría)');
+      }
+      const params = new URLSearchParams();
+      params.append('codigo', producto.codigo_producto);
+      params.append('modelo', producto.Modelo);
+      params.append('categoria', producto.categoria);
+      const url = `http://localhost:5001/api/products/opcionales?${params.toString()}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const response = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error del servidor: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.success && data.data && Array.isArray(data.data.products)) {
+        setOpcionalesData(data.data.products); // Cargar datos para el modal
+      } else {
+         throw new Error('Formato de respuesta inválido');
+      }
+    } catch (error: any) {
+       console.error('Error al obtener opcionales para modal configuración:', error);
+       setOpcionalesError(error instanceof Error ? error.message : 'Error desconocido');
+    } finally {
+       setOpcionalesLoading(false); // Terminar carga del modal
+       setLoadingSettings(null);
+    }
   };
   
   const handleCloseModal = () => {
-    setShowModal(false);
-    setProductoSeleccionado(null);
+    setShowVistaOpcionalesModal(false);
+    setProductoParaVistaOpcionales(null);
+    setVistaOpcionalesData([]);
+    setVistaOpcionalesError(null);
   };
   
   const fetchProductos = async () => {
@@ -247,26 +298,71 @@ export default function EquiposPanel() {
   useEffect(() => {
     const handleEscKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (showModal) {
-          handleCloseModal();
-        }
-        if (showDetalleModal) {
-          handleCloseDetalleModal();
-        }
+         if (showVistaOpcionalesModal) { handleCloseModal(); }
+         if (showDetalleModal) { handleCloseDetalleModal(); }
+         if (showCotizacionModal) { handleCloseCotizacionModal(); } // Ya cierra este
+         // No necesitamos cerrar DetallesCargaPanel con ESC (se usa botón Volver)
       }
     };
     window.addEventListener('keydown', handleEscKey);
-    return () => {
-      window.removeEventListener('keydown', handleEscKey);
-    };
-  }, [showModal, showDetalleModal]);
+    return () => { window.removeEventListener('keydown', handleEscKey); };
+  }, [showVistaOpcionalesModal, showDetalleModal, showCotizacionModal]);
 
   const handleCloseDetalleModal = () => {
     setShowDetalleModal(false);
     setDetalleProducto(null);
   };
 
+  const handleCloseCotizacionModal = () => { 
+      setShowCotizacionModal(false); 
+      setProductoParaCotizar(null); // Limpiar al cerrar sin confirmar
+      setOpcionalesData([]); // Limpiar datos del modal
+      setOpcionalesError(null);
+  };
+
+  // --- NUEVO: Función llamada desde OpcionalesCotizacionModal ---
+  const handleConfirmarSeleccionOpcionales = (codigosSeleccionados: string[]) => {
+    console.log("Confirmando opcionales con códigos:", codigosSeleccionados);
+    // Filtrar los opcionales completos basados en los códigos seleccionados
+    const seleccionadosCompletos = opcionalesData.filter(op => 
+        op.codigo_producto && codigosSeleccionados.includes(op.codigo_producto)
+    );
+    setOpcionalesConfirmados(seleccionadosCompletos); // Guardar los opcionales seleccionados
+    setPasoCotizacion(1); // Avanzar al paso 1: Detalles de la Carga
+    setShowCotizacionModal(false); // Cerrar el modal de selección
+    setProductoParaCotizar(productoParaCotizar); // Mantener el producto principal para el siguiente paso
+  };
+  
+  // --- NUEVO: Función para volver desde DetallesCargaPanel ---
+   const handleVolverDesdeDetalles = () => {
+    setPasoCotizacion(0); // Volver al paso 0: Tabla de Equipos
+    setProductoParaCotizar(null); // Limpiar producto en cotización
+    setOpcionalesConfirmados([]); // Limpiar opcionales confirmados
+  };
+
+  // --- NUEVO: Función para eliminar un opcional confirmado ---
+  const handleEliminarOpcionalConfirmado = (codigoAEliminar: string) => {
+    console.log("Eliminando opcional confirmado:", codigoAEliminar);
+    setOpcionalesConfirmados(prevConfirmados => 
+      prevConfirmados.filter(op => op.codigo_producto !== codigoAEliminar)
+    );
+  };
+
   // JSX (movido de App.tsx, corresponde al <main>...</main>)
+  if (pasoCotizacion === 1) {
+    // Renderizar el panel de Detalles de la Carga
+    return (
+       <DetallesCargaPanel 
+         productoPrincipal={productoParaCotizar} 
+         opcionalesSeleccionados={opcionalesConfirmados} 
+         onVolver={handleVolverDesdeDetalles}
+         onSiguiente={() => { console.log("Ir al siguiente paso..."); /* Lógica futura */ }}
+         onEliminarOpcional={handleEliminarOpcionalConfirmado}
+       />
+     );
+  }
+
+  // Renderizado por defecto (pasoCotizacion === 0): Tabla de Equipos
   return (
     <div style={{ padding: '24px' }}>
       <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>EQUIPOS</h1>
@@ -350,7 +446,16 @@ export default function EquiposPanel() {
                       <td style={{ padding: '16px', textAlign: 'left' }}>{producto.Modelo || '-'}</td>
                       <td style={{ padding: '16px', textAlign: 'left' }}>{producto.categoria || '-'}</td>
                       <td style={{ padding: '12px', textAlign: 'center' }}><button className="button-hover" style={{ padding: '8px', backgroundColor: 'white', color: '#1d4ed8', border: '1px solid #e5e7eb', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', transition: 'all 0.2s ease' }} onClick={() => handleVerDetalle(producto)} disabled={loadingDetail === producto.codigo_producto}>{loadingDetail === producto.codigo_producto ? (<div style={{ width: '14px', height: '14px', border: '2px solid #E5E7EB', borderTopColor: '#1d4ed8', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>) : (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>)}</button></td>
-                      <td style={{ padding: '12px', textAlign: 'center' }}><button className="button-hover" style={{ padding: '8px', backgroundColor: 'white', color: '#059669', border: '1px solid #e5e7eb', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', transition: 'all 0.2s ease' }} onClick={() => handleOpcionales(producto)} disabled={loadingOpcionales === producto.codigo_producto}>{loadingOpcionales === producto.codigo_producto ? (<div style={{ width: '14px', height: '14px', border: '2px solid #E5E7EB', borderTopColor: '#059669', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>) : (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line><polyline points="12 8 16 12 12 16"></polyline></svg>)}</button></td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        <button 
+                          className="button-hover" 
+                          style={{ padding: '8px', backgroundColor: 'white', color: '#059669', border: '1px solid #e5e7eb', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', transition: 'all 0.2s ease' }}
+                          onClick={() => handleOpcionales(producto)}
+                          disabled={loadingOpcionalesBtn === producto.codigo_producto}
+                        >
+                          {loadingOpcionalesBtn === producto.codigo_producto ? (<div style={{ width: '14px', height: '14px', border: '2px solid #E5E7EB', borderTopColor: '#059669', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>) : (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line><polyline points="12 8 16 12 12 16"></polyline></svg>)}
+                        </button>
+                      </td>
                       <td style={{ padding: '12px', textAlign: 'center' }}><button className="button-hover" style={{ padding: '8px', backgroundColor: 'white', color: '#d97706', border: '1px solid #e5e7eb', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', transition: 'all 0.2s ease' }} onClick={() => handleConfigurar(producto)} disabled={loadingSettings === producto.codigo_producto}>{loadingSettings === producto.codigo_producto ? (<div style={{ width: '14px', height: '14px', border: '2px solid #E5E7EB', borderTopColor: '#d97706', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>) : (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M9 9h6v6H9z"></path></svg>)}</button></td>
                     </tr>
                   ))}
@@ -361,58 +466,108 @@ export default function EquiposPanel() {
         )}
       </div>
 
-      {/* Modales (movidos de App.tsx) */}
-      {showModal && productoSeleccionado && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="modal-content hover-scale" style={{ backgroundColor: 'white', borderRadius: '8px', width: '90%', maxWidth: '800px', maxHeight: '85vh', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }}>
-            <div style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E5E7EB', backgroundColor: '#EBF8FF' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e88e5' }}>Opcionales: {productoSeleccionado.nombre_del_producto}</h2>
-              <button onClick={handleCloseModal} className="button-hover" style={{ backgroundColor: 'white', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', color: '#1e40af' }}>
+      {showDetalleModal && detalleProducto && (
+        <div className="modal-overlay" style={unifiedModalOverlayStyle}>
+          <div className="modal-content hover-scale" style={{ ...unifiedModalContentStyle, maxWidth: '800px' }}>
+            <div style={unifiedHeaderStyle}>
+               <div style={unifiedTitleStyle}>
+                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="8"/></svg>
+                 <h2>Especificaciones Técnicas</h2>
+               </div>
+               <button onClick={handleCloseDetalleModal} className="button-hover" style={unifiedCloseButtonStyle}>
                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
+               </button>
             </div>
-            <div style={{ padding: '24px', overflow: 'auto', maxHeight: 'calc(85vh - 64px)', backgroundColor: '#F9FAFB' }}>
-              {opcionalesLoading ? ( <div style={{ backgroundColor: 'white', padding: '48px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><div style={{ width: '48px', height: '48px', border: '3px solid #E5E7EB', borderTopColor: '#1e88e5', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '16px' }}></div><p style={{ fontSize: '18px', fontWeight: '500', color: '#4B5563', marginBottom: '8px' }}>Cargando opcionales...</p><p style={{ color: '#6B7280' }}>Por favor espere mientras obtenemos los opcionales</p></div>
-              ) : opcionalesError ? ( <div style={{ backgroundColor: 'white', padding: '48px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px' }}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12" y2="16"></line></svg><p style={{ fontSize: '18px', fontWeight: '500', color: '#EF4444', marginBottom: '8px' }}>Error al cargar opcionales</p><p style={{ color: '#6B7280' }}>{opcionalesError}</p></div>
-              ) : opcionalesData.length === 0 ? ( <div style={{ backgroundColor: 'white', padding: '48px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px' }}><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg><p style={{ fontSize: '18px', fontWeight: '500', color: '#4B5563', marginBottom: '8px' }}>No hay opcionales disponibles</p><p style={{ color: '#6B7280' }}>Este producto no tiene opcionales registrados</p></div>
-              ) : (
-                <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ backgroundColor: '#f3f4f6' }}><th style={{ padding: '12px 16px', textAlign: 'left' }}>Código</th><th style={{ padding: '12px 16px', textAlign: 'left' }}>Nombre</th><th style={{ padding: '12px 16px', textAlign: 'left' }}>Descripción</th><th style={{ padding: '12px 16px', textAlign: 'left' }}>Modelo</th></tr></thead>
-                    <tbody>
-                      {opcionalesData.map((opcional, index) => (
-                        <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}><td style={{ padding: '12px 16px' }}>{opcional.codigo_producto || '-'}</td><td style={{ padding: '12px 16px' }}>{opcional.nombre_del_producto || '-'}</td><td style={{ padding: '12px 16px' }}>{opcional.Descripcion || '-'}</td><td style={{ padding: '12px 16px' }}>{opcional.Modelo || '-'}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+            <div style={unifiedBodyStyle}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <tbody>
+                  <tr style={{ backgroundColor: '#f8f9fa' }}><td style={{ ...unifiedTdStyle, fontWeight: 500, width: '30%' }}>NOMBRE COMERCIAL</td><td style={unifiedTdStyle}>{detalleProducto.nombre_del_producto || '-'}</td></tr>
+                  <tr><td style={{ ...unifiedTdStyle, fontWeight: 500, width: '30%' }}>FAMILIA</td><td style={unifiedTdStyle}>{detalleProducto.categoria || '-'}</td></tr>
+                  <tr style={{ backgroundColor: '#f8f9fa' }}><td style={{ ...unifiedTdStyle, fontWeight: 500 }}>ELEMENTO DE CORTE</td><td style={unifiedTdStyle}>Disco simple</td></tr>
+                  <tr><td style={{ ...unifiedTdStyle, fontWeight: 500 }}>DIÁMETRO DE ENTRADA</td><td style={unifiedTdStyle}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/diámetro de entrada de (\d+)/i)?.[1] + 'mm' : '-'}</td></tr>
+                  <tr style={{ backgroundColor: '#f8f9fa' }}><td style={{ ...unifiedTdStyle, fontWeight: 500 }}>GARGANTA DE ALIMENTACIÓN</td><td style={unifiedTdStyle}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/garganta de (\d+x\d+)/i)?.[1] + 'mm' : '-'}</td></tr>
+                  <tr><td style={{ ...unifiedTdStyle, fontWeight: 500 }}>MÉTODO DE DESPLAZAMIENTO</td><td style={unifiedTdStyle}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/garganta de (\d+x\d+)/i)?.[1] : '-'}</td></tr>
+                  <tr style={{ backgroundColor: '#f8f9fa' }}><td style={{ ...unifiedTdStyle, fontWeight: 500 }}>TIPO DE MOTOR</td><td style={unifiedTdStyle}>{detalleProducto?.nombre_del_producto?.includes('PTO') ? 'Requiere PTO' : 'Motor integrado'}</td></tr>
+                  <tr><td style={{ ...unifiedTdStyle, fontWeight: 500 }}>TIPO DE ENGANCHE BOLA/ANILLO/CAT I-CAT II</td><td style={unifiedTdStyle}>{detalleProducto?.nombre_del_producto?.includes('Cat.') ? detalleProducto.nombre_del_producto.match(/Cat\.\s*(I+)/)?.[1] : '-'}</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       )}
 
-      {showDetalleModal && detalleProducto && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="modal-content hover-scale" style={{ backgroundColor: 'white', borderRadius: '8px', width: '90%', maxWidth: '800px', maxHeight: '90vh', overflow: 'auto', position: 'relative', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#EBF8FF' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e88e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="8"/></svg><h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: '#1e88e5' }}>Especificaciones Técnicas</h2></div>
-              <button onClick={handleCloseDetalleModal} className="button-hover" style={{ backgroundColor: 'white', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', color: '#1e40af' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+      {showCotizacionModal && productoParaCotizar && (
+        <OpcionalesCotizacionModal 
+          productoNombre={productoParaCotizar.nombre_del_producto || 'Producto sin nombre'}
+          opcionales={opcionalesData}
+          isLoading={opcionalesLoading}
+          error={opcionalesError}
+          onClose={handleCloseCotizacionModal}
+          onConfirmarSeleccion={handleConfirmarSeleccionOpcionales}
+        />
+      )}
+
+      {showVistaOpcionalesModal && productoParaVistaOpcionales && (
+        <div style={unifiedModalOverlayStyle} onClick={handleCloseModal}> 
+          <div style={unifiedModalContentStyle} onClick={(e) => e.stopPropagation()}> 
+            <div style={unifiedHeaderStyle}>
+              <div style={unifiedTitleStyle}>
+                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line><polyline points="12 8 16 12 12 16"></polyline></svg>
+                 <h2>{productoParaVistaOpcionales.nombre_del_producto} - Opcionales</h2>
+               </div>
+               <button onClick={handleCloseModal} style={unifiedCloseButtonStyle} aria-label="Cerrar">
+                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+               </button>
             </div>
-            <div style={{ padding: '24px', overflow: 'auto', maxHeight: 'calc(85vh - 64px)', backgroundColor: '#F9FAFB' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <tbody>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}><td style={{ padding: '12px 16px', fontWeight: '500', width: '30%', borderBottom: '1px solid #e5e7eb' }}>NOMBRE COMERCIAL</td><td style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>{detalleProducto.nombre_del_producto || '-'}</td></tr>
-                  <tr><td style={{ padding: '12px 16px', fontWeight: '500', width: '30%', borderBottom: '1px solid #e5e7eb' }}>FAMILIA</td><td style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>{detalleProducto.categoria || '-'}</td></tr>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}><td style={{ padding: '12px 16px', fontWeight: '500', borderBottom: '1px solid #e5e7eb' }}>ELEMENTO DE CORTE</td><td style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>Disco simple</td></tr>
-                  <tr><td style={{ padding: '12px 16px', fontWeight: '500', borderBottom: '1px solid #e5e7eb' }}>DIÁMETRO DE ENTRADA</td><td style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/diámetro de entrada de (\d+)/i)?.[1] + 'mm' : '-'}</td></tr>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}><td style={{ padding: '12px 16px', fontWeight: '500', borderBottom: '1px solid #e5e7eb' }}>GARGANTA DE ALIMENTACIÓN</td><td style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/garganta de (\d+x\d+)/i)?.[1] + 'mm' : '-'}</td></tr>
-                  <tr><td style={{ padding: '12px 16px', fontWeight: '500', borderBottom: '1px solid #e5e7eb' }}>MÉTODO DE DESPLAZAMIENTO</td><td style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>{detalleProducto.Descripcion ? detalleProducto.Descripcion.match(/garganta de (\d+x\d+)/i)?.[1] : '-'}</td></tr>
-                  <tr style={{ backgroundColor: '#f8f9fa' }}><td style={{ padding: '12px 16px', fontWeight: '500', borderBottom: '1px solid #e5e7eb' }}>TIPO DE MOTOR</td><td style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>{detalleProducto?.nombre_del_producto?.includes('PTO') ? 'Requiere PTO' : 'Motor integrado'}</td></tr>
-                  <tr><td style={{ padding: '12px 16px', fontWeight: '500', borderBottom: '1px solid #e5e7eb' }}>TIPO DE ENGANCHE BOLA/ANILLO/CAT I-CAT II</td><td style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>{detalleProducto?.nombre_del_producto?.includes('Cat.') ? detalleProducto.nombre_del_producto.match(/Cat\.\s*(I+)/)?.[1] : '-'}</td></tr>
-                </tbody>
-              </table>
+            
+            <div style={unifiedBodyStyle}>
+              {vistaOpcionalesLoading ? (
+                 <div style={{ padding: '40px', textAlign: 'center', color: '#6B7280' }}>Cargando opcionales...</div>
+              ) : vistaOpcionalesError ? (
+                 <div style={{ padding: '40px', textAlign: 'center', color: '#EF4444' }}>Error: {vistaOpcionalesError}</div>
+              ) : vistaOpcionalesData.length === 0 ? (
+                 <div style={{ padding: '40px', textAlign: 'center', color: '#6B7280' }}>No hay opcionales disponibles.</div>
+              ) : (
+                 <div style={unifiedTableContainerStyle}>
+                   <table style={unifiedTableStyle}>
+                     <thead>
+                       <tr>
+                         <th style={{ ...unifiedThStyle, width: '100px' }}>Código</th>
+                         <th style={{ ...unifiedThStyle, width: '35%' }}>Nombre</th>
+                         <th style={unifiedThStyle}>Descripción</th>
+                       </tr>
+                     </thead>
+                     <tbody>
+                       {vistaOpcionalesData.map((opcional, index) => (
+                         <tr key={opcional.codigo_producto || index} style={{ backgroundColor: index % 2 !== 0 ? '#f8f9fa' : 'white' }}>
+                           <td style={unifiedTdStyle}>{opcional.codigo_producto || '-'}</td>
+                           <td style={unifiedTdStyle}>{opcional.nombre_del_producto || '-'}</td>
+                           <td style={unifiedTdStyle}>{opcional.Descripcion || '-'}</td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+              )}
             </div>
+            
+            {vistaOpcionalesData.length > 0 && !vistaOpcionalesLoading && !vistaOpcionalesError && (
+              <div style={unifiedFooterStyle}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                   <button style={true ? unifiedDisabledSecondaryButtonStyle : unifiedSecondaryButtonStyle} disabled={true}>
+                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                     Anterior
+                   </button>
+                   <span style={{ fontSize: '13px', color: '#4B5563', padding: '0 8px' }}>
+                     1 de 1
+                   </span>
+                   <button style={true ? unifiedDisabledSecondaryButtonStyle : unifiedSecondaryButtonStyle} disabled={true}>
+                     Siguiente
+                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                   </button>
+                 </div>
+               </div>
+            )}
           </div>
         </div>
       )}
