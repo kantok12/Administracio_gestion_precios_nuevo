@@ -69,7 +69,7 @@ export default function AdminPanel() {
   // ------------------------------------------------------
 
   // --- Función Refactorizada para Obtener y Establecer Divisas --- 
-  const fetchAndSetCurrencies = async () => {
+  const fetchAndSetCurrencies = async (updateTimestamp?: Date) => {
     const webhookUrl = 'https://n8n-807184488368.southamerica-west1.run.app/webhook/8012d60e-8a29-4910-b385-6514edc3d912';
     console.log("Fetching currencies from webhook...");
     try {
@@ -86,12 +86,31 @@ export default function AdminPanel() {
       console.log("Webhook response:", data);
 
       if (data && data.Valor_Dolar !== undefined && data.Valor_Euro !== undefined) {
-        setDolarActualCLP(String(data.Valor_Dolar));
-        setEuroActualCLP(String(data.Valor_Euro));
-        // Intentar usar la fecha del webhook si existe, si no, la actual
-        const fechaWebhook = data.Fecha ? new Date(data.Fecha.split('-').reverse().join('-')).toLocaleDateString('es-CL') : null;
-        setFechaActualizacionDivisas(fechaWebhook ? `${fechaWebhook}, ${new Date().toLocaleTimeString('es-CL')}` : new Date().toLocaleString('es-CL'));
-        console.log("Frontend states updated.");
+        // --- REDONDEAR VALORES ANTES DE ESTABLECER ESTADO ---
+        const roundedDolar = Math.round(parseFloat(data.Valor_Dolar));
+        const roundedEuro = Math.round(parseFloat(data.Valor_Euro));
+        
+        // Comprobar si el redondeo fue exitoso (no NaN)
+        if (!isNaN(roundedDolar)) {
+           setDolarActualCLP(String(roundedDolar)); 
+        } else {
+           console.warn('Valor_Dolar no es un número válido:', data.Valor_Dolar);
+           setDolarActualCLP(null); // O mantener valor anterior / mostrar error
+        }
+        if (!isNaN(roundedEuro)) {
+            setEuroActualCLP(String(roundedEuro));
+        } else {
+           console.warn('Valor_Euro no es un número válido:', data.Valor_Euro);
+           setEuroActualCLP(null); // O mantener valor anterior / mostrar error
+        }
+        // ----------------------------------------------------
+
+        // --- USAR EL TIMESTAMP PASADO (o el actual si no se pasó) PARA LA FECHA DE ACTUALIZACIÓN ---
+        const displayTime = updateTimestamp || new Date(); 
+        setFechaActualizacionDivisas(displayTime.toLocaleString('es-CL'));
+        // ------------------------------------------------------------------------------------
+
+        console.log("Frontend states updated with rounded values.");
         return true; // Indicar éxito
       } else {
         throw new Error('Respuesta del webhook incompleta.');
@@ -109,8 +128,9 @@ export default function AdminPanel() {
     const loadInitialData = async () => {
       setInitialCurrencyLoading(true);
       setInitialCurrencyError(null);
+      const initialTimestamp = new Date(); // Captura la hora al iniciar la carga
       try {
-        await fetchAndSetCurrencies();
+        await fetchAndSetCurrencies(initialTimestamp); // Pasar el timestamp
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
         setInitialCurrencyError(errorMsg.includes('fetch') ? 'Error de conexión inicial con el webhook.' : errorMsg);
@@ -130,10 +150,11 @@ export default function AdminPanel() {
   
   // --- MODIFICAR handleActualizarDivisas para usar la función refactorizada ---
   const handleActualizarDivisas = async () => {
+    const updateTime = new Date(); // <<< CAPTURAR HORA AQUÍ
     setIsUpdatingCurrencies(true);
     setCurrencyUpdateError(null);
     try {
-      await fetchAndSetCurrencies(); // Llamar a la función refactorizada
+      await fetchAndSetCurrencies(updateTime); // <<< PASAR HORA AQUÍ
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
       setCurrencyUpdateError(errorMsg.includes('fetch') ? 'Error de conexión con el webhook.' : errorMsg);
