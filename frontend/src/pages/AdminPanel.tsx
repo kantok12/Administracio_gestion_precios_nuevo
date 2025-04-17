@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 // Importar iconos necesarios
-import { SlidersHorizontal, DollarSign, Euro, RefreshCw, Info, Save, Calendar, Filter } from 'lucide-react';
+import { SlidersHorizontal, DollarSign, Euro, RefreshCw, Info, Save, Calendar, Filter, Loader2 } from 'lucide-react';
 
 // --- Interfaz Placeholder para un Perfil de Costos (la mantenemos por si se usa en otras tabs) ---
 interface PerfilCostoCategoria {
@@ -61,12 +61,60 @@ export default function AdminPanel() {
   const secondaryButtonStyle: React.CSSProperties = { ...buttonBaseStyle, backgroundColor: 'white', color: '#334155', borderColor: borderColor };
   const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'none', background: `url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23${secondaryTextColor.substring(1)}%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.4-12.8z%22%2F%3E%3C%2Fsvg%3E') no-repeat right 12px center`, backgroundSize: '10px' };
 
+  // --- NUEVOS ESTADOS para la actualización de divisas ---
+  const [isUpdatingCurrencies, setIsUpdatingCurrencies] = useState(false);
+  const [currencyUpdateError, setCurrencyUpdateError] = useState<string | null>(null);
+  // ------------------------------------------------------
+
   // --- Handlers (mantener lógica placeholder) ---
   const handleInputChange = (setter: React.Dispatch<React.SetStateAction<any>>) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
      setter(event.target.value);
   };
   const handleSaveAll = () => alert('Guardando todos los cambios...');
-  const handleActualizarDivisas = () => alert('Actualizando divisas...');
+  
+  // -------- MODIFICAR handleActualizarDivisas --------
+  const handleActualizarDivisas = async () => {
+    setIsUpdatingCurrencies(true);
+    setCurrencyUpdateError(null);
+    console.log("Intentando actualizar divisas...");
+
+    try {
+      const response = await fetch('http://localhost:5001/api/currency/fetch'); // Asumiendo puerto 5001 para backend
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `Error del servidor: ${response.status}` }));
+        throw new Error(errorData.message || `Error del servidor: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Respuesta de actualización de divisas:", data);
+
+      if (data.success && data.data && data.data.currencies) {
+        const { dollar, euro } = data.data.currencies;
+        // Actualizar estados locales con los nuevos valores del backend
+        if (dollar && dollar.value !== null) {
+          setDolarActualCLP(String(dollar.value)); 
+        }
+        if (euro && euro.value !== null) {
+          setEuroActualCLP(String(euro.value));
+        }
+        // Actualizar la fecha/hora de última actualización mostrada
+        setFechaActualizacionDivisas(new Date().toLocaleString('es-CL')); 
+        // Opcionalmente usar data.data.currencies.dollar.last_update si prefieres la hora del servidor
+        console.log("Divisas actualizadas en el frontend.");
+      } else {
+        throw new Error(data.message || 'Formato de respuesta inesperado del servidor.');
+      }
+
+    } catch (error) {
+      console.error('Error al actualizar divisas:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
+      setCurrencyUpdateError(errorMsg.includes('Failed to fetch') ? 'Error de conexión con el servidor backend.' : errorMsg);
+    } finally {
+      setIsUpdatingCurrencies(false);
+    }
+  };
+  // --------------------------------------------------
 
   // --- Estado para la pestaña activa (ejemplo) ---
   const [activeTab, setActiveTab] = useState('calculos');
@@ -80,149 +128,151 @@ export default function AdminPanel() {
         <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#111827' }}>
           ADMIN
         </h1>
-        <div style={{ display: 'flex', gap: '24px' }}>
-          {/* Tabs (Funcionalidad placeholder) */}
-          <div style={{ display: 'flex' }}>
-            <button style={activeTab === 'calculos' ? activeTabStyle : tabStyle} onClick={() => setActiveTab('calculos')}>Cálculos y Parámetros</button>
-            <button style={activeTab === 'configuracion' ? activeTabStyle : tabStyle} onClick={() => setActiveTab('configuracion')}>Configuración</button>
-            <button style={activeTab === 'registro' ? activeTabStyle : tabStyle} onClick={() => setActiveTab('registro')}>Registro de Actividad</button>
-          </div>
-        </div>
+        
+        {/* Mantener el botón Guardar */}
         <button style={primaryButtonStyle} onClick={handleSaveAll}>
           <Save size={16} /> Guardar Cambios
         </button>
       </div>
 
-      {/* --- Contenido de la Pestaña Activa --- */} 
-      {activeTab === 'calculos' && (
-         // Contenedor para la pestaña "Cálculos y Parámetros"
-         <div>
-           {/* Título y Filtro */}
-           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-             <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <SlidersHorizontal size={20} /> Parámetros de Cálculo y Costos
-             </h2>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <label style={{ fontSize: '12px', color: secondaryTextColor }}>Filtrar por Categoría:</label>
-                <select 
-                    style={{ ...selectStyle, minWidth: '180px' }} 
-                    value={categoriaSeleccionadaFiltro} 
-                    onChange={(e) => setCategoriaSeleccionadaFiltro(e.target.value)}
-                >
-                    {categoriasDisponibles.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                </select>
+      {/* --- Contenido Principal (Ya no depende de activeTab) --- */}
+      <div> 
+         {/* Título y Filtro */}
+         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+           <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <SlidersHorizontal size={20} /> Parámetros de Cálculo y Costos
+           </h2>
+           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ fontSize: '12px', color: secondaryTextColor }}>Filtrar por Categoría:</label>
+              <select 
+                  style={{ ...selectStyle, minWidth: '180px' }} 
+                  value={categoriaSeleccionadaFiltro} 
+                  onChange={(e) => setCategoriaSeleccionadaFiltro(e.target.value)}
+              >
+                  {categoriasDisponibles.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                  ))}
+              </select>
+           </div>
+         </div>
+
+         {/* Sección Valores Actuales de Divisas */}
+         <div style={{ ...mainCardStyle, backgroundColor: lightGrayBg, border: `1px solid ${borderColor}`}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
+               <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', margin: 0 }}>Valores Actuales de Divisas</h3>
+               <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                  <button 
+                    style={{...secondaryButtonStyle, cursor: isUpdatingCurrencies ? 'not-allowed' : 'pointer'}}
+                    onClick={handleActualizarDivisas} 
+                    disabled={isUpdatingCurrencies}
+                  >
+                     {isUpdatingCurrencies ? (
+                        <Loader2 size={14} className="animate-spin" />
+                     ) : (
+                        <RefreshCw size={14} />
+                     )}
+                     {isUpdatingCurrencies ? 'Actualizando...' : 'Actualizar Divisas'} 
+                  </button>
+                  {currencyUpdateError && (
+                     <div style={{ marginBottom: '12px', padding: '8px 12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '6px', fontSize: '12px' }}>
+                        Error al actualizar: {currencyUpdateError}
+                     </div>
+                  )}
+               </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom:'12px' }}>
+               <div style={currencyDisplayStyle}>
+                  <DollarSign size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
+                  <div style={currencyValueStyle}>{dolarActualCLP}</div>
+                  <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Dólar Observado Actual (CLP)</div>
+                  <div style={currencyDateStyle}>Valor del {new Date(fechaActualizacionDivisas.split(', ')[0].split('/').reverse().join('-')).toLocaleDateString('es-CL') || new Date().toLocaleDateString('es-CL')}</div>
+               </div>
+               <div style={currencyDisplayStyle}>
+                   <Euro size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
+                  <div style={currencyValueStyle}>{euroActualCLP}</div>
+                   <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Euro Observado Actual (CLP)</div>
+                  <div style={currencyDateStyle}>Valor del {new Date(fechaActualizacionDivisas.split(', ')[0].split('/').reverse().join('-')).toLocaleDateString('es-CL') || new Date().toLocaleDateString('es-CL')}</div>
+               </div>
+            </div>
+             <p style={{fontSize: '11px', color: secondaryTextColor, textAlign: 'center', margin: '12px 0 0 0'}}>
+                <Info size={12} style={{verticalAlign: 'middle', marginRight: '4px'}}/>
+                Los valores se actualizan automáticamente todos los días a las 12:00 PM. También puedes actualizar manualmente.
+             </p>
+         </div>
+
+         {/* Grid para los parámetros */}
+         <div style={gridContainerStyle}>
+           {/* Card: Tipos de Cambio */}
+           <div style={gridCardStyle}>
+             <h3 style={gridCardTitleStyle}>Tipos de Cambio</h3>
+             <div style={inputGroupStyle}>
+               <label style={labelStyle}>Tipo de Cambio EUR/USD</label>
+               <input type="number" style={inputStyle} value={tipoCambio} onChange={handleInputChange(setTipoCambio)} step="0.01" />
+               <p style={inputDescriptionStyle}>Definible</p>
+             </div>
+             <div style={inputGroupStyle}>
+               <label style={labelStyle}>Dólar Observado Actual (CLP)</label>
+               <input type="number" style={{...inputStyle, backgroundColor: '#e5e7eb'}} value={dolarObservadoInput} readOnly />
+               <p style={inputDescriptionStyle}>Fijo desde API</p>
+             </div>
+             <div style={inputGroupStyle}>
+               <label style={labelStyle}>Buffer USD/CLP (%)</label>
+               <input type="number" style={inputStyle} value={bufferDolar} onChange={handleInputChange(setBufferDolar)} step="0.1" />
+               <p style={inputDescriptionStyle}>Definible</p>
              </div>
            </div>
 
-           {/* Sección Valores Actuales de Divisas */}
-           <div style={{ ...mainCardStyle, backgroundColor: lightGrayBg, border: `1px solid ${borderColor}`}}>
-              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
-                 <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', margin: 0 }}>Valores Actuales de Divisas</h3>
-                 <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                    <button style={secondaryButtonStyle} onClick={handleActualizarDivisas}>
-                       <RefreshCw size={14} /> Actualizar Divisas
-                    </button>
-                    <span style={{ fontSize: '11px', color: secondaryTextColor }}>
-                       <Info size={12} style={{verticalAlign: 'middle', marginRight: '4px'}} />
-                       Última actualización: {fechaActualizacionDivisas}
-                    </span>
-                 </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom:'12px' }}>
-                 <div style={currencyDisplayStyle}>
-                    <DollarSign size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
-                    <div style={currencyValueStyle}>{dolarActualCLP}</div>
-                    <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Dólar Observado Actual (CLP)</div>
-                    <div style={currencyDateStyle}>Valor del {new Date().toLocaleDateString('es-CL')}</div> {/* Mostrar fecha actual */} 
-                 </div>
-                 <div style={currencyDisplayStyle}>
-                     <Euro size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
-                    <div style={currencyValueStyle}>{euroActualCLP}</div>
-                     <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Euro Observado Actual (CLP)</div>
-                    <div style={currencyDateStyle}>Valor del {new Date().toLocaleDateString('es-CL')}</div> {/* Mostrar fecha actual */}
-                 </div>
-              </div>
-               <p style={{fontSize: '11px', color: secondaryTextColor, textAlign: 'center', margin: '12px 0 0 0'}}>
-                  <Info size={12} style={{verticalAlign: 'middle', marginRight: '4px'}}/>
-                  Los valores se actualizan automáticamente todos los días a las 12:00 PM. También puedes actualizar manualmente.
-               </p>
-           </div>
-
-           {/* Grid para los parámetros */}
-           <div style={gridContainerStyle}>
-             {/* Card: Tipos de Cambio */}
-             <div style={gridCardStyle}>
-               <h3 style={gridCardTitleStyle}>Tipos de Cambio</h3>
-               <div style={inputGroupStyle}>
-                 <label style={labelStyle}>Tipo de Cambio EUR/USD</label>
-                 <input type="number" style={inputStyle} value={tipoCambio} onChange={handleInputChange(setTipoCambio)} step="0.01" />
-                 <p style={inputDescriptionStyle}>Definible</p>
-               </div>
-               <div style={inputGroupStyle}>
-                 <label style={labelStyle}>Dólar Observado Actual (CLP)</label>
-                 <input type="number" style={{...inputStyle, backgroundColor: '#e5e7eb'}} value={dolarObservadoInput} readOnly />
-                 <p style={inputDescriptionStyle}>Fijo desde API</p>
-               </div>
-               <div style={inputGroupStyle}>
-                 <label style={labelStyle}>Buffer USD/CLP (%)</label>
-                 <input type="number" style={inputStyle} value={bufferDolar} onChange={handleInputChange(setBufferDolar)} step="0.1" />
-                 <p style={inputDescriptionStyle}>Definible</p>
-               </div>
+           {/* Card: Transporte y Seguro */}
+           <div style={gridCardStyle}>
+             <h3 style={gridCardTitleStyle}>Transporte y Seguro</h3>
+             <div style={inputGroupStyle}>
+               <label style={labelStyle}>Buffer Transporte (%)</label>
+               <input type="number" style={inputStyle} value={bufferTransporteGlobal} onChange={handleInputChange(setBufferTransporteGlobal)} step="0.5" />
+               <p style={inputDescriptionStyle}>Definible</p>
              </div>
-
-             {/* Card: Transporte y Seguro */}
-             <div style={gridCardStyle}>
-               <h3 style={gridCardTitleStyle}>Transporte y Seguro</h3>
-               <div style={inputGroupStyle}>
-                 <label style={labelStyle}>Buffer Transporte (%)</label>
-                 <input type="number" style={inputStyle} value={bufferTransporteGlobal} onChange={handleInputChange(setBufferTransporteGlobal)} step="0.5" />
-                 <p style={inputDescriptionStyle}>Definible</p>
-               </div>
-               <div style={inputGroupStyle}>
-                 <label style={labelStyle}>Tasa Seguro (%)</label>
-                 <input type="number" style={inputStyle} value={tasaSeguroGlobal} onChange={handleInputChange(setTasaSeguroGlobal)} step="0.1" />
-                 <p style={inputDescriptionStyle}>Definible</p>
-               </div>
-             </div>
-
-             {/* Card: Otros Parámetros */}
-             <div style={gridCardStyle}>
-               <h3 style={gridCardTitleStyle}>Otros Parámetros</h3>
-               <div style={inputGroupStyle}>
-                 <label style={labelStyle}>Margen Adicional Total (%)</label>
-                 <input type="number" style={inputStyle} value={margenTotalGeneral} onChange={handleInputChange(setMargenTotalGeneral)} step="0.5" />
-                 <p style={inputDescriptionStyle}>Definible</p>
-               </div>
-               <div style={inputGroupStyle}>
-                 <label style={labelStyle}>Descuento Fabricante (%)</label>
-                 <input type="number" style={inputStyle} value={descuentoFabricanteGeneral} onChange={handleInputChange(setDescuentoFabricanteGeneral)} step="0.5" />
-                 <p style={inputDescriptionStyle}>Definible</p>
-               </div>
-                <div style={inputGroupStyle}>
-                 <label style={labelStyle}>Fecha Última Actualización</label>
-                 {/* Usar input tipo date o un date picker component */}
-                 <input type="date" style={inputStyle} value={fechaUltimaActualizacion} onChange={handleInputChange(setFechaUltimaActualizacion)} />
-                 {/*<Calendar size={16} style={{position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', color:'#9ca3af'}}/>*/} 
-               </div>
+             <div style={inputGroupStyle}>
+               <label style={labelStyle}>Tasa Seguro (%)</label>
+               <input type="number" style={inputStyle} value={tasaSeguroGlobal} onChange={handleInputChange(setTasaSeguroGlobal)} step="0.1" />
+               <p style={inputDescriptionStyle}>Definible</p>
              </div>
            </div>
-           
-           {/* --- Sección Perfiles por Categoría (Comentada temporalmente) --- */}
-           {/* 
-           <div style={mainCardStyle}>
-             <h2 style={{...sectionTitleStyle, borderBottom: 'none'}}>Perfiles de Costos por Categoría</h2>
-              // ... contenido anterior de perfiles ... 
+
+           {/* Card: Otros Parámetros */}
+           <div style={gridCardStyle}>
+             <h3 style={gridCardTitleStyle}>Otros Parámetros</h3>
+             <div style={inputGroupStyle}>
+               <label style={labelStyle}>Margen Adicional Total (%)</label>
+               <input type="number" style={inputStyle} value={margenTotalGeneral} onChange={handleInputChange(setMargenTotalGeneral)} step="0.5" />
+               <p style={inputDescriptionStyle}>Definible</p>
+             </div>
+             <div style={inputGroupStyle}>
+               <label style={labelStyle}>Descuento Fabricante (%)</label>
+               <input type="number" style={inputStyle} value={descuentoFabricanteGeneral} onChange={handleInputChange(setDescuentoFabricanteGeneral)} step="0.5" />
+               <p style={inputDescriptionStyle}>Definible</p>
+             </div>
+              <div style={inputGroupStyle}>
+               <label style={labelStyle}>Fecha Última Actualización</label>
+               {/* Usar input tipo date o un date picker component */}
+               <input type="date" style={inputStyle} value={fechaUltimaActualizacion} onChange={handleInputChange(setFechaUltimaActualizacion)} />
+               {/*<Calendar size={16} style={{position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', color:'#9ca3af'}}/>*/} 
+             </div>
            </div>
-           */}
-        </div>
-      )}
+         </div>
+         
+         {/* --- Sección Perfiles por Categoría (Comentada temporalmente) --- */}
+         {/* 
+         <div style={mainCardStyle}>
+           <h2 style={{...sectionTitleStyle, borderBottom: 'none'}}>Perfiles de Costos por Categoría</h2>
+            // ... contenido anterior de perfiles ... 
+         </div>
+         */}
+      </div>
 
-      {/* Aquí podrías añadir el contenido para las otras pestañas */} 
-      {activeTab === 'configuracion' && <div>Contenido Configuración...</div>}
-      {activeTab === 'registro' && <div>Contenido Registro de Actividad...</div>}
-
+      {/* >>> MOVER LA ETIQUETA STYLE AQUÍ (dentro del div principal) <<< */}
+      <style>{`
+         @keyframes spin { to { transform: rotate(360deg); } }
+         .animate-spin { animation: spin 1s linear infinite; }
+      `}</style>
     </div>
   );
 } 
