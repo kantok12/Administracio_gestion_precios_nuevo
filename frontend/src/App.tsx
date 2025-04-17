@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { Search, Filter, X, ArrowLeft, ArrowRight, Check, Settings, Eye, List, Loader2 } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
+import ecoAllianceLogo from './assets/Logotipo_EAX-EA.png';
 
 // Interfaces
 interface Producto {
@@ -372,42 +373,30 @@ export default function App() {
       minHeight: '100vh', 
       backgroundColor: '#f9fafb', 
       display: 'flex',
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Inter, system-ui, Avenir, Helvetica, Arial, sans-serif'
     }}>
       {/* Sidebar */}
       <aside style={{ 
         width: '240px', 
         backgroundColor: 'white', 
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)', 
+        boxShadow: '0 2px 4px rgba(0,0,0,0.05)', 
         display: 'flex', 
-        flexDirection: 'column'
+        flexDirection: 'column',
+        borderRight: '1px solid #e5e7eb' 
       }}>
-        <div style={{ padding: '16px' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center'
-          }}>
-            <div style={{ 
-              width: '40px', 
-              height: '40px', 
-              backgroundColor: '#1e88e5', 
-              borderRadius: '50%', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              color: 'white', 
-              fontWeight: 'bold' 
-            }}>
-              EA
-            </div>
-            <div style={{ marginLeft: '8px' }}>
-              <div style={{ color: '#1e88e5', fontWeight: 'bold' }}>Eco</div>
-              <div style={{ color: '#1e88e5' }}>Alliance</div>
-            </div>
-          </div>
+        <div style={{ 
+          padding: '24px 16px 16px 16px', 
+          display: 'flex', 
+          justifyContent: 'center' 
+        }}>
+          <img 
+            src={ecoAllianceLogo} 
+            alt="Eco Alliance Logo" 
+            style={{ height: '40px', width: 'auto' }} 
+          />
         </div>
 
-        <nav style={{ marginTop: '32px', flex: '1' }}>
+        <nav style={{ marginTop: '16px', flex: '1', padding: '0 8px' }}>
           <Link to="/" style={getLinkStyle('/')}>
             <div style={{ 
               display: 'flex', 
@@ -464,7 +453,7 @@ export default function App() {
           </Link>
         </nav>
 
-        <div style={{ padding: '16px', marginTop: 'auto', borderTop: '1px solid #eee' }}>
+        <div style={{ padding: '16px', marginTop: 'auto', borderTop: '1px solid #e5e7eb' }}>
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
