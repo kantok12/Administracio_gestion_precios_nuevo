@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 // Importar iconos necesarios
-import { SlidersHorizontal, DollarSign, Euro, RefreshCw, Info, Save, Calendar, Filter, Loader2 } from 'lucide-react';
+import { SlidersHorizontal, DollarSign, Euro, RefreshCw, Info, Save, Calendar, Filter, Loader2, CheckCircle, XCircle } from 'lucide-react';
 
 // --- Interfaz Placeholder para un Perfil de Costos (la mantenemos por si se usa en otras tabs) ---
 interface PerfilCostoCategoria {
@@ -30,7 +30,7 @@ export default function AdminPanel() {
 
   // Estado para filtros (mantener lógica si es necesario)
   const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>(['Todas las categorías', 'Chipeadoras PTO', 'Chipeadoras Motor']); // Ejemplo
-  const [categoriaSeleccionadaFiltro, setCategoriaSeleccionadaFiltro] = useState<string>('Todas las categorías');
+  const [categoriaSeleccionadaParaAplicar, setCategoriaSeleccionadaParaAplicar] = useState<string>('Todas las categorías');
 
   // --- Estados/Lógica para perfiles (comentados por ahora) ---
   // const [categoriaSeleccionadaPerfil, setCategoriaSeleccionadaPerfil] = useState<string>('');
@@ -67,6 +67,12 @@ export default function AdminPanel() {
   const [initialCurrencyLoading, setInitialCurrencyLoading] = useState(true);
   const [initialCurrencyError, setInitialCurrencyError] = useState<string | null>(null);
   // ------------------------------------------------------
+
+  // --- NUEVOS ESTADOS para aplicar parámetros a categoría ---
+  const [isApplyingCategorySettings, setIsApplyingCategorySettings] = useState(false);
+  const [applyCategorySettingsError, setApplyCategorySettingsError] = useState<string | null>(null);
+  const [applyCategorySettingsSuccess, setApplyCategorySettingsSuccess] = useState<string | null>(null);
+  // ---------------------------------------------------------
 
   // --- Función Refactorizada para Obtener y Establecer Divisas --- 
   const fetchAndSetCurrencies = async (updateTimestamp?: Date) => {
@@ -164,6 +170,71 @@ export default function AdminPanel() {
   };
   // ------------------------------------------------------------------------
 
+  // --- NUEVA FUNCIÓN para aplicar parámetros a una categoría --- 
+  const aplicarParametrosACategoria = async (categoria: string) => {
+    if (categoria === 'Todas las categorías') return; // No hacer nada para 'Todas'
+
+    setIsApplyingCategorySettings(true);
+    setApplyCategorySettingsError(null);
+    setApplyCategorySettingsSuccess(null);
+    console.log(`Aplicando parámetros a la categoría: ${categoria}`);
+
+    // Endpoint placeholder - ¡¡DEBES CREAR ESTE ENDPOINT EN TU BACKEND!!
+    const endpoint = `/api/category-settings/${encodeURIComponent(categoria)}`; 
+    const settings = {
+      bufferTransporte: bufferTransporteGlobal,
+      tasaSeguro: tasaSeguroGlobal,
+      margenAdicional: margenTotalGeneral,
+      descuentoFabricante: descuentoFabricanteGeneral,
+      // Añade aquí cualquier otro parámetro que deba guardarse por categoría
+    };
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'PUT', // o 'POST', según tu diseño de API
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
+
+      if (!response.ok) {
+        let errorMsg = `Error del servidor: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.message || errorMsg;
+        } catch (e) { /* Ignorar error al parsear json */ }
+        throw new Error(errorMsg);
+      }
+
+      // Éxito
+      const successMsg = `Parámetros aplicados a '${categoria}' correctamente.`;
+      console.log(successMsg);
+      setApplyCategorySettingsSuccess(successMsg);
+      // Limpiar mensaje de éxito después de unos segundos
+      setTimeout(() => setApplyCategorySettingsSuccess(null), 5000);
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Error desconocido al aplicar parámetros.';
+      console.error("Error al aplicar parámetros a categoría:", error);
+      setApplyCategorySettingsError(errorMsg.includes('fetch') ? `Error de conexión al intentar aplicar parámetros a '${categoria}'.` : errorMsg);
+      // Limpiar mensaje de error después de unos segundos
+      setTimeout(() => setApplyCategorySettingsError(null), 8000);
+    } finally {
+      setIsApplyingCategorySettings(false);
+    }
+  };
+  // ----------------------------------------------------------
+
+  // --- MODIFICAR HANDLER DEL SELECT --- 
+  const handleCategoriaChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nuevaCategoria = event.target.value;
+    setCategoriaSeleccionadaParaAplicar(nuevaCategoria);
+    // Llamar a la función de aplicación si no es "Todas las categorías"
+    aplicarParametrosACategoria(nuevaCategoria); 
+  };
+  // ----------------------------------
+
   // --- Estado para la pestaña activa (ejemplo) ---
   const [activeTab, setActiveTab] = useState('calculos');
 
@@ -185,24 +256,42 @@ export default function AdminPanel() {
 
       {/* --- Contenido Principal (Ya no depende de activeTab) --- */}
       <div> 
-         {/* Título y Filtro */}
+         {/* Título y Selector de Categoría */}
          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
            <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <SlidersHorizontal size={20} /> Parámetros de Cálculo y Costos
            </h2>
            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '12px', color: secondaryTextColor }}>Filtrar por Categoría:</label>
+              <label style={{ fontSize: '12px', color: secondaryTextColor }}>Aplicar Parámetros a:</label>
               <select 
                   style={{ ...selectStyle, minWidth: '180px' }} 
-                  value={categoriaSeleccionadaFiltro} 
-                  onChange={(e) => setCategoriaSeleccionadaFiltro(e.target.value)}
+                  value={categoriaSeleccionadaParaAplicar} 
+                  onChange={handleCategoriaChange}
+                  disabled={isApplyingCategorySettings}
               >
                   {categoriasDisponibles.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
+                      <option key={cat} value={cat} disabled={cat === 'Todas las categorías' && isApplyingCategorySettings}>
+                         {cat}
+                      </option>
                   ))}
               </select>
+              {isApplyingCategorySettings && <Loader2 size={16} className="animate-spin" color={primaryTextColor}/>}
+              {applyCategorySettingsSuccess && !isApplyingCategorySettings && <CheckCircle size={16} color="#10b981" />}
+              {applyCategorySettingsError && !isApplyingCategorySettings && <XCircle size={16} color="#ef4444" />}
            </div>
          </div>
+
+         {/* Mensajes detallados de éxito/error */}
+         {applyCategorySettingsSuccess && !isApplyingCategorySettings && (
+             <div style={{ marginBottom: '12px', padding: '8px 12px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '6px', fontSize: '12px', textAlign: 'center' }}>
+                 {applyCategorySettingsSuccess}
+             </div>
+         )}
+         {applyCategorySettingsError && !isApplyingCategorySettings && (
+             <div style={{ marginBottom: '12px', padding: '8px 12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '6px', fontSize: '12px', textAlign: 'center' }}>
+                 Error: {applyCategorySettingsError}
+             </div>
+         )}
 
          {/* Sección Valores Actuales de Divisas */}
          <div style={{ ...mainCardStyle, backgroundColor: lightGrayBg, border: `1px solid ${borderColor}`}}>
