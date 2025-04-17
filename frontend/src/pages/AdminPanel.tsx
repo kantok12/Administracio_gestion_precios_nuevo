@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 // Importar iconos necesarios
 import { SlidersHorizontal, DollarSign, Euro, RefreshCw, Info, Save, Calendar, Filter, Loader2 } from 'lucide-react';
 
@@ -16,7 +16,6 @@ export default function AdminPanel() {
   
   // --- Estados (mantenemos los actuales, aunque no todos se muestren en la nueva UI) ---
   const [tipoCambio, setTipoCambio] = useState<string>('1.12'); // Valor de la imagen
-  const [dolarObservadoInput, setDolarObservadoInput] = useState<string>('978'); // Valor de la imagen
   const [bufferDolar, setBufferDolar] = useState<string>('1.8'); // Valor de la imagen
   const [tasaSeguroGlobal, setTasaSeguroGlobal] = useState<string>('1'); // Valor de la imagen
   const [bufferTransporteGlobal, setBufferTransporteGlobal] = useState<string>('5'); // Valor de la imagen
@@ -24,10 +23,10 @@ export default function AdminPanel() {
   const [descuentoFabricanteGeneral, setDescuentoFabricanteGeneral] = useState<string>('5'); // Valor de la imagen
   const [fechaUltimaActualizacion, setFechaUltimaActualizacion] = useState<string>('14-04-2025'); // Valor de la imagen
 
-  // Estados para la sección de divisas actualizadas (ejemplo)
-  const [dolarActualCLP, setDolarActualCLP] = useState<string>('978');
-  const [euroActualCLP, setEuroActualCLP] = useState<string>('1105');
-  const [fechaActualizacionDivisas, setFechaActualizacionDivisas] = useState<string>('14/4/2025, 18:12:22');
+  // Estados para la sección de divisas actualizadas
+  const [dolarActualCLP, setDolarActualCLP] = useState<string | null>(null);
+  const [euroActualCLP, setEuroActualCLP] = useState<string | null>(null);
+  const [fechaActualizacionDivisas, setFechaActualizacionDivisas] = useState<string | null>(null);
 
   // Estado para filtros (mantener lógica si es necesario)
   const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>(['Todas las categorías', 'Chipeadoras PTO', 'Chipeadoras Motor']); // Ejemplo
@@ -64,7 +63,64 @@ export default function AdminPanel() {
   // --- NUEVOS ESTADOS para la actualización de divisas ---
   const [isUpdatingCurrencies, setIsUpdatingCurrencies] = useState(false);
   const [currencyUpdateError, setCurrencyUpdateError] = useState<string | null>(null);
+  // Estados para la carga/error INICIAL de divisas
+  const [initialCurrencyLoading, setInitialCurrencyLoading] = useState(true);
+  const [initialCurrencyError, setInitialCurrencyError] = useState<string | null>(null);
   // ------------------------------------------------------
+
+  // --- Función Refactorizada para Obtener y Establecer Divisas --- 
+  const fetchAndSetCurrencies = async () => {
+    const webhookUrl = 'https://n8n-807184488368.southamerica-west1.run.app/webhook/8012d60e-8a29-4910-b385-6514edc3d912';
+    console.log("Fetching currencies from webhook...");
+    try {
+      const response = await fetch(webhookUrl);
+      if (!response.ok) {
+        let errorMsg = `Error del servidor: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.message || errorMsg;
+        } catch (e) { /* Ignorar */ }
+        throw new Error(errorMsg);
+      }
+      const data = await response.json();
+      console.log("Webhook response:", data);
+
+      if (data && data.Valor_Dolar !== undefined && data.Valor_Euro !== undefined) {
+        setDolarActualCLP(String(data.Valor_Dolar));
+        setEuroActualCLP(String(data.Valor_Euro));
+        // Intentar usar la fecha del webhook si existe, si no, la actual
+        const fechaWebhook = data.Fecha ? new Date(data.Fecha.split('-').reverse().join('-')).toLocaleDateString('es-CL') : null;
+        setFechaActualizacionDivisas(fechaWebhook ? `${fechaWebhook}, ${new Date().toLocaleTimeString('es-CL')}` : new Date().toLocaleString('es-CL'));
+        console.log("Frontend states updated.");
+        return true; // Indicar éxito
+      } else {
+        throw new Error('Respuesta del webhook incompleta.');
+      }
+    } catch (error) {
+      console.error('Error fetching/setting currencies:', error);
+      // Lanzar el error para que sea manejado por quien llama
+      throw error instanceof Error ? error : new Error('Error desconocido al obtener divisas');
+    }
+  };
+  // --------------------------------------------------------------
+
+  // --- useEffect para carga inicial --- 
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setInitialCurrencyLoading(true);
+      setInitialCurrencyError(null);
+      try {
+        await fetchAndSetCurrencies();
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
+        setInitialCurrencyError(errorMsg.includes('fetch') ? 'Error de conexión inicial con el webhook.' : errorMsg);
+      } finally {
+        setInitialCurrencyLoading(false);
+      }
+    };
+    loadInitialData();
+  }, []); // Array vacío para ejecutar solo al montar
+  // ----------------------------------
 
   // --- Handlers (mantener lógica placeholder) ---
   const handleInputChange = (setter: React.Dispatch<React.SetStateAction<any>>) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -72,49 +128,20 @@ export default function AdminPanel() {
   };
   const handleSaveAll = () => alert('Guardando todos los cambios...');
   
-  // -------- MODIFICAR handleActualizarDivisas --------
+  // --- MODIFICAR handleActualizarDivisas para usar la función refactorizada ---
   const handleActualizarDivisas = async () => {
     setIsUpdatingCurrencies(true);
     setCurrencyUpdateError(null);
-    console.log("Intentando actualizar divisas...");
-
     try {
-      const response = await fetch('http://localhost:5001/api/currency/fetch'); // Asumiendo puerto 5001 para backend
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: `Error del servidor: ${response.status}` }));
-        throw new Error(errorData.message || `Error del servidor: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log("Respuesta de actualización de divisas:", data);
-
-      if (data.success && data.data && data.data.currencies) {
-        const { dollar, euro } = data.data.currencies;
-        // Actualizar estados locales con los nuevos valores del backend
-        if (dollar && dollar.value !== null) {
-          setDolarActualCLP(String(dollar.value)); 
-        }
-        if (euro && euro.value !== null) {
-          setEuroActualCLP(String(euro.value));
-        }
-        // Actualizar la fecha/hora de última actualización mostrada
-        setFechaActualizacionDivisas(new Date().toLocaleString('es-CL')); 
-        // Opcionalmente usar data.data.currencies.dollar.last_update si prefieres la hora del servidor
-        console.log("Divisas actualizadas en el frontend.");
-      } else {
-        throw new Error(data.message || 'Formato de respuesta inesperado del servidor.');
-      }
-
+      await fetchAndSetCurrencies(); // Llamar a la función refactorizada
     } catch (error) {
-      console.error('Error al actualizar divisas:', error);
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
-      setCurrencyUpdateError(errorMsg.includes('Failed to fetch') ? 'Error de conexión con el servidor backend.' : errorMsg);
+      setCurrencyUpdateError(errorMsg.includes('fetch') ? 'Error de conexión con el webhook.' : errorMsg);
     } finally {
       setIsUpdatingCurrencies(false);
     }
   };
-  // --------------------------------------------------
+  // ------------------------------------------------------------------------
 
   // --- Estado para la pestaña activa (ejemplo) ---
   const [activeTab, setActiveTab] = useState('calculos');
@@ -173,6 +200,13 @@ export default function AdminPanel() {
                      )}
                      {isUpdatingCurrencies ? 'Actualizando...' : 'Actualizar Divisas'} 
                   </button>
+                  {/* Mostrar fecha SÓLO si no hay error inicial y NO está cargando inicialmente */}
+                  {!initialCurrencyLoading && !initialCurrencyError && fechaActualizacionDivisas && (
+                    <span style={{ fontSize: '11px', color: secondaryTextColor }}>
+                      <Info size={12} style={{verticalAlign: 'middle', marginRight: '4px'}} />
+                      Última actualización: {fechaActualizacionDivisas}
+                    </span>
+                  )}
                   {currencyUpdateError && (
                      <div style={{ marginBottom: '12px', padding: '8px 12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '6px', fontSize: '12px' }}>
                         Error al actualizar: {currencyUpdateError}
@@ -181,18 +215,32 @@ export default function AdminPanel() {
                </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom:'12px' }}>
-               <div style={currencyDisplayStyle}>
-                  <DollarSign size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
-                  <div style={currencyValueStyle}>{dolarActualCLP}</div>
-                  <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Dólar Observado Actual (CLP)</div>
-                  <div style={currencyDateStyle}>Valor del {new Date(fechaActualizacionDivisas.split(', ')[0].split('/').reverse().join('-')).toLocaleDateString('es-CL') || new Date().toLocaleDateString('es-CL')}</div>
-               </div>
-               <div style={currencyDisplayStyle}>
-                   <Euro size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
-                  <div style={currencyValueStyle}>{euroActualCLP}</div>
-                   <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Euro Observado Actual (CLP)</div>
-                  <div style={currencyDateStyle}>Valor del {new Date(fechaActualizacionDivisas.split(', ')[0].split('/').reverse().join('-')).toLocaleDateString('es-CL') || new Date().toLocaleDateString('es-CL')}</div>
-               </div>
+               {/* --- Mostrar estado inicial o valores --- */}
+               {initialCurrencyLoading ? (
+                  <div style={{...currencyDisplayStyle, justifyContent:'center', alignItems:'center', display:'flex', height: '110px'}}><Loader2 className="animate-spin" size={24}/></div>
+               ) : initialCurrencyError ? (
+                  <div style={{...currencyDisplayStyle, justifyContent:'center', alignItems:'center', display:'flex', height: '110px', color:'#b91c1c', fontSize:'12px'}}>Error: {initialCurrencyError}</div>
+               ) : (
+                  <div style={currencyDisplayStyle}>
+                     <DollarSign size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
+                     <div style={currencyValueStyle}>{dolarActualCLP ?? '-'}</div>
+                     <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Dólar Observado Actual (CLP)</div>
+                     <div style={currencyDateStyle}>Valor del {fechaActualizacionDivisas ? new Date(fechaActualizacionDivisas.split(', ')[0].split('/').reverse().join('-')).toLocaleDateString('es-CL') : '-'}</div>
+                  </div>
+               )}
+                {initialCurrencyLoading ? (
+                  <div style={{...currencyDisplayStyle, justifyContent:'center', alignItems:'center', display:'flex', height: '110px'}}><Loader2 className="animate-spin" size={24}/></div>
+               ) : initialCurrencyError ? (
+                  <div style={{...currencyDisplayStyle, justifyContent:'center', alignItems:'center', display:'flex', height: '110px', color:'#b91c1c', fontSize:'12px'}}>Error: {initialCurrencyError}</div>
+               ) : (
+                  <div style={currencyDisplayStyle}>
+                     <Euro size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
+                     <div style={currencyValueStyle}>{euroActualCLP ?? '-'}</div>
+                     <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Euro Observado Actual (CLP)</div>
+                     <div style={currencyDateStyle}>Valor del {fechaActualizacionDivisas ? new Date(fechaActualizacionDivisas.split(', ')[0].split('/').reverse().join('-')).toLocaleDateString('es-CL') : '-'}</div>
+                  </div>
+               )}
+               {/* ----------------------------------------- */}
             </div>
              <p style={{fontSize: '11px', color: secondaryTextColor, textAlign: 'center', margin: '12px 0 0 0'}}>
                 <Info size={12} style={{verticalAlign: 'middle', marginRight: '4px'}}/>
@@ -212,7 +260,12 @@ export default function AdminPanel() {
              </div>
              <div style={inputGroupStyle}>
                <label style={labelStyle}>Dólar Observado Actual (CLP)</label>
-               <input type="number" style={{...inputStyle, backgroundColor: '#e5e7eb'}} value={dolarObservadoInput} readOnly />
+               <input 
+                 type="number" 
+                 style={{...inputStyle, backgroundColor: '#e5e7eb'}} 
+                 value={dolarActualCLP ?? ''}
+                 readOnly 
+               />
                <p style={inputDescriptionStyle}>Fijo desde API</p>
              </div>
              <div style={inputGroupStyle}>
