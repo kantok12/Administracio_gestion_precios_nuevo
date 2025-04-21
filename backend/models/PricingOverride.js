@@ -1,56 +1,100 @@
 const mongoose = require('mongoose');
 
+console.log('[Database] Initializing PricingOverride model...');
+
 const pricingOverrideSchema = new mongoose.Schema({
   _id: {
-    type: String, // El _id será 'global', 'cat_...', 'prod_...'
-    required: true,
+    type: String,
+    required: [true, 'El ID es requerido'],
+    validate: {
+      validator: function(v) {
+        return v === 'global' || v.startsWith('cat_') || v.startsWith('prod_');
+      },
+      message: props => `${props.value} no es un ID válido. Debe ser 'global', empezar con 'cat_' o 'prod_'`
+    }
   },
   nivel: {
     type: String,
-    required: true,
-    enum: ['global', 'categoria', 'producto'],
+    required: [true, 'El nivel es requerido'],
+    enum: {
+      values: ['global', 'categoria', 'producto'],
+      message: '{VALUE} no es un nivel válido'
+    },
     index: true
   },
   costos: {
-    type: mongoose.Schema.Types.Mixed, // Permite cualquier estructura de objeto
-    // Considera definir un sub-esquema si la estructura es fija:
-    // type: {
-    //   margen_adicional_total: Number,
-    //   buffer_usd_clp: Number,
-    //   // ... otros campos de costos
-    // },
-    default: {} // Valor por defecto si no se proporciona
+    type: mongoose.Schema.Types.Mixed,
+    default: {},
+    required: [true, 'Los costos son requeridos'],
+    validate: {
+      validator: function(v) {
+        return typeof v === 'object' && v !== null;
+      },
+      message: 'Los costos deben ser un objeto válido'
+    }
   },
   metadata: {
     type: {
-      ultima_actualizacion: { type: Date, default: Date.now },
-      actualizado_por: { type: String } // O podrías referenciar a un User ID
+      ultima_actualizacion: { 
+        type: Date, 
+        default: Date.now,
+        required: [true, 'La fecha de última actualización es requerida']
+      },
+      actualizado_por: { 
+        type: String,
+        required: [true, 'El usuario que actualiza es requerido'],
+        default: 'system'
+      }
     },
-    default: () => ({ ultima_actualizacion: new Date() })
+    default: () => ({ 
+      ultima_actualizacion: new Date(),
+      actualizado_por: 'system'
+    })
   },
-  // Campos opcionales para referencia (útiles para queries, aunque no estrictamente necesarios para _id)
   categoryId: {
     type: String,
     index: true,
-    sparse: true // Índice solo si el campo existe (para nivel: categoria)
+    sparse: true,
+    validate: {
+      validator: function(v) {
+        if (this.nivel !== 'categoria') return true;
+        return v && v.length > 0;
+      },
+      message: 'categoryId es requerido para documentos de nivel categoria'
+    }
   },
   productId: {
     type: String,
     index: true,
-    sparse: true // Índice solo si el campo existe (para nivel: producto)
+    sparse: true,
+    validate: {
+      validator: function(v) {
+        if (this.nivel !== 'producto') return true;
+        return v && v.length > 0;
+      },
+      message: 'productId es requerido para documentos de nivel producto'
+    }
   }
 }, {
-  timestamps: true, // Añade createdAt y updatedAt automáticamente
-  collection: 'pricingOverrides', // Especificar el nombre exacto de la colección
-  _id: false // Añadir esta configuración para deshabilitar la conversión automática a ObjectId
+  timestamps: true,
+  collection: 'pricingOverrides',
+  _id: false
 });
 
-// Index sugerido para búsquedas específicas si se necesitaran
-// pricingOverrideSchema.index({ productId: 1 }); 
-// pricingOverrideSchema.index({ categoryId: 1 });
+// Middleware para logging
+pricingOverrideSchema.pre('save', function(next) {
+  console.log(`[PricingOverride] Guardando documento ${this._id}...`);
+  next();
+});
+
+pricingOverrideSchema.post('save', function(doc) {
+  console.log(`[PricingOverride] Documento ${doc._id} guardado exitosamente`);
+});
 
 // Función para inicializar documentos por defecto
 pricingOverrideSchema.statics.initializeDefaults = async function() {
+  console.log('[PricingOverride] Iniciando inicialización de documentos por defecto...');
+  
   const defaultGlobal = {
     _id: "global",
     nivel: "global",
@@ -83,26 +127,58 @@ pricingOverrideSchema.statics.initializeDefaults = async function() {
   };
   
   try {
-    // Verificar si ya existe el documento global
+    console.log('[PricingOverride] Verificando existencia del documento global...');
     const existingGlobal = await this.findOne({ _id: 'global' });
+    
     if (!existingGlobal) {
-      console.log('[PricingOverride] Creating default global override document...');
+      console.log('[PricingOverride] Documento global no encontrado. Creando...');
       await this.create(defaultGlobal);
-      console.log('[PricingOverride] Default global override document created successfully');
+      console.log('[PricingOverride] ✅ Documento global creado exitosamente');
     } else {
-      console.log('[PricingOverride] Global override document already exists');
+      console.log('[PricingOverride] ℹ️ Documento global ya existe');
+      console.log('[PricingOverride] Última actualización:', existingGlobal.metadata.ultima_actualizacion);
     }
+    
+    console.log('[PricingOverride] Inicialización completada exitosamente');
     return true;
   } catch (error) {
-    console.error('[PricingOverride] Error initializing default documents:', error);
+    console.error('[PricingOverride] ❌ Error durante la inicialización:', error);
+    console.error('[PricingOverride] Detalles:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
     return false;
   }
 };
 
-// Eliminar el modelo si ya existe para evitar errores de recreación
+// Método para validar estructura de costos
+pricingOverrideSchema.methods.validateCostos = function() {
+  const requiredFields = [
+    'tipo_cambio_eur_usd',
+    'buffer_eur_usd',
+    'dolar_observado_actual',
+    'tasa_seguro',
+    'margen_adicional_total'
+  ];
+  
+  const missingFields = requiredFields.filter(field => !(field in this.costos));
+  
+  if (missingFields.length > 0) {
+    throw new Error(`Campos requeridos faltantes en costos: ${missingFields.join(', ')}`);
+  }
+  
+  return true;
+};
+
+// Eliminar el modelo si ya existe
 if (mongoose.models.PricingOverride) {
   delete mongoose.models.PricingOverride;
+  console.log('[Database] Modelo PricingOverride existente eliminado');
 }
 
 // Crear y exportar el modelo
-module.exports = mongoose.model('PricingOverride', pricingOverrideSchema); 
+const model = mongoose.model('PricingOverride', pricingOverrideSchema);
+console.log('[Database] ✅ Modelo PricingOverride creado exitosamente');
+
+module.exports = model; 

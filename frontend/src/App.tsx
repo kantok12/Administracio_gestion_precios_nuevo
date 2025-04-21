@@ -361,11 +361,15 @@ export default function App() {
 
   // Función para determinar el estilo del enlace
   const getLinkStyle = (path: string): LinkStyle => {
-    // Considerar /equipos como activo si la ruta es / o /equipos
-    if (path === '/equipos' && (location.pathname === '/' || location.pathname === '/equipos')) {
-        return activeLinkStyle;
+    const currentPath = location.pathname;
+    
+    // Si estamos en la ruta raíz, activar EQUIPOS
+    if (currentPath === '/' && path === '/equipos') {
+      return activeLinkStyle;
     }
-    return location.pathname === path ? activeLinkStyle : baseLinkStyle;
+    
+    // Para cualquier otra ruta, activar solo si coincide exactamente
+    return currentPath === path ? activeLinkStyle : baseLinkStyle;
   };
 
   return (
@@ -422,10 +426,7 @@ export default function App() {
               gap: '8px', 
               padding: '12px 16px', 
               fontSize: '14px', 
-              fontWeight: '500',
-              backgroundColor: '#e3f2fd',
-              color: '#1e88e5',
-              borderLeft: '4px solid #1e88e5'
+              fontWeight: '500'
             }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 20V10"></path>

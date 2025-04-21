@@ -24,8 +24,10 @@ export default function AdminPanel() {
         return 'chipeadora_motor';
       case 'Chipeadoras PTO':
         return 'chipeadora_pto';
-      default:
+      case 'Global':
         return 'global';
+      default:
+        return categoria.toLowerCase().replace(/ /g, '_');
     }
   };
   
@@ -269,9 +271,8 @@ export default function AdminPanel() {
     console.log(`[Frontend] Fetching parameters for category: ${categoria}`);
     
     try {
-      // Usar la misma función de mapeo de categorías
       const categoryId = getCategoryId(categoria);
-      console.log(`[Frontend] Fetching parameters for category: ${categoria} (ID: ${categoryId})`);
+      console.log(`[Frontend] Fetching parameters for category ID: ${categoryId}`);
       
       const data = await api.fetchCategoryParams(categoryId);
       
@@ -283,19 +284,18 @@ export default function AdminPanel() {
       
       console.log(`[Frontend] Parameters received for category ${categoria}:`, data);
 
-      if (data && data.costos) {
+      if (data.costos) {
         const costos = data.costos;
         
-        // --- Parámetros básicos ---
+        // Aplicar los valores recibidos a los estados
         if (costos.tipo_cambio_eur_usd !== undefined) setTipoCambio(String(costos.tipo_cambio_eur_usd));
         if (costos.buffer_usd_clp !== undefined) setBufferDolar(String(costos.buffer_usd_clp * 100));
-        if (costos.tasa_seguro !== undefined) setTasaSeguroGlobal(String(costos.tasa_seguro * 100));
-        if (costos.buffer_transporte !== undefined) setBufferTransporteGlobal(String(costos.buffer_transporte * 100));
-        if (costos.margen_adicional_total !== undefined) setMargenTotalGeneral(String(costos.margen_adicional_total * 100));
-        if (costos.descuento_fabricante !== undefined) setDescuentoFabricanteGeneral(String(costos.descuento_fabricante * 100));
         if (costos.buffer_eur_usd !== undefined) setBufferEurUsd(String(costos.buffer_eur_usd * 100));
+        if (costos.tasa_seguro !== undefined) setTasaSeguroGlobal(String(costos.tasa_seguro * 100));
+        if (costos.margen_adicional_total !== undefined) setMargenTotalGeneral(String(costos.margen_adicional_total * 100));
+        if (costos.buffer_transporte !== undefined) setBufferTransporteGlobal(String(costos.buffer_transporte * 100));
+        if (costos.descuento_fabricante !== undefined) setDescuentoFabricanteGeneral(String(costos.descuento_fabricante * 100));
         
-        // --- Parámetros adicionales ---
         if (costos.costo_fabrica_original_eur !== undefined) setCostoFabricaOriginalEUR(String(costos.costo_fabrica_original_eur));
         if (costos.transporte_local_eur !== undefined) setTransporteLocalEUR(String(costos.transporte_local_eur));
         if (costos.gasto_importacion_eur !== undefined) setGastoImportacionEUR(String(costos.gasto_importacion_eur));
@@ -308,15 +308,13 @@ export default function AdminPanel() {
         if (costos.derecho_ad_valorem !== undefined) setDerechoAdValorem(String(costos.derecho_ad_valorem * 100));
         if (costos.iva !== undefined) setIva(String(costos.iva * 100));
         
-        // Fecha de actualización
         if (costos.fecha_ultima_actualizacion_transporte_local) 
           setFechaUltimaActualizacion(costos.fecha_ultima_actualizacion_transporte_local);
       }
-
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Error desconocido al cargar parámetros.';
-      console.error(`[Frontend] Error fetching parameters for ${categoria}:`, error);
-      setLoadCategoryParamsError(errorMsg.includes('fetch') ? `Error de conexión cargando parámetros para ${categoria}.` : errorMsg);
+      console.error('[Frontend] Error fetching category parameters:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Error desconocido al cargar parámetros de categoría';
+      setLoadCategoryParamsError(errorMsg);
     } finally {
       setIsLoadingCategoryParams(false);
     }
@@ -414,53 +412,66 @@ export default function AdminPanel() {
 
   // --- MODIFICAR handleSaveAll --- 
   const handleSaveAll = async () => {
-    try {
-      setIsSavingGlobalParams(true);
-      console.log('[Frontend] Iniciando guardado de parámetros...');
+    console.log('[Frontend] Starting save operation...');
+    setIsSavingGlobalParams(true);
+    setSaveGlobalParamsError(null);
+    setSaveGlobalParamsSuccess(null);
 
+    try {
       const categoryId = getCategoryId(categoriaSeleccionadaParaAplicar);
-      console.log(`[Frontend] Guardando para categoría: ${categoryId}`);
+      console.log(`[Frontend] Saving parameters for category: ${categoriaSeleccionadaParaAplicar} (ID: ${categoryId})`);
 
       const params = {
         costos: {
-          margen_adicional: parseFloat(margenTotalGeneral),
-          buffer_dolar: parseFloat(bufferDolar),
-          tasa_seguro: parseFloat(tasaSeguroGlobal),
-          tasa_importacion: parseFloat(gastoImportacionEUR) || 0,
-          tasa_aduana: parseFloat(honorariosAgenteAduanaUSD) || 0,
-          tasa_flete: parseFloat(fleteMaritimosUSD) || 0,
-          tasa_comision: parseFloat(gastosPortuariosOtrosUSD) || 0,
-          tasa_impuesto: parseFloat(iva) || 0,
-          buffer_transporte: parseFloat(bufferTransporteGlobal) || 0,
-          descuento_fabricante: parseFloat(descuentoFabricanteGeneral) || 0,
-          costo_fabrica_original_eur: parseFloat(costoFabricaOriginalEUR) || 0,
-          transporte_local_eur: parseFloat(transporteLocalEUR) || 0,
-          gasto_importacion_eur: parseFloat(gastoImportacionEUR) || 0,
-          flete_maritimo_usd: parseFloat(fleteMaritimosUSD) || 0,
-          recargos_destino_usd: parseFloat(recargosDestinoUSD) || 0,
-          honorarios_agente_aduana_usd: parseFloat(honorariosAgenteAduanaUSD) || 0,
-          gastos_portuarios_otros_usd: parseFloat(gastosPortuariosOtrosUSD) || 0,
-          transporte_nacional_clp: parseFloat(transporteNacionalCLP) || 0,
-          factor_actualizacion_anual: parseFloat(factorActualizacionAnual) || 0,
-          derecho_ad_valorem: parseFloat(derechoAdValorem) || 0,
-          iva: parseFloat(iva) || 0,
+          tipo_cambio_eur_usd: parseFloat(tipoCambio),
+          buffer_usd_clp: parseFloat(bufferDolar) / 100,
+          buffer_eur_usd: parseFloat(bufferEurUsd) / 100,
+          tasa_seguro: parseFloat(tasaSeguroGlobal) / 100,
+          margen_adicional_total: parseFloat(margenTotalGeneral) / 100,
+          buffer_transporte: parseFloat(bufferTransporteGlobal) / 100,
+          descuento_fabricante: parseFloat(descuentoFabricanteGeneral) / 100,
+          costo_fabrica_original_eur: parseFloat(costoFabricaOriginalEUR),
+          transporte_local_eur: parseFloat(transporteLocalEUR),
+          gasto_importacion_eur: parseFloat(gastoImportacionEUR),
+          flete_maritimo_usd: parseFloat(fleteMaritimosUSD),
+          recargos_destino_usd: parseFloat(recargosDestinoUSD),
+          honorarios_agente_aduana_usd: parseFloat(honorariosAgenteAduanaUSD),
+          gastos_portuarios_otros_usd: parseFloat(gastosPortuariosOtrosUSD),
+          transporte_nacional_clp: parseFloat(transporteNacionalCLP),
+          factor_actualizacion_anual: parseFloat(factorActualizacionAnual) / 100,
+          derecho_ad_valorem: parseFloat(derechoAdValorem) / 100,
+          iva: parseFloat(iva) / 100,
           fecha_ultima_actualizacion_transporte_local: fechaUltimaActualizacion,
-          dolar_observado_actual: parseFloat(dolarActualCLP ?? '0') || 0,
+          dolar_observado_actual: dolarActualCLP ? parseFloat(dolarActualCLP) : undefined
         }
       };
 
-      const response = await api.updateCategoryParams(categoryId, params);
-      console.log('[Frontend] Respuesta del servidor:', response);
+      let result;
+      if (categoriaSeleccionadaParaAplicar === 'Global') {
+        result = await api.updateGlobalParams(params);
+      } else {
+        result = await api.updateCategoryParams(categoryId, params);
+      }
 
-      setIsSavingGlobalParams(false);
+      console.log(`[Frontend] Parameters saved successfully for ${categoriaSeleccionadaParaAplicar}:`, result);
       setSaveGlobalParamsSuccess(`Parámetros guardados exitosamente para ${categoriaSeleccionadaParaAplicar}`);
-      setTimeout(() => setSaveGlobalParamsSuccess(''), 3000);
+      
+      // Limpiar el mensaje de éxito después de 5 segundos
+      setTimeout(() => {
+        setSaveGlobalParamsSuccess(null);
+      }, 5000);
 
-    } catch (error: any) {
-      console.error('[Frontend] Error al guardar:', error);
+    } catch (error) {
+      console.error('[Frontend] Error saving parameters:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Error desconocido al guardar parámetros';
+      setSaveGlobalParamsError(errorMsg);
+      
+      // Limpiar el mensaje de error después de 5 segundos
+      setTimeout(() => {
+        setSaveGlobalParamsError(null);
+      }, 5000);
+    } finally {
       setIsSavingGlobalParams(false);
-      setSaveGlobalParamsError(`Error al guardar parámetros para ${categoriaSeleccionadaParaAplicar}: ${error.message}`);
-      setTimeout(() => setSaveGlobalParamsError(''), 5000);
     }
   };
   // ---------------------------
