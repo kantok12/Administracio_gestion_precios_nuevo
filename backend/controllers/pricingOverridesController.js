@@ -115,16 +115,85 @@ const saveGlobalPricingOverrides = async (req, res) => {
     });
   }
 };
-// -------------------------------------------------------------
 
-// --- ACTUALIZAR EXPORTACIÓN --- 
-module.exports = {
-  getPricingOverridesFromWebhook,
-  saveGlobalPricingOverrides // Añadir la nueva función
+// --- RENOMBRAR y MODIFICAR Controlador para ACTUALIZAR DÓLAR Y EURO vía webhook N8N --- 
+const updateCurrencyValues = async (req, res) => {
+  console.log('[Backend] Received request to update currency values (dollar & euro).');
+  try {
+    // 1. Obtener los valores del cuerpo de la solicitud
+    const { dolar_observado_actual, euro_observado_actual } = req.body;
+    console.log('[Backend] Currency values received from frontend:', { dolar_observado_actual, euro_observado_actual });
+
+    // 2. Validación mínima (ambos deben ser números válidos)
+    if (dolar_observado_actual === undefined || dolar_observado_actual === null || typeof dolar_observado_actual !== 'number' ||
+        euro_observado_actual === undefined || euro_observado_actual === null || typeof euro_observado_actual !== 'number') {
+      console.error('[Backend] Invalid or missing currency values in request body.');
+      return res.status(400).json({ message: 'Valores de divisas inválidos o faltantes en la solicitud.' });
+    }
+
+    // 3. Usar la MISMA URL de webhook N8N para guardar
+    if (!N8N_SAVE_WEBHOOK_URL) {
+       console.error('[Backend] N8N_SAVE_WEBHOOK URL is not configured.');
+       return res.status(500).json({ message: 'La URL del webhook de guardado no está configurada en el servidor.' });
+    }
+
+    // 4. Crear el payload con AMBOS valores
+    const payload = {
+      dolar_observado_actual: dolar_observado_actual,
+      euro_observado_actual: euro_observado_actual // <<< AÑADIR EURO
+    };
+
+    console.log(`[Backend] Sending updated currency values to N8N save webhook: ${N8N_SAVE_WEBHOOK_URL}`);
+    console.log('[Backend] Payload for currency update:', payload);
+
+    // 5. Enviar a N8N
+    const response = await fetch(N8N_SAVE_WEBHOOK_URL, {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    // 6. Manejar respuesta de N8N
+    let resultText = await response.text();
+    let resultJson = null;
+    try { resultJson = JSON.parse(resultText); } catch (e) { /* Ignorar si no es JSON */ }
+
+    console.log(`[Backend] Received response from N8N save webhook (currency update). Status: ${response.status}`);
+
+    if (!response.ok) {
+      console.error(`[Backend] Error response from N8N save webhook (currency update - ${response.status}):`, resultJson || resultText);
+      return res.status(response.status || 502).json({ 
+        message: 'Error recibido desde N8N al intentar actualizar las divisas.',
+        detalle_n8n: resultJson || { rawResponse: resultText }
+      });
+    }
+
+    console.log('[Backend] Successfully updated currency values via N8N webhook.');
+    return res.status(200).json({
+      message: 'Valores de divisas actualizados correctamente vía N8N.',
+      respuesta_n8n: resultJson || { rawResponse: resultText }
+    });
+
+  } catch (error) {
+    console.error('[Backend] Internal error sending currency update to N8N:', error);
+    return res.status(500).json({
+      message: 'Error interno del servidor al intentar actualizar las divisas.',
+      error: error.message
+    });
+  }
 };
-// ----------------------------
+// ----------------------------------------------------------------------
+
+// --- ACTUALIZAR EXPORTACIÓN (Renombrar updateDolarValue) --- 
+module.exports = {
+  getPricingOverridesFromWebhook,
+  saveGlobalPricingOverrides,
+  updateCurrencyValues // Usar el nuevo nombre
+};
+// -------------------------------------------------------
 
 module.exports = {
   getPricingOverridesFromWebhook,
-  saveGlobalPricingOverrides
+  saveGlobalPricingOverrides,
+  updateCurrencyValues
 }; 

@@ -124,37 +124,63 @@ export default function AdminPanel() {
         throw new Error(errorMsg);
       }
       const data = await response.json();
-      console.log("Webhook response:", data);
+      console.log("Webhook currency response:", data);
 
       if (data && data.Valor_Dolar !== undefined && data.Valor_Euro !== undefined) {
-        // --- REDONDEAR VALORES ANTES DE ESTABLECER ESTADO ---
         const roundedDolar = Math.round(parseFloat(data.Valor_Dolar));
         const roundedEuro = Math.round(parseFloat(data.Valor_Euro));
         
-        // Comprobar si el redondeo fue exitoso (no NaN)
+        let dolarSuccessfullySet = false;
+        let euroSuccessfullySet = false;
+
         if (!isNaN(roundedDolar)) {
            setDolarActualCLP(String(roundedDolar)); 
+           dolarSuccessfullySet = true; 
         } else {
            console.warn('Valor_Dolar no es un número válido:', data.Valor_Dolar);
-           setDolarActualCLP(null); // O mantener valor anterior / mostrar error
+           setDolarActualCLP(null); 
         }
         if (!isNaN(roundedEuro)) {
             setEuroActualCLP(String(roundedEuro));
+            euroSuccessfullySet = true;
         } else {
            console.warn('Valor_Euro no es un número válido:', data.Valor_Euro);
-           setEuroActualCLP(null); // O mantener valor anterior / mostrar error
+           setEuroActualCLP(null); 
         }
-        // ----------------------------------------------------
-
-        // --- USAR EL TIMESTAMP PASADO (o el actual si no se pasó) PARA LA FECHA DE ACTUALIZACIÓN ---
+        
         const displayTime = updateTimestamp || new Date(); 
         setFechaActualizacionDivisas(displayTime.toLocaleString('es-CL'));
-        // ------------------------------------------------------------------------------------
 
-        console.log("Frontend states updated with rounded values.");
-        return true; // Indicar éxito
+        // --- >>> LLAMAR AL BACKEND PARA ACTUALIZAR DÓLAR Y EURO EN MONGO <<< --- 
+        if (dolarSuccessfullySet && euroSuccessfullySet) {
+          console.log(`[Frontend] Currency values updated (D: ${roundedDolar}, E: ${roundedEuro}). Attempting to update in DB via backend...`);
+          try {
+            const updateResponse = await fetch('http://localhost:5001/api/pricing-overrides/update-currencies', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                dolar_observado_actual: roundedDolar, 
+                euro_observado_actual: roundedEuro
+              })
+            });
+            const updateResult = await updateResponse.json();
+            if (!updateResponse.ok) {
+              console.error('[Frontend] Error response from backend updating currencies:', updateResult);
+            } else {
+              console.log('[Frontend] Backend confirmed currency update:', updateResult);
+            }
+          } catch (backendError) {
+            console.error('[Frontend] Network error calling backend to update currencies:', backendError);
+          }
+        } else {
+            console.warn('[Frontend] Skipping backend currency update because one or both values were invalid.')
+        }
+        // --- >>> FIN DE LA LLAMADA AL BACKEND <<< ---
+
+        console.log("Frontend currency states updated with rounded values.");
+        return true; 
       } else {
-        throw new Error('Respuesta del webhook incompleta.');
+        throw new Error('Respuesta del webhook de divisas incompleta.');
       }
     } catch (error) {
       console.error('Error fetching/setting currencies:', error);
@@ -329,32 +355,27 @@ export default function AdminPanel() {
     setSaveGlobalParamsError(null);
     setSaveGlobalParamsSuccess(null);
 
-    // 1. Recopilar y Mapear datos del estado del formulario a la estructura esperada por el backend/N8N
-    //    ¡¡IMPORTANTE: Asegúrate que las claves coincidan con tu backend/N8N!!
-    //    Convertir porcentajes a decimales si es necesario (ej: dividir por 100)
-    //    Usar parseFloat para convertir strings a números
+    // 1. Recopilar y Mapear datos COMPLETOS del estado del formulario
+    //    (Excepto buffer_eur_usd que no tiene estado asociado)
     const payload = {
-      margen_adicional_total: parseFloat(margenTotalGeneral) / 100 || 0, // Ejemplo: convertir % a decimal
-      buffer_usd_clp: parseFloat(bufferDolar) / 100 || 0,           // Ejemplo: convertir % a decimal
-      tasa_seguro: parseFloat(tasaSeguroGlobal) / 100 || 0,         // Ejemplo: convertir % a decimal
-      buffer_transporte: parseFloat(bufferTransporteGlobal) / 100 || 0, // Ejemplo: convertir % a decimal
-      descuento_fabricante: parseFloat(descuentoFabricanteGeneral) / 100 || 0, // Ejemplo: convertir % a decimal
+      margen_adicional_total: parseFloat(margenTotalGeneral) / 100 || 0, 
+      // buffer_eur_usd: ??? // No hay estado para este valor en el frontend
+      buffer_usd_clp: parseFloat(bufferDolar) / 100 || 0,          
+      tasa_seguro: parseFloat(tasaSeguroGlobal) / 100 || 0,         
       tipo_cambio_eur_usd: parseFloat(tipoCambio) || 0,
-      // --- ¿Incluir dólar observado? Decide si este valor debe guardarse --- 
-      // dolar_observado_actual: parseFloat(dolarActualCLP ?? '0') || 0, 
-      // --- ¿Incluir buffer EUR/USD? Si no tienes estado para él, no lo envíes o usa un default --- 
-      // buffer_eur_usd: 0.02, // Ejemplo: Si no hay input, quizás no deba enviarse o usar default
-      // --- ¿Incluir fecha? Decide si este valor debe guardarse --- 
-      // fecha_actualizacion: fechaUltimaActualizacion // O usar new Date().toISOString()
+      dolar_observado_actual: parseFloat(dolarActualCLP ?? '0') || 0, // <<< INCLUIR ESTE VALOR
+      buffer_transporte: parseFloat(bufferTransporteGlobal) / 100 || 0, 
+      descuento_fabricante: parseFloat(descuentoFabricanteGeneral) / 100 || 0, 
+      // fecha_actualizacion: fechaUltimaActualizacion // Omitir por ahora, no en schema backend
     };
 
-    console.log('Payload to send to backend:', payload);
+    console.log('Payload to send to backend (Complete):', payload);
 
     try {
       const response = await fetch('http://localhost:5001/api/pricing-overrides/update-global', {
-        method: 'PUT', // o POST, según definiste en backend
+        method: 'PUT', 
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload) // Enviar el payload completo
       });
 
       const result = await response.json(); // Intenta parsear siempre

@@ -1,7 +1,8 @@
 const express = require('express');
 const { 
   getPricingOverridesFromWebhook,
-  saveGlobalPricingOverrides
+  saveGlobalPricingOverrides,
+  updateCurrencyValues
 } = require('../controllers/pricingOverridesController');
 
 const router = express.Router();
@@ -13,6 +14,9 @@ router.get('/webhook', getPricingOverridesFromWebhook);
 // PUT /api/pricing-overrides/update-global
 // Endpoint para recibir parámetros globales del frontend y enviarlos a N8N para guardar
 router.put('/update-global', saveGlobalPricingOverrides);
+
+// PUT /api/pricing-overrides/update-currencies
+router.put('/update-currencies', updateCurrencyValues);
 
 // Podrías añadir más rutas aquí en el futuro, como:
 // router.get('/', ...) // Para obtener overrides guardados internamente (si se reintroduce DB)
