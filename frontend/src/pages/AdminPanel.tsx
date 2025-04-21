@@ -11,6 +11,25 @@ interface PerfilCostoCategoria {
   descuentoFabricante?: number;
 }
 
+// Interfaz placeholder (asumiendo que el webhook devuelve algo así)
+interface CostParamsWebhookResponse {
+  _id?: string;
+  categoryId?: string;
+  costos?: {
+    margen_adicional_total?: number;
+    buffer_eur_usd?: number;
+    buffer_usd_clp?: number; // Mapea a bufferDolar
+    buffer_dolar?: number; // <<< AÑADIR PROPIEDAD OPCIONAL PARA FALLBACK
+    tasa_seguro?: number;
+    tasa_seguro_categoria?: number; // Mapea a tasaSeguroGlobal
+    tipo_cambio_eur_usd?: number; // Mapea a tipoCambio
+    dolar_observado_actual?: number;
+    buffer_transporte?: number; // Mapea a bufferTransporteGlobal
+    descuento_fabricante?: number; // Mapea a descuentoFabricanteGeneral
+  };
+  // Otros campos posibles
+}
+
 // --- Componente AdminPanel --- 
 export default function AdminPanel() {
   
@@ -73,6 +92,11 @@ export default function AdminPanel() {
   const [applyCategorySettingsError, setApplyCategorySettingsError] = useState<string | null>(null);
   const [applyCategorySettingsSuccess, setApplyCategorySettingsSuccess] = useState<string | null>(null);
   // ---------------------------------------------------------
+
+  // --- NUEVOS ESTADOS para Carga Inicial de Parámetros de Costo ---
+  const [initialCostParamsLoading, setInitialCostParamsLoading] = useState(true);
+  const [initialCostParamsError, setInitialCostParamsError] = useState<string | null>(null);
+  // ------------------------------------------------------------------
 
   // --- Función Refactorizada para Obtener y Establecer Divisas --- 
   const fetchAndSetCurrencies = async (updateTimestamp?: Date) => {
@@ -147,6 +171,62 @@ export default function AdminPanel() {
     loadInitialData();
   }, []); // Array vacío para ejecutar solo al montar
   // ----------------------------------
+
+  // --- useEffect para Carga INICIAL de Parámetros de Costo --- 
+  useEffect(() => {
+    const fetchInitialCostParams = async () => {
+      setInitialCostParamsLoading(true);
+      setInitialCostParamsError(null);
+      console.log('Fetching initial cost parameters from backend...');
+      try {
+        const response = await fetch('http://localhost:5001/api/pricing-overrides/webhook'); // Endpoint del backend
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({})); // Intenta parsear error, si no, objeto vacío
+          throw new Error(errorData.message || `Error del servidor: ${response.status}`);
+        }
+        const data: CostParamsWebhookResponse = await response.json();
+        console.log('Initial cost parameters received:', data);
+
+        // Actualizar estados del formulario SÓLO con los datos recibidos
+        // Usar || '' para evitar pasar undefined/null y convertir a string
+        if (data.costos) {
+          if (data.costos.margen_adicional_total !== undefined) {
+            setMargenTotalGeneral(String(data.costos.margen_adicional_total) || '0');
+          }
+          if (data.costos.buffer_usd_clp !== undefined) { // Nombre mapeado desde buffer_dolar si así viene del webhook
+            setBufferDolar(String(data.costos.buffer_usd_clp) || '0');
+          } else if (data.costos.buffer_dolar !== undefined) { // Fallback por si el webhook usa buffer_dolar
+             setBufferDolar(String(data.costos.buffer_dolar) || '0');
+          }
+          if (data.costos.tasa_seguro_categoria !== undefined) { // Asumiendo mapeo desde tasa_seguro_categoria
+            setTasaSeguroGlobal(String(data.costos.tasa_seguro_categoria) || '0');
+          } else if (data.costos.tasa_seguro !== undefined) { // Fallback por si el webhook usa tasa_seguro
+             setTasaSeguroGlobal(String(data.costos.tasa_seguro) || '0');
+          }           
+          if (data.costos.tipo_cambio_eur_usd !== undefined) {
+            setTipoCambio(String(data.costos.tipo_cambio_eur_usd) || '0');
+          }
+          if (data.costos.buffer_transporte !== undefined) {
+            setBufferTransporteGlobal(String(data.costos.buffer_transporte) || '0');
+          }
+          if (data.costos.descuento_fabricante !== undefined) {
+            setDescuentoFabricanteGeneral(String(data.costos.descuento_fabricante) || '0');
+          }
+          // No actualizamos fechaUltimaActualizacion desde aquí por ahora
+        }
+        
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Error desconocido al cargar parámetros iniciales.';
+        console.error('Error fetching initial cost parameters:', error);
+        setInitialCostParamsError(errorMsg.includes('fetch') ? 'Error de conexión cargando parámetros iniciales.' : errorMsg);
+      } finally {
+        setInitialCostParamsLoading(false);
+      }
+    };
+
+    fetchInitialCostParams();
+  }, []); // Array vacío para ejecutar solo al montar
+  // ---------------------------------------------------------
 
   // --- Handlers (mantener lógica placeholder) ---
   const handleInputChange = (setter: React.Dispatch<React.SetStateAction<any>>) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -293,6 +373,13 @@ export default function AdminPanel() {
              </div>
          )}
 
+         {/* Mensajes Éxito/Error Guardar */}
+         {initialCostParamsError && (
+           <div style={{ marginBottom: '16px', padding: '10px 15px', backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+               <XCircle size={18} /> Error cargando parámetros iniciales: {initialCostParamsError}
+           </div>
+         )}
+
          {/* Sección Valores Actuales de Divisas */}
          <div style={{ ...mainCardStyle, backgroundColor: lightGrayBg, border: `1px solid ${borderColor}`}}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
@@ -359,76 +446,74 @@ export default function AdminPanel() {
          </div>
 
          {/* Grid para los parámetros */}
-         <div style={gridContainerStyle}>
-           {/* Card: Tipos de Cambio */}
-           <div style={gridCardStyle}>
-             <h3 style={gridCardTitleStyle}>Tipos de Cambio</h3>
-             <div style={inputGroupStyle}>
-               <label style={labelStyle}>Tipo de Cambio EUR/USD</label>
-               <input type="number" style={inputStyle} value={tipoCambio} onChange={handleInputChange(setTipoCambio)} step="0.01" />
-               <p style={inputDescriptionStyle}>Definible</p>
-             </div>
-             <div style={inputGroupStyle}>
-               <label style={labelStyle}>Dólar Observado Actual (CLP)</label>
-               <input 
-                 type="number" 
-                 style={{...inputStyle, backgroundColor: '#e5e7eb'}} 
-                 value={dolarActualCLP ?? ''}
-                 readOnly 
-               />
-               <p style={inputDescriptionStyle}>Fijo desde API</p>
-             </div>
-             <div style={inputGroupStyle}>
-               <label style={labelStyle}>Buffer USD/CLP (%)</label>
-               <input type="number" style={inputStyle} value={bufferDolar} onChange={handleInputChange(setBufferDolar)} step="0.1" />
-               <p style={inputDescriptionStyle}>Definible</p>
-             </div>
-           </div>
+         {initialCostParamsLoading ? (
+            <div style={{display:'flex', justifyContent:'center', alignItems:'center', padding: '50px', color: '#64748b'}}>
+                <Loader2 className="animate-spin" size={24} style={{marginRight: '10px'}} /> Cargando parámetros...
+            </div>
+         ) : (
+            <div style={gridContainerStyle}>
+             {/* Cards con los inputs (Tipo Cambio, Transporte, Otros) */}
+             {/* Los inputs usarán los estados (tipoCambio, bufferDolar, etc.) que ahora se actualizan desde el webhook */}
+             {/* Card: Tipos de Cambio */}
+              <div style={gridCardStyle}>
+                <h3 style={gridCardTitleStyle}>Tipos de Cambio</h3>
+                <div style={inputGroupStyle}>
+                  <label style={labelStyle}>Tipo de Cambio EUR/USD</label>
+                  <input type="number" style={inputStyle} value={tipoCambio} onChange={handleInputChange(setTipoCambio)} step="0.01" />
+                  <p style={inputDescriptionStyle}>Definible</p>
+                </div>
+                <div style={inputGroupStyle}>
+                  <label style={labelStyle}>Dólar Observado Actual (CLP)</label>
+                  <input 
+                    type="number" 
+                    style={{...inputStyle, backgroundColor: '#e5e7eb'}} 
+                    value={dolarActualCLP ?? ''} // Este viene de las divisas
+                    readOnly 
+                  />
+                  <p style={inputDescriptionStyle}>Fijo desde API</p>
+                </div>
+                <div style={inputGroupStyle}>
+                  <label style={labelStyle}>Buffer USD/CLP (%)</label>
+                  <input type="number" style={inputStyle} value={bufferDolar} onChange={handleInputChange(setBufferDolar)} step="0.1" />
+                  <p style={inputDescriptionStyle}>Definible</p>
+                </div>
+              </div>
 
-           {/* Card: Transporte y Seguro */}
-           <div style={gridCardStyle}>
-             <h3 style={gridCardTitleStyle}>Transporte y Seguro</h3>
-             <div style={inputGroupStyle}>
-               <label style={labelStyle}>Buffer Transporte (%)</label>
-               <input type="number" style={inputStyle} value={bufferTransporteGlobal} onChange={handleInputChange(setBufferTransporteGlobal)} step="0.5" />
-               <p style={inputDescriptionStyle}>Definible</p>
-             </div>
-             <div style={inputGroupStyle}>
-               <label style={labelStyle}>Tasa Seguro (%)</label>
-               <input type="number" style={inputStyle} value={tasaSeguroGlobal} onChange={handleInputChange(setTasaSeguroGlobal)} step="0.1" />
-               <p style={inputDescriptionStyle}>Definible</p>
-             </div>
-           </div>
+              {/* Card: Transporte y Seguro */}
+              <div style={gridCardStyle}>
+                <h3 style={gridCardTitleStyle}>Transporte y Seguro</h3>
+                <div style={inputGroupStyle}>
+                  <label style={labelStyle}>Buffer Transporte (%)</label>
+                  <input type="number" style={inputStyle} value={bufferTransporteGlobal} onChange={handleInputChange(setBufferTransporteGlobal)} step="0.5" />
+                  <p style={inputDescriptionStyle}>Definible</p>
+                </div>
+                <div style={inputGroupStyle}>
+                  <label style={labelStyle}>Tasa Seguro (%)</label>
+                  <input type="number" style={inputStyle} value={tasaSeguroGlobal} onChange={handleInputChange(setTasaSeguroGlobal)} step="0.1" />
+                  <p style={inputDescriptionStyle}>Definible</p>
+                </div>
+              </div>
 
-           {/* Card: Otros Parámetros */}
-           <div style={gridCardStyle}>
-             <h3 style={gridCardTitleStyle}>Otros Parámetros</h3>
-             <div style={inputGroupStyle}>
-               <label style={labelStyle}>Margen Adicional Total (%)</label>
-               <input type="number" style={inputStyle} value={margenTotalGeneral} onChange={handleInputChange(setMargenTotalGeneral)} step="0.5" />
-               <p style={inputDescriptionStyle}>Definible</p>
-             </div>
-             <div style={inputGroupStyle}>
-               <label style={labelStyle}>Descuento Fabricante (%)</label>
-               <input type="number" style={inputStyle} value={descuentoFabricanteGeneral} onChange={handleInputChange(setDescuentoFabricanteGeneral)} step="0.5" />
-               <p style={inputDescriptionStyle}>Definible</p>
-             </div>
-              <div style={inputGroupStyle}>
-               <label style={labelStyle}>Fecha Última Actualización</label>
-               {/* Usar input tipo date o un date picker component */}
-               <input type="date" style={inputStyle} value={fechaUltimaActualizacion} onChange={handleInputChange(setFechaUltimaActualizacion)} />
-               {/*<Calendar size={16} style={{position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', color:'#9ca3af'}}/>*/} 
-             </div>
+              {/* Card: Otros Parámetros */}
+              <div style={gridCardStyle}>
+                <h3 style={gridCardTitleStyle}>Otros Parámetros</h3>
+                <div style={inputGroupStyle}>
+                  <label style={labelStyle}>Margen Adicional Total (%)</label>
+                  <input type="number" style={inputStyle} value={margenTotalGeneral} onChange={handleInputChange(setMargenTotalGeneral)} step="0.5" />
+                  <p style={inputDescriptionStyle}>Definible</p>
+                </div>
+                <div style={inputGroupStyle}>
+                  <label style={labelStyle}>Descuento Fabricante (%)</label>
+                  <input type="number" style={inputStyle} value={descuentoFabricanteGeneral} onChange={handleInputChange(setDescuentoFabricanteGeneral)} step="0.5" />
+                  <p style={inputDescriptionStyle}>Definible</p>
+                </div>
+                 <div style={inputGroupStyle}>
+                  <label style={labelStyle}>Fecha Última Actualización</label>
+                  <input type="date" style={inputStyle} value={fechaUltimaActualizacion} onChange={handleInputChange(setFechaUltimaActualizacion)} />
+                </div>
+              </div>
            </div>
-         </div>
-         
-         {/* --- Sección Perfiles por Categoría (Comentada temporalmente) --- */}
-         {/* 
-         <div style={mainCardStyle}>
-           <h2 style={{...sectionTitleStyle, borderBottom: 'none'}}>Perfiles de Costos por Categoría</h2>
-            // ... contenido anterior de perfiles ... 
-         </div>
-         */}
+         )}
       </div>
 
       {/* >>> MOVER LA ETIQUETA STYLE AQUÍ (dentro del div principal) <<< */}
