@@ -33,14 +33,14 @@ interface CostParamsWebhookResponse {
 // --- Componente AdminPanel --- 
 export default function AdminPanel() {
   
-  // --- Estados (mantenemos los actuales, aunque no todos se muestren en la nueva UI) ---
-  const [tipoCambio, setTipoCambio] = useState<string>('1.12'); // Valor de la imagen
-  const [bufferDolar, setBufferDolar] = useState<string>('1.8'); // Valor de la imagen
-  const [tasaSeguroGlobal, setTasaSeguroGlobal] = useState<string>('1'); // Valor de la imagen
-  const [bufferTransporteGlobal, setBufferTransporteGlobal] = useState<string>('5'); // Valor de la imagen
-  const [margenTotalGeneral, setMargenTotalGeneral] = useState<string>('20'); // Valor de la imagen
-  const [descuentoFabricanteGeneral, setDescuentoFabricanteGeneral] = useState<string>('5'); // Valor de la imagen
-  const [fechaUltimaActualizacion, setFechaUltimaActualizacion] = useState<string>('14-04-2025'); // Valor de la imagen
+  // --- Estados del formulario con valores iniciales por defecto ---
+  const [tipoCambio, setTipoCambio] = useState<string>('1.12'); 
+  const [bufferDolar, setBufferDolar] = useState<string>('1.8'); 
+  const [tasaSeguroGlobal, setTasaSeguroGlobal] = useState<string>('1'); 
+  const [bufferTransporteGlobal, setBufferTransporteGlobal] = useState<string>('5'); 
+  const [margenTotalGeneral, setMargenTotalGeneral] = useState<string>('20'); 
+  const [descuentoFabricanteGeneral, setDescuentoFabricanteGeneral] = useState<string>('5'); 
+  const [fechaUltimaActualizacion, setFechaUltimaActualizacion] = useState<string>('2025-04-14');
 
   // Estados para la sección de divisas actualizadas
   const [dolarActualCLP, setDolarActualCLP] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export default function AdminPanel() {
   const [fechaActualizacionDivisas, setFechaActualizacionDivisas] = useState<string | null>(null);
 
   // Estado para filtros (mantener lógica si es necesario)
-  const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>(['Todas las categorías', 'Chipeadoras PTO', 'Chipeadoras Motor']); // Ejemplo
+  const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>(['Todas las categorías', 'Chipeadoras Motor', 'Chipeadoras PTO']); // Ejemplo
   const [categoriaSeleccionadaParaAplicar, setCategoriaSeleccionadaParaAplicar] = useState<string>('Todas las categorías');
 
   // --- Estados/Lógica para perfiles (comentados por ahora) ---
@@ -94,9 +94,20 @@ export default function AdminPanel() {
   // ---------------------------------------------------------
 
   // --- NUEVOS ESTADOS para Carga Inicial de Parámetros de Costo ---
-  const [initialCostParamsLoading, setInitialCostParamsLoading] = useState(true);
+  const [initialCostParamsLoading, setInitialCostParamsLoading] = useState(false); // Ya no cargamos al inicio
   const [initialCostParamsError, setInitialCostParamsError] = useState<string | null>(null);
   // ------------------------------------------------------------------
+
+  // --- NUEVOS ESTADOS para Carga de Parámetros por Categoría ---
+  const [isLoadingCategoryParams, setIsLoadingCategoryParams] = useState(false);
+  const [loadCategoryParamsError, setLoadCategoryParamsError] = useState<string | null>(null);
+  // -----------------------------------------------------------
+
+  // --- NUEVOS ESTADOS PARA GUARDAR PARÁMETROS GLOBALES --- 
+  const [isSavingGlobalParams, setIsSavingGlobalParams] = useState(false);
+  const [saveGlobalParamsError, setSaveGlobalParamsError] = useState<string | null>(null);
+  const [saveGlobalParamsSuccess, setSaveGlobalParamsSuccess] = useState<string | null>(null);
+  // -------------------------------------------------------
 
   // --- Función Refactorizada para Obtener y Establecer Divisas --- 
   const fetchAndSetCurrencies = async (updateTimestamp?: Date) => {
@@ -172,68 +183,73 @@ export default function AdminPanel() {
   }, []); // Array vacío para ejecutar solo al montar
   // ----------------------------------
 
-  // --- useEffect para Carga INICIAL de Parámetros de Costo --- 
-  useEffect(() => {
-    const fetchInitialCostParams = async () => {
-      setInitialCostParamsLoading(true);
-      setInitialCostParamsError(null);
-      console.log('Fetching initial cost parameters from backend...');
-      try {
-        const response = await fetch('http://localhost:5001/api/pricing-overrides/webhook'); // Endpoint del backend
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({})); // Intenta parsear error, si no, objeto vacío
-          throw new Error(errorData.message || `Error del servidor: ${response.status}`);
-        }
-        const data: CostParamsWebhookResponse = await response.json();
-        console.log('Initial cost parameters received:', data);
+  // --- NUEVA FUNCIÓN PARA CARGAR PARÁMETROS AL CAMBIAR CATEGORÍA ---
+  const fetchAndApplyCategoryParams = async (categoria: string) => {
+    if (categoria !== 'Chipeadoras Motor' && categoria !== 'Chipeadoras PTO') {
+      setLoadCategoryParamsError(null); // Limpiar errores si no es chipeadora
+      // Opcional: Resetear a valores globales/default si se selecciona otra categoría
+      // setTipoCambio('1.12'); setBufferDolar('1.8'); ... etc
+      return; 
+    }
 
-        // Actualizar estados del formulario SÓLO con los datos recibidos
-        // Usar || '' para evitar pasar undefined/null y convertir a string
-        if (data.costos) {
-          if (data.costos.margen_adicional_total !== undefined) {
-            setMargenTotalGeneral(String(data.costos.margen_adicional_total) || '0');
-          }
-          if (data.costos.buffer_usd_clp !== undefined) { // Nombre mapeado desde buffer_dolar si así viene del webhook
-            setBufferDolar(String(data.costos.buffer_usd_clp) || '0');
-          } else if (data.costos.buffer_dolar !== undefined) { // Fallback por si el webhook usa buffer_dolar
-             setBufferDolar(String(data.costos.buffer_dolar) || '0');
-          }
-          if (data.costos.tasa_seguro_categoria !== undefined) { // Asumiendo mapeo desde tasa_seguro_categoria
-            setTasaSeguroGlobal(String(data.costos.tasa_seguro_categoria) || '0');
-          } else if (data.costos.tasa_seguro !== undefined) { // Fallback por si el webhook usa tasa_seguro
-             setTasaSeguroGlobal(String(data.costos.tasa_seguro) || '0');
-          }           
-          if (data.costos.tipo_cambio_eur_usd !== undefined) {
-            setTipoCambio(String(data.costos.tipo_cambio_eur_usd) || '0');
-          }
-          if (data.costos.buffer_transporte !== undefined) {
-            setBufferTransporteGlobal(String(data.costos.buffer_transporte) || '0');
-          }
-          if (data.costos.descuento_fabricante !== undefined) {
-            setDescuentoFabricanteGeneral(String(data.costos.descuento_fabricante) || '0');
-          }
-          // No actualizamos fechaUltimaActualizacion desde aquí por ahora
-        }
-        
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Error desconocido al cargar parámetros iniciales.';
-        console.error('Error fetching initial cost parameters:', error);
-        setInitialCostParamsError(errorMsg.includes('fetch') ? 'Error de conexión cargando parámetros iniciales.' : errorMsg);
-      } finally {
-        setInitialCostParamsLoading(false);
+    setIsLoadingCategoryParams(true);
+    setLoadCategoryParamsError(null);
+    console.log(`Fetching parameters for category type: ${categoria}`);
+    
+    try {
+      // --- MODIFICAR URL PARA INCLUIR CATEGORÍA --- 
+      const encodedCategory = encodeURIComponent(categoria);
+      const response = await fetch(`http://localhost:5001/api/pricing-overrides/webhook?category=${encodedCategory}`); // Usa el endpoint del backend con query param
+      // -------------------------------------------
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error del servidor: ${response.status}`);
       }
-    };
+      const data: CostParamsWebhookResponse = await response.json();
+      console.log(`Parameters received (for ${categoria}):`, data);
 
-    fetchInitialCostParams();
-  }, []); // Array vacío para ejecutar solo al montar
-  // ---------------------------------------------------------
+      // Actualizar estados del formulario con los datos recibidos
+      if (data.costos) {
+        // Mapeo cuidadoso basado en la respuesta esperada del webhook
+        if (data.costos.margen_adicional_total !== undefined) setMargenTotalGeneral(String(data.costos.margen_adicional_total));
+        if (data.costos.buffer_usd_clp !== undefined) setBufferDolar(String(data.costos.buffer_usd_clp));
+        else if (data.costos.buffer_dolar !== undefined) setBufferDolar(String(data.costos.buffer_dolar)); // Fallback
+        if (data.costos.tasa_seguro_categoria !== undefined) setTasaSeguroGlobal(String(data.costos.tasa_seguro_categoria));
+        else if (data.costos.tasa_seguro !== undefined) setTasaSeguroGlobal(String(data.costos.tasa_seguro)); // Fallback
+        if (data.costos.tipo_cambio_eur_usd !== undefined) setTipoCambio(String(data.costos.tipo_cambio_eur_usd));
+        if (data.costos.buffer_transporte !== undefined) setBufferTransporteGlobal(String(data.costos.buffer_transporte));
+        if (data.costos.descuento_fabricante !== undefined) setDescuentoFabricanteGeneral(String(data.costos.descuento_fabricante));
+      }
+       // Limpiar error si la carga fue exitosa
+       setLoadCategoryParamsError(null);
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Error desconocido al cargar parámetros.';
+      console.error(`Error fetching parameters for ${categoria}:`, error);
+      setLoadCategoryParamsError(errorMsg.includes('fetch') ? `Error de conexión cargando parámetros para ${categoria}.` : errorMsg);
+    } finally {
+      setIsLoadingCategoryParams(false);
+    }
+  };
+  // ------------------------------------------------------------------
+
+  // --- HANDLER PARA EL CAMBIO DEL DROPDOWN --- 
+  const handleCategoriaChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nuevaCategoria = event.target.value;
+    setCategoriaSeleccionadaParaAplicar(nuevaCategoria);
+    // Llamar a la función para cargar datos si es una categoría Chipeadora
+    fetchAndApplyCategoryParams(nuevaCategoria); 
+  };
+  // -------------------------------------------
 
   // --- Handlers (mantener lógica placeholder) ---
   const handleInputChange = (setter: React.Dispatch<React.SetStateAction<any>>) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+     // Limpiar mensajes de éxito/error al cambiar cualquier input
+     setSaveGlobalParamsSuccess(null);
+     setSaveGlobalParamsError(null);
      setter(event.target.value);
   };
-  const handleSaveAll = () => alert('Guardando todos los cambios...');
-  
+
   // --- MODIFICAR handleActualizarDivisas para usar la función refactorizada ---
   const handleActualizarDivisas = async () => {
     const updateTime = new Date(); // <<< CAPTURAR HORA AQUÍ
@@ -306,14 +322,66 @@ export default function AdminPanel() {
   };
   // ----------------------------------------------------------
 
-  // --- MODIFICAR HANDLER DEL SELECT --- 
-  const handleCategoriaChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const nuevaCategoria = event.target.value;
-    setCategoriaSeleccionadaParaAplicar(nuevaCategoria);
-    // Llamar a la función de aplicación si no es "Todas las categorías"
-    aplicarParametrosACategoria(nuevaCategoria); 
+  // --- MODIFICAR handleSaveAll --- 
+  const handleSaveAll = async () => {
+    console.log('Attempting to save global parameters...');
+    setIsSavingGlobalParams(true);
+    setSaveGlobalParamsError(null);
+    setSaveGlobalParamsSuccess(null);
+
+    // 1. Recopilar y Mapear datos del estado del formulario a la estructura esperada por el backend/N8N
+    //    ¡¡IMPORTANTE: Asegúrate que las claves coincidan con tu backend/N8N!!
+    //    Convertir porcentajes a decimales si es necesario (ej: dividir por 100)
+    //    Usar parseFloat para convertir strings a números
+    const payload = {
+      margen_adicional_total: parseFloat(margenTotalGeneral) / 100 || 0, // Ejemplo: convertir % a decimal
+      buffer_usd_clp: parseFloat(bufferDolar) / 100 || 0,           // Ejemplo: convertir % a decimal
+      tasa_seguro: parseFloat(tasaSeguroGlobal) / 100 || 0,         // Ejemplo: convertir % a decimal
+      buffer_transporte: parseFloat(bufferTransporteGlobal) / 100 || 0, // Ejemplo: convertir % a decimal
+      descuento_fabricante: parseFloat(descuentoFabricanteGeneral) / 100 || 0, // Ejemplo: convertir % a decimal
+      tipo_cambio_eur_usd: parseFloat(tipoCambio) || 0,
+      // --- ¿Incluir dólar observado? Decide si este valor debe guardarse --- 
+      // dolar_observado_actual: parseFloat(dolarActualCLP ?? '0') || 0, 
+      // --- ¿Incluir buffer EUR/USD? Si no tienes estado para él, no lo envíes o usa un default --- 
+      // buffer_eur_usd: 0.02, // Ejemplo: Si no hay input, quizás no deba enviarse o usar default
+      // --- ¿Incluir fecha? Decide si este valor debe guardarse --- 
+      // fecha_actualizacion: fechaUltimaActualizacion // O usar new Date().toISOString()
+    };
+
+    console.log('Payload to send to backend:', payload);
+
+    try {
+      const response = await fetch('http://localhost:5001/api/pricing-overrides/update-global', {
+        method: 'PUT', // o POST, según definiste en backend
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json(); // Intenta parsear siempre
+
+      if (!response.ok) {
+        // Error desde el backend/N8N
+        const errorMsg = result.message || 'Error desconocido desde el servidor.';
+        console.error('Error saving global params:', result);
+        setSaveGlobalParamsError(errorMsg + (result.detalle_n8n ? ` (Detalle N8N: ${JSON.stringify(result.detalle_n8n)})` : ''));
+      } else {
+        // Éxito
+        console.log('Global params saved successfully:', result);
+        setSaveGlobalParamsSuccess(result.message || 'Parámetros guardados exitosamente.');
+        // Opcional: Limpiar mensaje de éxito después de un tiempo
+        setTimeout(() => setSaveGlobalParamsSuccess(null), 5000);
+      }
+
+    } catch (error) {
+      // Error de red o fetch
+      console.error('Network error saving global params:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Error desconocido de red.';
+      setSaveGlobalParamsError(`Error de conexión: ${errorMsg}`);
+    } finally {
+      setIsSavingGlobalParams(false);
+    }
   };
-  // ----------------------------------
+  // ---------------------------
 
   // --- Estado para la pestaña activa (ejemplo) ---
   const [activeTab, setActiveTab] = useState('calculos');
@@ -323,20 +391,43 @@ export default function AdminPanel() {
     <div style={{ padding: '0 24px 24px 24px' }}> 
       
       {/* --- Cabecera con Título, Tabs y Botón Guardar --- */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: `1px solid ${borderColor}`, paddingBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: `1px solid ${borderColor}`, paddingBottom: '16px' }}>
         <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#111827' }}>
-          ADMIN
+          ADMINISTRACIÓN PARÁMETROS GLOBALES
         </h1>
         
-        {/* Mantener el botón Guardar */}
-        <button style={primaryButtonStyle} onClick={handleSaveAll}>
-          <Save size={16} /> Guardar Cambios
+        {/* --- ACTUALIZAR BOTÓN GUARDAR --- */}
+        <button 
+          style={{...primaryButtonStyle, cursor: isSavingGlobalParams ? 'not-allowed' : 'pointer'}}
+          onClick={handleSaveAll}
+          disabled={isSavingGlobalParams}
+        >
+          {isSavingGlobalParams ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Save size={16} />
+          )}
+          {isSavingGlobalParams ? 'Guardando...' : 'Guardar Cambios'}
         </button>
+        {/* ------------------------------ */} 
       </div>
+
+      {/* --- MENSAJES DE FEEDBACK PARA GUARDADO --- */} 
+      {saveGlobalParamsSuccess && (
+        <div style={{ marginBottom: '16px', padding: '10px 15px', backgroundColor: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <CheckCircle size={18} /> {saveGlobalParamsSuccess}
+        </div>
+      )}
+      {saveGlobalParamsError && (
+        <div style={{ marginBottom: '16px', padding: '10px 15px', backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <XCircle size={18} /> Error al guardar: {saveGlobalParamsError}
+        </div>
+      )}
+      {/* ---------------------------------------- */} 
 
       {/* --- Contenido Principal (Ya no depende de activeTab) --- */}
       <div> 
-         {/* Título y Selector de Categoría */}
+         {/* Título y Dropdown Categoría */}
          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
            <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <SlidersHorizontal size={20} /> Parámetros de Cálculo y Costos
@@ -347,31 +438,16 @@ export default function AdminPanel() {
                   style={{ ...selectStyle, minWidth: '180px' }} 
                   value={categoriaSeleccionadaParaAplicar} 
                   onChange={handleCategoriaChange}
-                  disabled={isApplyingCategorySettings}
+                  disabled={isLoadingCategoryParams}
               >
                   {categoriasDisponibles.map(cat => (
-                      <option key={cat} value={cat} disabled={cat === 'Todas las categorías' && isApplyingCategorySettings}>
-                         {cat}
-                      </option>
+                      <option key={cat} value={cat}>{cat}</option>
                   ))}
               </select>
-              {isApplyingCategorySettings && <Loader2 size={16} className="animate-spin" color={primaryTextColor}/>}
-              {applyCategorySettingsSuccess && !isApplyingCategorySettings && <CheckCircle size={16} color="#10b981" />}
-              {applyCategorySettingsError && !isApplyingCategorySettings && <XCircle size={16} color="#ef4444" />}
+              {isLoadingCategoryParams && <Loader2 size={16} className="animate-spin" color={primaryTextColor}/>}
+              {loadCategoryParamsError && <XCircle size={16} color="#ef4444" />}
            </div>
          </div>
-
-         {/* Mensajes detallados de éxito/error */}
-         {applyCategorySettingsSuccess && !isApplyingCategorySettings && (
-             <div style={{ marginBottom: '12px', padding: '8px 12px', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '6px', fontSize: '12px', textAlign: 'center' }}>
-                 {applyCategorySettingsSuccess}
-             </div>
-         )}
-         {applyCategorySettingsError && !isApplyingCategorySettings && (
-             <div style={{ marginBottom: '12px', padding: '8px 12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '6px', fontSize: '12px', textAlign: 'center' }}>
-                 Error: {applyCategorySettingsError}
-             </div>
-         )}
 
          {/* Mensajes Éxito/Error Guardar */}
          {initialCostParamsError && (
