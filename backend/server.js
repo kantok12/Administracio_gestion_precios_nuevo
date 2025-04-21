@@ -1,24 +1,62 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const connectDB = require('./config/db');
 const userRoutes = require('./routes/userRoutes');
 const productRoutes = require('./routes/productRoutes');
-const pricingOverridesRoutes = require('./routes/pricingOverridesRoutes');
+// const pricingOverridesRoutes = require('./routes/pricingOverridesRoutes');
+const costosRoutes = require('./routes/costosRoutes');
+const overridesRoutes = require('./routes/overridesRoutes');
 const { fetchCurrencyValuesController, fetchProducts } = require('./controllers/productController');
 const { port } = require('./config/env');
+const PricingOverride = require('./models/PricingOverrideString');
 
 dotenv.config();
 
-const app = express();
+// Imprimir un mensaje de inicio para informar al usuario del proceso
+console.log('\n========== INICIANDO SERVIDOR BACKEND ==========');
+console.log('Por favor espere mientras se preparan las bases de datos y modelos...');
+console.log('Esto podría tardar unos segundos...');
+console.log('================================================\n');
 
-// Habilitar CORS para todas las rutas (o configura orígenes específicos)
-app.use(cors());
-
-app.use(express.json());
-
-app.use('/api/users', userRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/pricing-overrides', pricingOverridesRoutes);
+// Inicialización extendida con configuración de modelos
+const initializeServer = async () => {
+  try {
+    // Conectar a la base de datos
+    await connectDB();
+    
+    // Inicializar modelos
+    console.log('[Server] Initializing data models...');
+    await PricingOverride.initializeDefaults();
+    console.log('[Server] Models initialization complete.');
+    
+    // Configuración de Express
+    const app = express();
+    app.use(cors());
+    app.use(express.json());
+    
+    // Configuración de rutas
+    app.use('/api/users', userRoutes);
+    app.use('/api/products', productRoutes);
+    app.use('/api/overrides', overridesRoutes);
+    app.use('/api', costosRoutes);
+    
+    // Inicializar caché
+    console.log('[Server] Initializing cache...');
+    await initializeCache();
+    console.log('[Server] Cache initialization complete.');
+    
+    // Iniciar el servidor
+    app.listen(port, () => {
+      console.log(`\n---- Server running on port ${port} ----`);
+      console.log(`Backend API accessible at: http://localhost:${port}/api`);
+      console.log(`Admin panel accessible at: http://localhost:5173/admin\n`);
+    });
+  } catch (error) {
+    console.error('[Server] Error during initialization:', error);
+    process.exit(1);
+  }
+};
 
 // Initialize cache on startup
 const initializeCache = async () => {
@@ -53,26 +91,5 @@ const initializeCache = async () => {
   }
 };
 
-// Inicializar caché al arrancar el servidor
-initializeCache();
-
-const startServer = async () => {
-  try {
-    // Initialize cache first
-    console.log('Initializing cache...');
-    await initializeCache(); 
-    console.log('Cache initialization attempt complete.');
-    
-    // Start listening 
-    app.listen(port, () => {
-      console.log(`---- Server running on port ${port} ----`);
-    });
-
-  } catch (error) {
-    console.error('🔴 Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-// Start the server
-startServer();
+// Iniciar el servidor
+initializeServer();

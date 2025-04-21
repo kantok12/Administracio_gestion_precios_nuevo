@@ -11,29 +11,48 @@ interface PerfilCostoCategoria {
   descuentoFabricante?: number;
 }
 
-// Interfaz placeholder (asumiendo que el webhook devuelve algo así)
+// Interfaz completa para los parámetros de costos
 interface CostParamsWebhookResponse {
   _id?: string;
+  nivel?: string;
   categoryId?: string;
   costos?: {
+    // Parámetros básicos (los que ya teníamos)
     margen_adicional_total?: number;
     buffer_eur_usd?: number;
-    buffer_usd_clp?: number; // Mapea a bufferDolar
-    buffer_dolar?: number; // <<< AÑADIR PROPIEDAD OPCIONAL PARA FALLBACK
+    buffer_usd_clp?: number;
+    buffer_dolar?: number;
     tasa_seguro?: number;
-    tasa_seguro_categoria?: number; // Mapea a tasaSeguroGlobal
-    tipo_cambio_eur_usd?: number; // Mapea a tipoCambio
+    tasa_seguro_categoria?: number;
+    tipo_cambio_eur_usd?: number;
     dolar_observado_actual?: number;
-    buffer_transporte?: number; // Mapea a bufferTransporteGlobal
-    descuento_fabricante?: number; // Mapea a descuentoFabricanteGeneral
+    buffer_transporte?: number;
+    descuento_fabricante?: number;
+    
+    // Parámetros adicionales
+    costo_fabrica_original_eur?: number;
+    fecha_ultima_actualizacion_transporte_local?: string;
+    transporte_local_eur?: number;
+    gasto_importacion_eur?: number;
+    flete_maritimo_usd?: number;
+    recargos_destino_usd?: number;
+    honorarios_agente_aduana_usd?: number;
+    gastos_portuarios_otros_usd?: number;
+    transporte_nacional_clp?: number;
+    factor_actualizacion_anual?: number;
+    derecho_ad_valorem?: number;
+    iva?: number;
   };
-  // Otros campos posibles
+  metadata?: {
+    ultima_actualizacion?: Date;
+    actualizado_por?: string;
+  };
 }
 
 // --- Componente AdminPanel --- 
 export default function AdminPanel() {
   
-  // --- Estados del formulario con valores iniciales por defecto ---
+  // --- Estados para parámetros básicos (que ya teníamos) ---
   const [tipoCambio, setTipoCambio] = useState<string>('1.12'); 
   const [bufferDolar, setBufferDolar] = useState<string>('1.8'); 
   const [tasaSeguroGlobal, setTasaSeguroGlobal] = useState<string>('1'); 
@@ -41,6 +60,21 @@ export default function AdminPanel() {
   const [margenTotalGeneral, setMargenTotalGeneral] = useState<string>('20'); 
   const [descuentoFabricanteGeneral, setDescuentoFabricanteGeneral] = useState<string>('5'); 
   const [fechaUltimaActualizacion, setFechaUltimaActualizacion] = useState<string>('2025-04-14');
+
+  // --- NUEVOS Estados para parámetros adicionales ---
+  const [costoFabricaOriginalEUR, setCostoFabricaOriginalEUR] = useState<string>('100000');
+  const [transporteLocalEUR, setTransporteLocalEUR] = useState<string>('800');
+  const [gastoImportacionEUR, setGastoImportacionEUR] = useState<string>('400');
+  const [fleteMaritimosUSD, setFleteMaritimosUSD] = useState<string>('3500');
+  const [recargosDestinoUSD, setRecargosDestinoUSD] = useState<string>('500');
+  const [honorariosAgenteAduanaUSD, setHonorariosAgenteAduanaUSD] = useState<string>('600');
+  const [gastosPortuariosOtrosUSD, setGastosPortuariosOtrosUSD] = useState<string>('200');
+  const [transporteNacionalCLP, setTransporteNacionalCLP] = useState<string>('950000');
+  const [factorActualizacionAnual, setFactorActualizacionAnual] = useState<string>('5');
+  const [derechoAdValorem, setDerechoAdValorem] = useState<string>('6');
+  const [iva, setIva] = useState<string>('19');
+  const [bufferEurUsd, setBufferEurUsd] = useState<string>('2');
+  // -------------------------------------------------
 
   // Estados para la sección de divisas actualizadas
   const [dolarActualCLP, setDolarActualCLP] = useState<string | null>(null);
@@ -51,10 +85,6 @@ export default function AdminPanel() {
   const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>(['Todas las categorías', 'Chipeadoras Motor', 'Chipeadoras PTO']); // Ejemplo
   const [categoriaSeleccionadaParaAplicar, setCategoriaSeleccionadaParaAplicar] = useState<string>('Todas las categorías');
 
-  // --- Estados/Lógica para perfiles (comentados por ahora) ---
-  // const [categoriaSeleccionadaPerfil, setCategoriaSeleccionadaPerfil] = useState<string>('');
-  // const [perfilSeleccionado, setPerfilSeleccionado] = useState<Partial<PerfilCostoCategoria>>({});
-  
   // --- Estilos reutilizables para la nueva UI ---
   const primaryTextColor = '#0ea5e9'; // Azul similar al de App.tsx
   const secondaryTextColor = '#64748b';
@@ -93,8 +123,8 @@ export default function AdminPanel() {
   const [applyCategorySettingsSuccess, setApplyCategorySettingsSuccess] = useState<string | null>(null);
   // ---------------------------------------------------------
 
-  // --- NUEVOS ESTADOS para Carga Inicial de Parámetros de Costo ---
-  const [initialCostParamsLoading, setInitialCostParamsLoading] = useState(false); // Ya no cargamos al inicio
+  // --- ESTADOS PARA CARGA INICIAL PARÁMETROS (AHORA DESDE DB) ---
+  const [initialCostParamsLoading, setInitialCostParamsLoading] = useState(true); // Empezar cargando
   const [initialCostParamsError, setInitialCostParamsError] = useState<string | null>(null);
   // ------------------------------------------------------------------
 
@@ -208,6 +238,78 @@ export default function AdminPanel() {
     loadInitialData();
   }, []); // Array vacío para ejecutar solo al montar
   // ----------------------------------
+
+  // --- REEMPLAZAR useEffect PARA CARGA INICIAL DE PARÁMETROS DE COSTO --- 
+  useEffect(() => {
+    const fetchInitialGlobalParams = async () => {
+      setInitialCostParamsLoading(true);
+      setInitialCostParamsError(null);
+      console.log('[Frontend] Fetching initial global cost parameters from DB...');
+      try {
+        const response = await fetch('http://localhost:5001/api/overrides/global'); // <<< NUEVO ENDPOINT
+        
+        if (response.status === 404) {
+           console.log('[Frontend] Global override document not found in DB. Using default form values.');
+           // No hacer nada, mantener los valores iniciales de useState
+        } else if (!response.ok) {
+          const errorData = await response.json().catch(() => ({})); 
+          throw new Error(errorData.message || `Error del servidor: ${response.status}`);
+        } else {
+          // Éxito, el documento existe
+          const data = await response.json();
+          console.log('[Frontend] Initial global parameters received from DB:', data);
+
+          // Actualizar estados del formulario SÓLO con los datos del objeto `costos`
+          if (data && data.costos) {
+            const costos = data.costos;
+            
+            // --- Parámetros básicos (que ya teníamos) ---
+            if (costos.tipo_cambio_eur_usd !== undefined) setTipoCambio(String(costos.tipo_cambio_eur_usd));
+            if (costos.buffer_usd_clp !== undefined) setBufferDolar(String(costos.buffer_usd_clp * 100)); // Decimal a %
+            if (costos.tasa_seguro !== undefined) setTasaSeguroGlobal(String(costos.tasa_seguro * 100)); // Decimal a %
+            if (costos.buffer_transporte !== undefined) setBufferTransporteGlobal(String(costos.buffer_transporte * 100)); // Decimal a %
+            if (costos.margen_adicional_total !== undefined) setMargenTotalGeneral(String(costos.margen_adicional_total * 100)); // Decimal a %
+            if (costos.descuento_fabricante !== undefined) setDescuentoFabricanteGeneral(String(costos.descuento_fabricante * 100)); // Decimal a %
+            
+            // --- Parámetros adicionales ---
+            if (costos.costo_fabrica_original_eur !== undefined) setCostoFabricaOriginalEUR(String(costos.costo_fabrica_original_eur));
+            if (costos.transporte_local_eur !== undefined) setTransporteLocalEUR(String(costos.transporte_local_eur));
+            if (costos.gasto_importacion_eur !== undefined) setGastoImportacionEUR(String(costos.gasto_importacion_eur));
+            if (costos.flete_maritimo_usd !== undefined) setFleteMaritimosUSD(String(costos.flete_maritimo_usd));
+            if (costos.recargos_destino_usd !== undefined) setRecargosDestinoUSD(String(costos.recargos_destino_usd));
+            if (costos.honorarios_agente_aduana_usd !== undefined) setHonorariosAgenteAduanaUSD(String(costos.honorarios_agente_aduana_usd));
+            if (costos.gastos_portuarios_otros_usd !== undefined) setGastosPortuariosOtrosUSD(String(costos.gastos_portuarios_otros_usd));
+            if (costos.transporte_nacional_clp !== undefined) setTransporteNacionalCLP(String(costos.transporte_nacional_clp));
+            if (costos.factor_actualizacion_anual !== undefined) setFactorActualizacionAnual(String(costos.factor_actualizacion_anual * 100)); // Decimal a %
+            if (costos.derecho_ad_valorem !== undefined) setDerechoAdValorem(String(costos.derecho_ad_valorem * 100)); // Decimal a %
+            if (costos.iva !== undefined) setIva(String(costos.iva * 100)); // Decimal a %
+            if (costos.buffer_eur_usd !== undefined) setBufferEurUsd(String(costos.buffer_eur_usd * 100)); // Decimal a %
+            
+            // Fecha de actualización
+            if (costos.fecha_ultima_actualizacion_transporte_local) 
+              setFechaUltimaActualizacion(costos.fecha_ultima_actualizacion_transporte_local);
+            
+            // Dólar observado (si no se ha cargado por otro medio)
+            if (costos.dolar_observado_actual !== undefined && !dolarActualCLP)
+              setDolarActualCLP(String(costos.dolar_observado_actual));
+            
+          } else {
+             console.warn('[Frontend] Global override document found, but \'costos\' field is missing or empty.');
+          }
+        }
+        
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Error desconocido al cargar parámetros iniciales.';
+        console.error('[Frontend] Error fetching initial global parameters:', error);
+        setInitialCostParamsError(errorMsg.includes('fetch') ? 'Error de conexión cargando parámetros iniciales.' : errorMsg);
+      } finally {
+        setInitialCostParamsLoading(false);
+      }
+    };
+
+    fetchInitialGlobalParams();
+  }, []); // Array vacío para ejecutar solo al montar
+  // -----------------------------------------------------------------
 
   // --- NUEVA FUNCIÓN PARA CARGAR PARÁMETROS AL CAMBIAR CATEGORÍA ---
   const fetchAndApplyCategoryParams = async (categoria: string) => {
@@ -355,27 +457,40 @@ export default function AdminPanel() {
     setSaveGlobalParamsError(null);
     setSaveGlobalParamsSuccess(null);
 
-    // 1. Recopilar y Mapear datos COMPLETOS del estado del formulario
-    //    (Excepto buffer_eur_usd que no tiene estado asociado)
+    // 1. Recopilar y Mapear todos los parámetros del estado del formulario
     const payload = {
-      margen_adicional_total: parseFloat(margenTotalGeneral) / 100 || 0, 
-      // buffer_eur_usd: ??? // No hay estado para este valor en el frontend
-      buffer_usd_clp: parseFloat(bufferDolar) / 100 || 0,          
-      tasa_seguro: parseFloat(tasaSeguroGlobal) / 100 || 0,         
+      // Parámetros básicos 
       tipo_cambio_eur_usd: parseFloat(tipoCambio) || 0,
-      dolar_observado_actual: parseFloat(dolarActualCLP ?? '0') || 0, // <<< INCLUIR ESTE VALOR
-      buffer_transporte: parseFloat(bufferTransporteGlobal) / 100 || 0, 
-      descuento_fabricante: parseFloat(descuentoFabricanteGeneral) / 100 || 0, 
-      // fecha_actualizacion: fechaUltimaActualizacion // Omitir por ahora, no en schema backend
+      buffer_usd_clp: parseFloat(bufferDolar) / 100 || 0,
+      buffer_eur_usd: parseFloat(bufferEurUsd) / 100 || 0,
+      tasa_seguro: parseFloat(tasaSeguroGlobal) / 100 || 0,
+      margen_adicional_total: parseFloat(margenTotalGeneral) / 100 || 0,
+      buffer_transporte: parseFloat(bufferTransporteGlobal) / 100 || 0,
+      descuento_fabricante: parseFloat(descuentoFabricanteGeneral) / 100 || 0,
+
+      // Parámetros adicionales
+      costo_fabrica_original_eur: parseFloat(costoFabricaOriginalEUR) || 0,
+      transporte_local_eur: parseFloat(transporteLocalEUR) || 0,
+      gasto_importacion_eur: parseFloat(gastoImportacionEUR) || 0,
+      flete_maritimo_usd: parseFloat(fleteMaritimosUSD) || 0,
+      recargos_destino_usd: parseFloat(recargosDestinoUSD) || 0,
+      honorarios_agente_aduana_usd: parseFloat(honorariosAgenteAduanaUSD) || 0,
+      gastos_portuarios_otros_usd: parseFloat(gastosPortuariosOtrosUSD) || 0,
+      transporte_nacional_clp: parseFloat(transporteNacionalCLP) || 0,
+      factor_actualizacion_anual: parseFloat(factorActualizacionAnual) / 100 || 0,
+      derecho_ad_valorem: parseFloat(derechoAdValorem) / 100 || 0,
+      iva: parseFloat(iva) / 100 || 0,
+      fecha_ultima_actualizacion_transporte_local: fechaUltimaActualizacion,
+      dolar_observado_actual: parseFloat(dolarActualCLP ?? '0') || 0,
     };
 
     console.log('Payload to send to backend (Complete):', payload);
 
     try {
-      const response = await fetch('http://localhost:5001/api/pricing-overrides/update-global', {
+      const response = await fetch('http://localhost:5001/api/overrides/global', {
         method: 'PUT', 
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload) // Enviar el payload completo
+        body: JSON.stringify({ costos: payload }) // Enviar el payload dentro de un objeto "costos"
       });
 
       const result = await response.json(); // Intenta parsear siempre
@@ -549,67 +664,281 @@ export default function AdminPanel() {
             </div>
          ) : (
             <div style={gridContainerStyle}>
-             {/* Cards con los inputs (Tipo Cambio, Transporte, Otros) */}
-             {/* Los inputs usarán los estados (tipoCambio, bufferDolar, etc.) que ahora se actualizan desde el webhook */}
-             {/* Card: Tipos de Cambio */}
-              <div style={gridCardStyle}>
-                <h3 style={gridCardTitleStyle}>Tipos de Cambio</h3>
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>Tipo de Cambio EUR/USD</label>
-                  <input type="number" style={inputStyle} value={tipoCambio} onChange={handleInputChange(setTipoCambio)} step="0.01" />
-                  <p style={inputDescriptionStyle}>Definible</p>
-                </div>
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>Dólar Observado Actual (CLP)</label>
-                  <input 
-                    type="number" 
-                    style={{...inputStyle, backgroundColor: '#e5e7eb'}} 
-                    value={dolarActualCLP ?? ''} // Este viene de las divisas
-                    readOnly 
-                  />
-                  <p style={inputDescriptionStyle}>Fijo desde API</p>
-                </div>
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>Buffer USD/CLP (%)</label>
-                  <input type="number" style={inputStyle} value={bufferDolar} onChange={handleInputChange(setBufferDolar)} step="0.1" />
-                  <p style={inputDescriptionStyle}>Definible</p>
-                </div>
-              </div>
-
-              {/* Card: Transporte y Seguro */}
-              <div style={gridCardStyle}>
-                <h3 style={gridCardTitleStyle}>Transporte y Seguro</h3>
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>Buffer Transporte (%)</label>
-                  <input type="number" style={inputStyle} value={bufferTransporteGlobal} onChange={handleInputChange(setBufferTransporteGlobal)} step="0.5" />
-                  <p style={inputDescriptionStyle}>Definible</p>
-                </div>
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>Tasa Seguro (%)</label>
-                  <input type="number" style={inputStyle} value={tasaSeguroGlobal} onChange={handleInputChange(setTasaSeguroGlobal)} step="0.1" />
-                  <p style={inputDescriptionStyle}>Definible</p>
-                </div>
-              </div>
-
-              {/* Card: Otros Parámetros */}
-              <div style={gridCardStyle}>
-                <h3 style={gridCardTitleStyle}>Otros Parámetros</h3>
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>Margen Adicional Total (%)</label>
-                  <input type="number" style={inputStyle} value={margenTotalGeneral} onChange={handleInputChange(setMargenTotalGeneral)} step="0.5" />
-                  <p style={inputDescriptionStyle}>Definible</p>
-                </div>
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>Descuento Fabricante (%)</label>
-                  <input type="number" style={inputStyle} value={descuentoFabricanteGeneral} onChange={handleInputChange(setDescuentoFabricanteGeneral)} step="0.5" />
-                  <p style={inputDescriptionStyle}>Definible</p>
-                </div>
-                 <div style={inputGroupStyle}>
-                  <label style={labelStyle}>Fecha Última Actualización</label>
-                  <input type="date" style={inputStyle} value={fechaUltimaActualizacion} onChange={handleInputChange(setFechaUltimaActualizacion)} />
-                </div>
-              </div>
-           </div>
+               {/* Sección 1: Parámetros Tipo de Cambio */}
+               <div style={gridCardStyle}>
+                  <h4 style={gridCardTitleStyle}>Tipo de Cambio y Buffers</h4>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Tipo de Cambio EUR/USD:</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={tipoCambio}
+                        onChange={handleInputChange(setTipoCambio)}
+                        min="0"
+                        step="0.01"
+                     />
+                     <p style={inputDescriptionStyle}>Tipo de cambio actual entre Euro y Dólar</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Buffer EUR/USD (%):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={bufferEurUsd}
+                        onChange={handleInputChange(setBufferEurUsd)}
+                        min="0"
+                        step="0.1"
+                     />
+                     <p style={inputDescriptionStyle}>Margen adicional para tipo cambio EUR/USD</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Buffer USD/CLP (%):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={bufferDolar}
+                        onChange={handleInputChange(setBufferDolar)}
+                        min="0"
+                        step="0.1"
+                     />
+                     <p style={inputDescriptionStyle}>Margen adicional para tipo cambio USD/CLP</p>
+                  </div>
+               </div>
+               
+               {/* Sección 2: Parámetros Generales */}
+               <div style={gridCardStyle}>
+                  <h4 style={gridCardTitleStyle}>Parámetros de Margen y Seguro</h4>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Margen Total General (%):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={margenTotalGeneral}
+                        onChange={handleInputChange(setMargenTotalGeneral)}
+                        min="0"
+                        step="0.1"
+                     />
+                     <p style={inputDescriptionStyle}>Porcentaje de margen adicional</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Tasa de Seguro Global (%):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={tasaSeguroGlobal}
+                        onChange={handleInputChange(setTasaSeguroGlobal)}
+                        min="0"
+                        step="0.1"
+                     />
+                     <p style={inputDescriptionStyle}>Porcentaje aplicado para calcular seguro</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Descuento Fabricante (%):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={descuentoFabricanteGeneral}
+                        onChange={handleInputChange(setDescuentoFabricanteGeneral)}
+                        min="0"
+                        step="0.1"
+                     />
+                     <p style={inputDescriptionStyle}>Descuento aplicado por el fabricante</p>
+                  </div>
+               </div>
+               
+               {/* Sección 3: Parámetros de Transporte */}
+               <div style={gridCardStyle}>
+                  <h4 style={gridCardTitleStyle}>Parámetros de Transporte</h4>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Buffer Transporte (%):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={bufferTransporteGlobal}
+                        onChange={handleInputChange(setBufferTransporteGlobal)}
+                        min="0"
+                        step="0.1"
+                     />
+                     <p style={inputDescriptionStyle}>Margen adicional para costos de transporte</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Fecha Última Actualización:</label>
+                     <input 
+                        type="date"
+                        style={inputStyle}
+                        value={fechaUltimaActualizacion}
+                        onChange={handleInputChange(setFechaUltimaActualizacion)}
+                     />
+                     <p style={inputDescriptionStyle}>Fecha de última actualización de tarifas</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Transporte Local EUR:</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={transporteLocalEUR}
+                        onChange={handleInputChange(setTransporteLocalEUR)}
+                        min="0"
+                        step="1"
+                     />
+                     <p style={inputDescriptionStyle}>Costo de transporte local en EUR</p>
+                  </div>
+               </div>
+               
+               {/* Sección 4: Costos Adicionales EUR */}
+               <div style={gridCardStyle}>
+                  <h4 style={gridCardTitleStyle}>Costos Adicionales (EUR)</h4>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Costo Fábrica Original (EUR):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={costoFabricaOriginalEUR}
+                        onChange={handleInputChange(setCostoFabricaOriginalEUR)}
+                        min="0"
+                        step="1"
+                     />
+                     <p style={inputDescriptionStyle}>Costo base de fábrica en Euros</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Gasto Importación (EUR):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={gastoImportacionEUR}
+                        onChange={handleInputChange(setGastoImportacionEUR)}
+                        min="0"
+                        step="1"
+                     />
+                     <p style={inputDescriptionStyle}>Gastos de importación en Euros</p>
+                  </div>
+               </div>
+               
+               {/* Sección 5: Costos Adicionales USD */}
+               <div style={gridCardStyle}>
+                  <h4 style={gridCardTitleStyle}>Costos Adicionales (USD)</h4>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Flete Marítimo (USD):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={fleteMaritimosUSD}
+                        onChange={handleInputChange(setFleteMaritimosUSD)}
+                        min="0"
+                        step="1"
+                     />
+                     <p style={inputDescriptionStyle}>Costo de flete marítimo en USD</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Recargos Destino (USD):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={recargosDestinoUSD}
+                        onChange={handleInputChange(setRecargosDestinoUSD)}
+                        min="0"
+                        step="1"
+                     />
+                     <p style={inputDescriptionStyle}>Recargos en destino en USD</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Honorarios Agente Aduana (USD):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={honorariosAgenteAduanaUSD}
+                        onChange={handleInputChange(setHonorariosAgenteAduanaUSD)}
+                        min="0"
+                        step="1"
+                     />
+                     <p style={inputDescriptionStyle}>Honorarios de agencia aduanera</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Gastos Portuarios y Otros (USD):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={gastosPortuariosOtrosUSD}
+                        onChange={handleInputChange(setGastosPortuariosOtrosUSD)}
+                        min="0"
+                        step="1"
+                     />
+                     <p style={inputDescriptionStyle}>Gastos adicionales en puerto</p>
+                  </div>
+               </div>
+               
+               {/* Sección 6: Costos Adicionales CLP e Impuestos */}
+               <div style={gridCardStyle}>
+                  <h4 style={gridCardTitleStyle}>Costos Locales e Impuestos</h4>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Transporte Nacional (CLP):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={transporteNacionalCLP}
+                        onChange={handleInputChange(setTransporteNacionalCLP)}
+                        min="0"
+                        step="1"
+                     />
+                     <p style={inputDescriptionStyle}>Costo de transporte dentro de Chile</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Factor Act. Anual (%):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={factorActualizacionAnual}
+                        onChange={handleInputChange(setFactorActualizacionAnual)}
+                        min="0"
+                        step="0.1"
+                     />
+                     <p style={inputDescriptionStyle}>Factor de actualización anual</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>Derecho Ad Valorem (%):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={derechoAdValorem}
+                        onChange={handleInputChange(setDerechoAdValorem)}
+                        min="0"
+                        step="0.1"
+                     />
+                     <p style={inputDescriptionStyle}>Tasa de derechos arancelarios</p>
+                  </div>
+                  
+                  <div style={inputGroupStyle}>
+                     <label style={labelStyle}>IVA (%):</label>
+                     <input 
+                        type="number"
+                        style={inputStyle}
+                        value={iva}
+                        onChange={handleInputChange(setIva)}
+                        min="0"
+                        step="0.1"
+                     />
+                     <p style={inputDescriptionStyle}>Impuesto al Valor Agregado</p>
+                  </div>
+               </div>
+            </div>
          )}
       </div>
 
