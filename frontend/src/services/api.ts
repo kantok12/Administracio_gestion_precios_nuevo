@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Product } from '../types/product';
 import { CurrencyData } from '../types/currency';
+import { CostParamsWebhookResponse } from '../types/costParams';
 
 // Establecer URL base según entorno
 const API_URL = 'http://localhost:3000/api';
@@ -146,4 +147,62 @@ export const getDollarValue = async () => {
 export const getEuroValue = async () => {
   const response = await axios.get(`${API_URL}/products/currency/euro`);
   return response.data;
+};
+
+const API_BASE_URL = 'http://localhost:5001/api';
+
+export const api = {
+  // Divisas
+  fetchCurrencies: async () => {
+    const response = await fetch('https://n8n-807184488368.southamerica-west1.run.app/webhook/8012d60e-8a29-4910-b385-6514edc3d912');
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  },
+
+  // Parámetros Globales
+  fetchGlobalParams: async () => {
+    const response = await fetch(`${API_BASE_URL}/overrides/global`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  },
+
+  updateGlobalParams: async (params: { costos: any }) => {
+    const response = await fetch(`${API_BASE_URL}/overrides/global`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  },
+
+  // Parámetros por Categoría
+  fetchCategoryParams: async (categoryId: string) => {
+    const response = await fetch(`${API_BASE_URL}/overrides/${categoryId}`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  },
+
+  updateCategoryParams: async (categoryId: string, params: { costos: any }) => {
+    const response = await fetch(`${API_BASE_URL}/overrides/${categoryId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  },
+
+  // Actualizar Divisas en el Backend
+  updateCurrenciesInDB: async (params: { dolar_observado_actual: number, euro_observado_actual: number }) => {
+    const response = await fetch(`${API_BASE_URL}/pricing-overrides/update-currencies`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  }
 };

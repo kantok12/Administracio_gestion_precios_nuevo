@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 // Importar iconos necesarios
 import { SlidersHorizontal, DollarSign, Euro, RefreshCw, Info, Save, Calendar, Filter, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { api } from '../services/api';
+import { CostParams, CurrencyWebhookResponse, CostParamsWebhookResponse } from '../types/costParams';
 
 // --- Interfaz Placeholder para un Perfil de Costos (la mantenemos por si se usa en otras tabs) ---
 interface PerfilCostoCategoria {
@@ -11,46 +13,17 @@ interface PerfilCostoCategoria {
   descuentoFabricante?: number;
 }
 
-// Interfaz completa para los parámetros de costos
-interface CostParamsWebhookResponse {
-  _id?: string;
-  nivel?: string;
-  categoryId?: string;
-  costos?: {
-    // Parámetros básicos (los que ya teníamos)
-    margen_adicional_total?: number;
-    buffer_eur_usd?: number;
-    buffer_usd_clp?: number;
-    buffer_dolar?: number;
-    tasa_seguro?: number;
-    tasa_seguro_categoria?: number;
-    tipo_cambio_eur_usd?: number;
-    dolar_observado_actual?: number;
-    buffer_transporte?: number;
-    descuento_fabricante?: number;
-    
-    // Parámetros adicionales
-    costo_fabrica_original_eur?: number;
-    fecha_ultima_actualizacion_transporte_local?: string;
-    transporte_local_eur?: number;
-    gasto_importacion_eur?: number;
-    flete_maritimo_usd?: number;
-    recargos_destino_usd?: number;
-    honorarios_agente_aduana_usd?: number;
-    gastos_portuarios_otros_usd?: number;
-    transporte_nacional_clp?: number;
-    factor_actualizacion_anual?: number;
-    derecho_ad_valorem?: number;
-    iva?: number;
-  };
-  metadata?: {
-    ultima_actualizacion?: Date;
-    actualizado_por?: string;
-  };
-}
-
 // --- Componente AdminPanel --- 
 export default function AdminPanel() {
+  // Función de mapeo de categorías (mover al principio del componente)
+  const getCategoryId = (categoria: string) => {
+    switch (categoria) {
+      case 'Chipeadoras':
+        return 'categoria_chipeadora';
+      default:
+        return 'global';
+    }
+  };
   
   // --- Estados para parámetros básicos (que ya teníamos) ---
   const [tipoCambio, setTipoCambio] = useState<string>('1.12'); 
@@ -82,8 +55,8 @@ export default function AdminPanel() {
   const [fechaActualizacionDivisas, setFechaActualizacionDivisas] = useState<string | null>(null);
 
   // Estado para filtros (mantener lógica si es necesario)
-  const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>(['Todas las categorías', 'Chipeadoras Motor', 'Chipeadoras PTO']); // Ejemplo
-  const [categoriaSeleccionadaParaAplicar, setCategoriaSeleccionadaParaAplicar] = useState<string>('Todas las categorías');
+  const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>(['Global', 'Chipeadoras']);
+  const [categoriaSeleccionadaParaAplicar, setCategoriaSeleccionadaParaAplicar] = useState<string>('Global');
 
   // --- Estilos reutilizables para la nueva UI ---
   const primaryTextColor = '#0ea5e9'; // Azul similar al de App.tsx
@@ -141,19 +114,9 @@ export default function AdminPanel() {
 
   // --- Función Refactorizada para Obtener y Establecer Divisas --- 
   const fetchAndSetCurrencies = async (updateTimestamp?: Date) => {
-    const webhookUrl = 'https://n8n-807184488368.southamerica-west1.run.app/webhook/8012d60e-8a29-4910-b385-6514edc3d912';
-    console.log("Fetching currencies from webhook...");
+    console.log("[Frontend] Fetching currencies from webhook...");
     try {
-      const response = await fetch(webhookUrl);
-      if (!response.ok) {
-        let errorMsg = `Error del servidor: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMsg = errorData.message || errorMsg;
-        } catch (e) { /* Ignorar */ }
-        throw new Error(errorMsg);
-      }
-      const data = await response.json();
+      const data: CurrencyWebhookResponse = await api.fetchCurrencies();
       console.log("Webhook currency response:", data);
 
       if (data && data.Valor_Dolar !== undefined && data.Valor_Euro !== undefined) {
@@ -181,31 +144,19 @@ export default function AdminPanel() {
         const displayTime = updateTimestamp || new Date(); 
         setFechaActualizacionDivisas(displayTime.toLocaleString('es-CL'));
 
-        // --- >>> LLAMAR AL BACKEND PARA ACTUALIZAR DÓLAR Y EURO EN MONGO <<< --- 
+        // Actualizar divisas en el backend
         if (dolarSuccessfullySet && euroSuccessfullySet) {
-          console.log(`[Frontend] Currency values updated (D: ${roundedDolar}, E: ${roundedEuro}). Attempting to update in DB via backend...`);
+          console.log(`[Frontend] Currency values updated (D: ${roundedDolar}, E: ${roundedEuro}). Attempting to update in DB...`);
           try {
-            const updateResponse = await fetch('http://localhost:5001/api/pricing-overrides/update-currencies', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                dolar_observado_actual: roundedDolar, 
-                euro_observado_actual: roundedEuro
-              })
+            const updateResult = await api.updateCurrenciesInDB({ 
+              dolar_observado_actual: roundedDolar, 
+              euro_observado_actual: roundedEuro 
             });
-            const updateResult = await updateResponse.json();
-            if (!updateResponse.ok) {
-              console.error('[Frontend] Error response from backend updating currencies:', updateResult);
-            } else {
-              console.log('[Frontend] Backend confirmed currency update:', updateResult);
-            }
+            console.log('[Frontend] Backend confirmed currency update:', updateResult);
           } catch (backendError) {
-            console.error('[Frontend] Network error calling backend to update currencies:', backendError);
+            console.error('[Frontend] Error updating currencies in backend:', backendError);
           }
-        } else {
-            console.warn('[Frontend] Skipping backend currency update because one or both values were invalid.')
         }
-        // --- >>> FIN DE LA LLAMADA AL BACKEND <<< ---
 
         console.log("Frontend currency states updated with rounded values.");
         return true; 
@@ -214,7 +165,6 @@ export default function AdminPanel() {
       }
     } catch (error) {
       console.error('Error fetching/setting currencies:', error);
-      // Lanzar el error para que sea manejado por quien llama
       throw error instanceof Error ? error : new Error('Error desconocido al obtener divisas');
     }
   };
@@ -239,121 +189,124 @@ export default function AdminPanel() {
   }, []); // Array vacío para ejecutar solo al montar
   // ----------------------------------
 
-  // --- REEMPLAZAR useEffect PARA CARGA INICIAL DE PARÁMETROS DE COSTO --- 
-  useEffect(() => {
-    const fetchInitialGlobalParams = async () => {
-      setInitialCostParamsLoading(true);
-      setInitialCostParamsError(null);
-      console.log('[Frontend] Fetching initial global cost parameters from DB...');
-      try {
-        const response = await fetch('http://localhost:5001/api/overrides/global'); // <<< NUEVO ENDPOINT
-        
-        if (response.status === 404) {
-           console.log('[Frontend] Global override document not found in DB. Using default form values.');
-           // No hacer nada, mantener los valores iniciales de useState
-        } else if (!response.ok) {
-          const errorData = await response.json().catch(() => ({})); 
-          throw new Error(errorData.message || `Error del servidor: ${response.status}`);
-        } else {
-          // Éxito, el documento existe
-          const data = await response.json();
-          console.log('[Frontend] Initial global parameters received from DB:', data);
-
-          // Actualizar estados del formulario SÓLO con los datos del objeto `costos`
-          if (data && data.costos) {
-            const costos = data.costos;
-            
-            // --- Parámetros básicos (que ya teníamos) ---
-            if (costos.tipo_cambio_eur_usd !== undefined) setTipoCambio(String(costos.tipo_cambio_eur_usd));
-            if (costos.buffer_usd_clp !== undefined) setBufferDolar(String(costos.buffer_usd_clp * 100)); // Decimal a %
-            if (costos.tasa_seguro !== undefined) setTasaSeguroGlobal(String(costos.tasa_seguro * 100)); // Decimal a %
-            if (costos.buffer_transporte !== undefined) setBufferTransporteGlobal(String(costos.buffer_transporte * 100)); // Decimal a %
-            if (costos.margen_adicional_total !== undefined) setMargenTotalGeneral(String(costos.margen_adicional_total * 100)); // Decimal a %
-            if (costos.descuento_fabricante !== undefined) setDescuentoFabricanteGeneral(String(costos.descuento_fabricante * 100)); // Decimal a %
-            
-            // --- Parámetros adicionales ---
-            if (costos.costo_fabrica_original_eur !== undefined) setCostoFabricaOriginalEUR(String(costos.costo_fabrica_original_eur));
-            if (costos.transporte_local_eur !== undefined) setTransporteLocalEUR(String(costos.transporte_local_eur));
-            if (costos.gasto_importacion_eur !== undefined) setGastoImportacionEUR(String(costos.gasto_importacion_eur));
-            if (costos.flete_maritimo_usd !== undefined) setFleteMaritimosUSD(String(costos.flete_maritimo_usd));
-            if (costos.recargos_destino_usd !== undefined) setRecargosDestinoUSD(String(costos.recargos_destino_usd));
-            if (costos.honorarios_agente_aduana_usd !== undefined) setHonorariosAgenteAduanaUSD(String(costos.honorarios_agente_aduana_usd));
-            if (costos.gastos_portuarios_otros_usd !== undefined) setGastosPortuariosOtrosUSD(String(costos.gastos_portuarios_otros_usd));
-            if (costos.transporte_nacional_clp !== undefined) setTransporteNacionalCLP(String(costos.transporte_nacional_clp));
-            if (costos.factor_actualizacion_anual !== undefined) setFactorActualizacionAnual(String(costos.factor_actualizacion_anual * 100)); // Decimal a %
-            if (costos.derecho_ad_valorem !== undefined) setDerechoAdValorem(String(costos.derecho_ad_valorem * 100)); // Decimal a %
-            if (costos.iva !== undefined) setIva(String(costos.iva * 100)); // Decimal a %
-            if (costos.buffer_eur_usd !== undefined) setBufferEurUsd(String(costos.buffer_eur_usd * 100)); // Decimal a %
-            
-            // Fecha de actualización
-            if (costos.fecha_ultima_actualizacion_transporte_local) 
-              setFechaUltimaActualizacion(costos.fecha_ultima_actualizacion_transporte_local);
-            
-            // Dólar observado (si no se ha cargado por otro medio)
-            if (costos.dolar_observado_actual !== undefined && !dolarActualCLP)
-              setDolarActualCLP(String(costos.dolar_observado_actual));
-            
-          } else {
-             console.warn('[Frontend] Global override document found, but \'costos\' field is missing or empty.');
-          }
-        }
-        
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Error desconocido al cargar parámetros iniciales.';
-        console.error('[Frontend] Error fetching initial global parameters:', error);
-        setInitialCostParamsError(errorMsg.includes('fetch') ? 'Error de conexión cargando parámetros iniciales.' : errorMsg);
-      } finally {
-        setInitialCostParamsLoading(false);
+  // --- FUNCIÓN PARA CARGAR PARÁMETROS GLOBALES ---
+  const fetchInitialGlobalParams = async () => {
+    setInitialCostParamsLoading(true);
+    setInitialCostParamsError(null);
+    console.log('[Frontend] Fetching initial global cost parameters from DB...');
+    try {
+      const data = await api.fetchGlobalParams();
+      
+      if (!data) {
+        console.log('[Frontend] Global override document not found in DB. Using default form values.');
+        return;
       }
-    };
+      
+      console.log('[Frontend] Initial global parameters received from DB:', data);
 
+      if (data && data.costos) {
+        const costos = data.costos;
+        
+        // --- Parámetros básicos ---
+        if (costos.tipo_cambio_eur_usd !== undefined) setTipoCambio(String(costos.tipo_cambio_eur_usd));
+        if (costos.buffer_usd_clp !== undefined) setBufferDolar(String(costos.buffer_usd_clp * 100));
+        if (costos.tasa_seguro !== undefined) setTasaSeguroGlobal(String(costos.tasa_seguro * 100));
+        if (costos.buffer_transporte !== undefined) setBufferTransporteGlobal(String(costos.buffer_transporte * 100));
+        if (costos.margen_adicional_total !== undefined) setMargenTotalGeneral(String(costos.margen_adicional_total * 100));
+        if (costos.descuento_fabricante !== undefined) setDescuentoFabricanteGeneral(String(costos.descuento_fabricante * 100));
+        if (costos.buffer_eur_usd !== undefined) setBufferEurUsd(String(costos.buffer_eur_usd * 100));
+        
+        // --- Parámetros adicionales ---
+        if (costos.costo_fabrica_original_eur !== undefined) setCostoFabricaOriginalEUR(String(costos.costo_fabrica_original_eur));
+        if (costos.transporte_local_eur !== undefined) setTransporteLocalEUR(String(costos.transporte_local_eur));
+        if (costos.gasto_importacion_eur !== undefined) setGastoImportacionEUR(String(costos.gasto_importacion_eur));
+        if (costos.flete_maritimo_usd !== undefined) setFleteMaritimosUSD(String(costos.flete_maritimo_usd));
+        if (costos.recargos_destino_usd !== undefined) setRecargosDestinoUSD(String(costos.recargos_destino_usd));
+        if (costos.honorarios_agente_aduana_usd !== undefined) setHonorariosAgenteAduanaUSD(String(costos.honorarios_agente_aduana_usd));
+        if (costos.gastos_portuarios_otros_usd !== undefined) setGastosPortuariosOtrosUSD(String(costos.gastos_portuarios_otros_usd));
+        if (costos.transporte_nacional_clp !== undefined) setTransporteNacionalCLP(String(costos.transporte_nacional_clp));
+        if (costos.factor_actualizacion_anual !== undefined) setFactorActualizacionAnual(String(costos.factor_actualizacion_anual * 100));
+        if (costos.derecho_ad_valorem !== undefined) setDerechoAdValorem(String(costos.derecho_ad_valorem * 100));
+        if (costos.iva !== undefined) setIva(String(costos.iva * 100));
+        
+        if (costos.fecha_ultima_actualizacion_transporte_local) 
+          setFechaUltimaActualizacion(costos.fecha_ultima_actualizacion_transporte_local);
+      }
+      
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Error desconocido al cargar parámetros iniciales.';
+      console.error('[Frontend] Error fetching initial global parameters:', error);
+      setInitialCostParamsError(errorMsg.includes('fetch') ? 'Error de conexión cargando parámetros iniciales.' : errorMsg);
+    } finally {
+      setInitialCostParamsLoading(false);
+    }
+  };
+
+  // --- EFECTO PARA CARGAR PARÁMETROS GLOBALES AL MONTAR ---
+  useEffect(() => {
+    console.log('[Frontend] Component mounted, fetching initial global parameters...');
     fetchInitialGlobalParams();
   }, []); // Array vacío para ejecutar solo al montar
-  // -----------------------------------------------------------------
 
   // --- NUEVA FUNCIÓN PARA CARGAR PARÁMETROS AL CAMBIAR CATEGORÍA ---
   const fetchAndApplyCategoryParams = async (categoria: string) => {
-    if (categoria !== 'Chipeadoras Motor' && categoria !== 'Chipeadoras PTO') {
-      setLoadCategoryParamsError(null); // Limpiar errores si no es chipeadora
-      // Opcional: Resetear a valores globales/default si se selecciona otra categoría
-      // setTipoCambio('1.12'); setBufferDolar('1.8'); ... etc
-      return; 
+    if (categoria === 'Global') {
+      fetchInitialGlobalParams();
+      return;
     }
 
     setIsLoadingCategoryParams(true);
     setLoadCategoryParamsError(null);
-    console.log(`Fetching parameters for category type: ${categoria}`);
+    console.log(`[Frontend] Fetching parameters for category: ${categoria}`);
     
     try {
-      // --- MODIFICAR URL PARA INCLUIR CATEGORÍA --- 
-      const encodedCategory = encodeURIComponent(categoria);
-      const response = await fetch(`http://localhost:5001/api/pricing-overrides/webhook?category=${encodedCategory}`); // Usa el endpoint del backend con query param
-      // -------------------------------------------
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Error del servidor: ${response.status}`);
+      // Usar la misma función de mapeo de categorías
+      const categoryId = getCategoryId(categoria);
+      console.log(`[Frontend] Fetching parameters for category: ${categoria} (ID: ${categoryId})`);
+      
+      const data = await api.fetchCategoryParams(categoryId);
+      
+      if (!data) {
+        console.log('[Frontend] Category override document not found in DB. Using global values.');
+        fetchInitialGlobalParams();
+        return;
       }
-      const data: CostParamsWebhookResponse = await response.json();
-      console.log(`Parameters received (for ${categoria}):`, data);
+      
+      console.log(`[Frontend] Parameters received for category ${categoria}:`, data);
 
-      // Actualizar estados del formulario con los datos recibidos
-      if (data.costos) {
-        // Mapeo cuidadoso basado en la respuesta esperada del webhook
-        if (data.costos.margen_adicional_total !== undefined) setMargenTotalGeneral(String(data.costos.margen_adicional_total));
-        if (data.costos.buffer_usd_clp !== undefined) setBufferDolar(String(data.costos.buffer_usd_clp));
-        else if (data.costos.buffer_dolar !== undefined) setBufferDolar(String(data.costos.buffer_dolar)); // Fallback
-        if (data.costos.tasa_seguro_categoria !== undefined) setTasaSeguroGlobal(String(data.costos.tasa_seguro_categoria));
-        else if (data.costos.tasa_seguro !== undefined) setTasaSeguroGlobal(String(data.costos.tasa_seguro)); // Fallback
-        if (data.costos.tipo_cambio_eur_usd !== undefined) setTipoCambio(String(data.costos.tipo_cambio_eur_usd));
-        if (data.costos.buffer_transporte !== undefined) setBufferTransporteGlobal(String(data.costos.buffer_transporte));
-        if (data.costos.descuento_fabricante !== undefined) setDescuentoFabricanteGeneral(String(data.costos.descuento_fabricante));
+      if (data && data.costos) {
+        const costos = data.costos;
+        
+        // --- Parámetros básicos ---
+        if (costos.tipo_cambio_eur_usd !== undefined) setTipoCambio(String(costos.tipo_cambio_eur_usd));
+        if (costos.buffer_usd_clp !== undefined) setBufferDolar(String(costos.buffer_usd_clp * 100));
+        if (costos.tasa_seguro !== undefined) setTasaSeguroGlobal(String(costos.tasa_seguro * 100));
+        if (costos.buffer_transporte !== undefined) setBufferTransporteGlobal(String(costos.buffer_transporte * 100));
+        if (costos.margen_adicional_total !== undefined) setMargenTotalGeneral(String(costos.margen_adicional_total * 100));
+        if (costos.descuento_fabricante !== undefined) setDescuentoFabricanteGeneral(String(costos.descuento_fabricante * 100));
+        if (costos.buffer_eur_usd !== undefined) setBufferEurUsd(String(costos.buffer_eur_usd * 100));
+        
+        // --- Parámetros adicionales ---
+        if (costos.costo_fabrica_original_eur !== undefined) setCostoFabricaOriginalEUR(String(costos.costo_fabrica_original_eur));
+        if (costos.transporte_local_eur !== undefined) setTransporteLocalEUR(String(costos.transporte_local_eur));
+        if (costos.gasto_importacion_eur !== undefined) setGastoImportacionEUR(String(costos.gasto_importacion_eur));
+        if (costos.flete_maritimo_usd !== undefined) setFleteMaritimosUSD(String(costos.flete_maritimo_usd));
+        if (costos.recargos_destino_usd !== undefined) setRecargosDestinoUSD(String(costos.recargos_destino_usd));
+        if (costos.honorarios_agente_aduana_usd !== undefined) setHonorariosAgenteAduanaUSD(String(costos.honorarios_agente_aduana_usd));
+        if (costos.gastos_portuarios_otros_usd !== undefined) setGastosPortuariosOtrosUSD(String(costos.gastos_portuarios_otros_usd));
+        if (costos.transporte_nacional_clp !== undefined) setTransporteNacionalCLP(String(costos.transporte_nacional_clp));
+        if (costos.factor_actualizacion_anual !== undefined) setFactorActualizacionAnual(String(costos.factor_actualizacion_anual * 100));
+        if (costos.derecho_ad_valorem !== undefined) setDerechoAdValorem(String(costos.derecho_ad_valorem * 100));
+        if (costos.iva !== undefined) setIva(String(costos.iva * 100));
+        
+        // Fecha de actualización
+        if (costos.fecha_ultima_actualizacion_transporte_local) 
+          setFechaUltimaActualizacion(costos.fecha_ultima_actualizacion_transporte_local);
       }
-       // Limpiar error si la carga fue exitosa
-       setLoadCategoryParamsError(null);
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido al cargar parámetros.';
-      console.error(`Error fetching parameters for ${categoria}:`, error);
+      console.error(`[Frontend] Error fetching parameters for ${categoria}:`, error);
       setLoadCategoryParamsError(errorMsg.includes('fetch') ? `Error de conexión cargando parámetros para ${categoria}.` : errorMsg);
     } finally {
       setIsLoadingCategoryParams(false);
@@ -396,7 +349,7 @@ export default function AdminPanel() {
 
   // --- NUEVA FUNCIÓN para aplicar parámetros a una categoría --- 
   const aplicarParametrosACategoria = async (categoria: string) => {
-    if (categoria === 'Todas las categorías') return; // No hacer nada para 'Todas'
+    if (categoria === 'Global') return; // No hacer nada para 'Global'
 
     setIsApplyingCategorySettings(true);
     setApplyCategorySettingsError(null);
@@ -452,69 +405,53 @@ export default function AdminPanel() {
 
   // --- MODIFICAR handleSaveAll --- 
   const handleSaveAll = async () => {
-    console.log('Attempting to save global parameters...');
-    setIsSavingGlobalParams(true);
-    setSaveGlobalParamsError(null);
-    setSaveGlobalParamsSuccess(null);
-
-    // 1. Recopilar y Mapear todos los parámetros del estado del formulario
-    const payload = {
-      // Parámetros básicos 
-      tipo_cambio_eur_usd: parseFloat(tipoCambio) || 0,
-      buffer_usd_clp: parseFloat(bufferDolar) / 100 || 0,
-      buffer_eur_usd: parseFloat(bufferEurUsd) / 100 || 0,
-      tasa_seguro: parseFloat(tasaSeguroGlobal) / 100 || 0,
-      margen_adicional_total: parseFloat(margenTotalGeneral) / 100 || 0,
-      buffer_transporte: parseFloat(bufferTransporteGlobal) / 100 || 0,
-      descuento_fabricante: parseFloat(descuentoFabricanteGeneral) / 100 || 0,
-
-      // Parámetros adicionales
-      costo_fabrica_original_eur: parseFloat(costoFabricaOriginalEUR) || 0,
-      transporte_local_eur: parseFloat(transporteLocalEUR) || 0,
-      gasto_importacion_eur: parseFloat(gastoImportacionEUR) || 0,
-      flete_maritimo_usd: parseFloat(fleteMaritimosUSD) || 0,
-      recargos_destino_usd: parseFloat(recargosDestinoUSD) || 0,
-      honorarios_agente_aduana_usd: parseFloat(honorariosAgenteAduanaUSD) || 0,
-      gastos_portuarios_otros_usd: parseFloat(gastosPortuariosOtrosUSD) || 0,
-      transporte_nacional_clp: parseFloat(transporteNacionalCLP) || 0,
-      factor_actualizacion_anual: parseFloat(factorActualizacionAnual) / 100 || 0,
-      derecho_ad_valorem: parseFloat(derechoAdValorem) / 100 || 0,
-      iva: parseFloat(iva) / 100 || 0,
-      fecha_ultima_actualizacion_transporte_local: fechaUltimaActualizacion,
-      dolar_observado_actual: parseFloat(dolarActualCLP ?? '0') || 0,
-    };
-
-    console.log('Payload to send to backend (Complete):', payload);
-
     try {
-      const response = await fetch('http://localhost:5001/api/overrides/global', {
-        method: 'PUT', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ costos: payload }) // Enviar el payload dentro de un objeto "costos"
-      });
+      setIsSavingGlobalParams(true);
+      console.log('[Frontend] Iniciando guardado de parámetros...');
 
-      const result = await response.json(); // Intenta parsear siempre
+      const categoryId = getCategoryId(categoriaSeleccionadaParaAplicar);
+      console.log(`[Frontend] Guardando para categoría: ${categoryId}`);
 
-      if (!response.ok) {
-        // Error desde el backend/N8N
-        const errorMsg = result.message || 'Error desconocido desde el servidor.';
-        console.error('Error saving global params:', result);
-        setSaveGlobalParamsError(errorMsg + (result.detalle_n8n ? ` (Detalle N8N: ${JSON.stringify(result.detalle_n8n)})` : ''));
-      } else {
-        // Éxito
-        console.log('Global params saved successfully:', result);
-        setSaveGlobalParamsSuccess(result.message || 'Parámetros guardados exitosamente.');
-        // Opcional: Limpiar mensaje de éxito después de un tiempo
-        setTimeout(() => setSaveGlobalParamsSuccess(null), 5000);
-      }
+      const params = {
+        costos: {
+          margen_adicional: parseFloat(margenTotalGeneral),
+          buffer_dolar: parseFloat(bufferDolar),
+          tasa_seguro: parseFloat(tasaSeguroGlobal),
+          tasa_importacion: parseFloat(gastoImportacionEUR) || 0,
+          tasa_aduana: parseFloat(honorariosAgenteAduanaUSD) || 0,
+          tasa_flete: parseFloat(fleteMaritimosUSD) || 0,
+          tasa_comision: parseFloat(gastosPortuariosOtrosUSD) || 0,
+          tasa_impuesto: parseFloat(iva) || 0,
+          buffer_transporte: parseFloat(bufferTransporteGlobal) || 0,
+          descuento_fabricante: parseFloat(descuentoFabricanteGeneral) || 0,
+          costo_fabrica_original_eur: parseFloat(costoFabricaOriginalEUR) || 0,
+          transporte_local_eur: parseFloat(transporteLocalEUR) || 0,
+          gasto_importacion_eur: parseFloat(gastoImportacionEUR) || 0,
+          flete_maritimo_usd: parseFloat(fleteMaritimosUSD) || 0,
+          recargos_destino_usd: parseFloat(recargosDestinoUSD) || 0,
+          honorarios_agente_aduana_usd: parseFloat(honorariosAgenteAduanaUSD) || 0,
+          gastos_portuarios_otros_usd: parseFloat(gastosPortuariosOtrosUSD) || 0,
+          transporte_nacional_clp: parseFloat(transporteNacionalCLP) || 0,
+          factor_actualizacion_anual: parseFloat(factorActualizacionAnual) || 0,
+          derecho_ad_valorem: parseFloat(derechoAdValorem) || 0,
+          iva: parseFloat(iva) || 0,
+          fecha_ultima_actualizacion_transporte_local: fechaUltimaActualizacion,
+          dolar_observado_actual: parseFloat(dolarActualCLP ?? '0') || 0,
+        }
+      };
 
-    } catch (error) {
-      // Error de red o fetch
-      console.error('Network error saving global params:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Error desconocido de red.';
-      setSaveGlobalParamsError(`Error de conexión: ${errorMsg}`);
-    } finally {
+      const response = await api.updateCategoryParams(categoryId, params);
+      console.log('[Frontend] Respuesta del servidor:', response);
+
       setIsSavingGlobalParams(false);
+      setSaveGlobalParamsSuccess(`Parámetros guardados exitosamente para ${categoriaSeleccionadaParaAplicar}`);
+      setTimeout(() => setSaveGlobalParamsSuccess(''), 3000);
+
+    } catch (error: any) {
+      console.error('[Frontend] Error al guardar:', error);
+      setIsSavingGlobalParams(false);
+      setSaveGlobalParamsError(`Error al guardar parámetros para ${categoriaSeleccionadaParaAplicar}: ${error.message}`);
+      setTimeout(() => setSaveGlobalParamsError(''), 5000);
     }
   };
   // ---------------------------
