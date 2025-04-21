@@ -20,6 +20,10 @@ export default function AdminPanel() {
     switch (categoria) {
       case 'Chipeadoras':
         return 'categoria_chipeadora';
+      case 'Chipeadoras Motor':
+        return 'chipeadora_motor';
+      case 'Chipeadoras PTO':
+        return 'chipeadora_pto';
       default:
         return 'global';
     }
@@ -55,7 +59,12 @@ export default function AdminPanel() {
   const [fechaActualizacionDivisas, setFechaActualizacionDivisas] = useState<string | null>(null);
 
   // Estado para filtros (mantener lógica si es necesario)
-  const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>(['Global', 'Chipeadoras']);
+  const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>([
+    'Global',
+    'Chipeadoras',
+    'Chipeadoras Motor',
+    'Chipeadoras PTO'
+  ]);
   const [categoriaSeleccionadaParaAplicar, setCategoriaSeleccionadaParaAplicar] = useState<string>('Global');
 
   // --- Estilos reutilizables para la nueva UI ---

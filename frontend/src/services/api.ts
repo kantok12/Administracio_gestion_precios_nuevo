@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { Product } from '../types/product';
 import { CurrencyData } from '../types/currency';
-import { CostParamsWebhookResponse } from '../types/costParams';
 
 // Establecer URL base según entorno
 const API_URL = 'http://localhost:3000/api';
@@ -161,14 +160,14 @@ export const api = {
 
   // Parámetros Globales
   fetchGlobalParams: async () => {
-    const response = await fetch(`${API_BASE_URL}/overrides/global`);
+    const response = await fetch(`${API_BASE_URL}/category-overrides/global`);
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return response.json();
   },
 
   updateGlobalParams: async (params: { costos: any }) => {
-    const response = await fetch(`${API_BASE_URL}/overrides/global`, {
+    const response = await fetch(`${API_BASE_URL}/category-overrides/global`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
@@ -179,14 +178,14 @@ export const api = {
 
   // Parámetros por Categoría
   fetchCategoryParams: async (categoryId: string) => {
-    const response = await fetch(`${API_BASE_URL}/overrides/${categoryId}`);
+    const response = await fetch(`${API_BASE_URL}/category-overrides/${categoryId}`);
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return response.json();
   },
 
   updateCategoryParams: async (categoryId: string, params: { costos: any }) => {
-    const response = await fetch(`${API_BASE_URL}/overrides/${categoryId}`, {
+    const response = await fetch(`${API_BASE_URL}/category-overrides/${categoryId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)

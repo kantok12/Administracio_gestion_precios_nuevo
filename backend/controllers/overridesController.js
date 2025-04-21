@@ -1,4 +1,4 @@
-const PricingOverride = require('../models/PricingOverrideString');
+const PricingOverride = require('../models/PricingOverride');
 
 // --- Definir funciones como constantes --- 
 

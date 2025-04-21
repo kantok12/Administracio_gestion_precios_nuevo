@@ -99,8 +99,10 @@ pricingOverrideSchema.statics.initializeDefaults = async function() {
   }
 };
 
-// Crear el modelo o reutilizarlo si ya existe
-const PricingOverride = mongoose.models.PricingOverride || mongoose.model('PricingOverride', pricingOverrideSchema);
+// Eliminar el modelo si ya existe para evitar errores de recreación
+if (mongoose.models.PricingOverride) {
+  delete mongoose.models.PricingOverride;
+}
 
-// Exportar el modelo
-module.exports = PricingOverride; 
+// Crear y exportar el modelo
+module.exports = mongoose.model('PricingOverride', pricingOverrideSchema); 

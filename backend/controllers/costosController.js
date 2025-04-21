@@ -1,6 +1,6 @@
 // controllers/costosController.js
 const Producto = require('../models/Producto'); // << MODELO AHORA EXISTE
-const PricingOverride = require('../models/PricingOverrideString'); // << USAR MODELO ALTERNATIVO
+const PricingOverride = require('../models/PricingOverride'); // Usando el modelo principal
 
 // Controlador para obtener costos fusionados de un producto
 exports.getCostos = async (req, res) => {

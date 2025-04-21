@@ -7,9 +7,10 @@ const productRoutes = require('./routes/productRoutes');
 // const pricingOverridesRoutes = require('./routes/pricingOverridesRoutes');
 const costosRoutes = require('./routes/costosRoutes');
 const overridesRoutes = require('./routes/overridesRoutes');
+const categoryOverridesRoutes = require('./routes/categoryOverridesRoutes');
 const { fetchCurrencyValuesController, fetchProducts } = require('./controllers/productController');
 const { port } = require('./config/env');
-const PricingOverride = require('./models/PricingOverrideString');
+const PricingOverride = require('./models/PricingOverride');
 
 dotenv.config();
 
@@ -39,6 +40,7 @@ const initializeServer = async () => {
     app.use('/api/users', userRoutes);
     app.use('/api/products', productRoutes);
     app.use('/api/overrides', overridesRoutes);
+    app.use('/api/category-overrides', categoryOverridesRoutes);
     app.use('/api', costosRoutes);
     
     // Inicializar caché
