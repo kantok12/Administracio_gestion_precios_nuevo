@@ -3,9 +3,10 @@ import { Search, Filter, X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
 import OpcionalesCotizacionModal from '../components/OpcionalesCotizacionModal';
 import DetallesCargaPanel from './DetallesCargaPanel';
+import DetallesEnvioPanel from './DetallesEnvioPanel';
 
 // Interfaces (copiadas de App.tsx)
-interface Producto {
+export interface Producto {
   codigo_producto?: string;
   nombre_del_producto?: string;
   Descripcion?: string;
@@ -340,6 +341,18 @@ export default function EquiposPanel() {
     setOpcionalesConfirmados([]); // Limpiar opcionales confirmados
   };
 
+  // --- NUEVO: Función para avanzar desde DetallesCargaPanel ---
+  const handleSiguienteDesdeDetalles = () => {
+    console.log("Avanzando a Detalles de Envío...");
+    setPasoCotizacion(2); // Avanzar al paso 2
+  };
+
+  // --- NUEVO: Función para volver desde DetallesEnvioPanel ---
+  const handleVolverDesdeEnvio = () => {
+    console.log("Volviendo a Detalles de Carga...");
+    setPasoCotizacion(1); // Volver al paso 1
+  };
+
   // --- NUEVO: Función para eliminar un opcional confirmado ---
   const handleEliminarOpcionalConfirmado = (codigoAEliminar: string) => {
     console.log("Eliminando opcional confirmado:", codigoAEliminar);
@@ -356,10 +369,22 @@ export default function EquiposPanel() {
          productoPrincipal={productoParaCotizar} 
          opcionalesSeleccionados={opcionalesConfirmados} 
          onVolver={handleVolverDesdeDetalles}
-         onSiguiente={() => { console.log("Ir al siguiente paso..."); /* Lógica futura */ }}
+         onSiguiente={handleSiguienteDesdeDetalles}
          onEliminarOpcional={handleEliminarOpcionalConfirmado}
        />
      );
+  }
+
+  // --- NUEVO: Renderizar el panel de Detalles de Envío ---
+  if (pasoCotizacion === 2) {
+    return (
+      <DetallesEnvioPanel
+        productoPrincipal={productoParaCotizar}
+        opcionalesSeleccionados={opcionalesConfirmados}
+        onVolver={handleVolverDesdeEnvio}
+        onSiguiente={() => { console.log("Ir a Detalles Tributarios..."); /* Lógica futura */ }}
+      />
+    );
   }
 
   // Renderizado por defecto (pasoCotizacion === 0): Tabla de Equipos

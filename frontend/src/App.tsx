@@ -60,7 +60,7 @@ type LinkStyle = React.CSSProperties;
 // Versión funcional con diseño simplificado
 export default function App() {
   const location = useLocation(); // Hook para obtener la ruta actual
-
+  
   // Estados principales
   const [productos, setProductos] = useState<Producto[]>([]);
   const [productosOriginales, setProductosOriginales] = useState<Producto[]>([]);

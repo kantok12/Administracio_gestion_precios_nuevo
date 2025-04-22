@@ -195,13 +195,23 @@ export const api = {
   },
 
   // Actualizar Divisas en el Backend
-  updateCurrenciesInDB: async (params: { dolar_observado_actual: number, euro_observado_actual: number }) => {
-    const response = await fetch(`${API_BASE_URL}/pricing-overrides/update-currencies`, {
+  updateCurrenciesInDB: async (params: { dolar_observado_actual: number, euro_observado_actual?: number }) => {
+    console.log('[API Service] Updating currencies in DB with params:', params);
+    const response = await fetch(`${API_BASE_URL}/category-overrides/global`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      body: JSON.stringify({ 
+          costos: params
+      })
     });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return response.json();
+    console.log(`[API Service] Update currencies response status: ${response.status}`);
+    if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`[API Service] Update currencies failed: ${response.status}`, errorBody);
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const result = await response.json();
+    console.log('[API Service] Update currencies success response:', result);
+    return result;
   }
 };
