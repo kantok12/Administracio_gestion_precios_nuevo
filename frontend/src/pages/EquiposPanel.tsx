@@ -55,6 +55,33 @@ interface OpcionalesResponse {
   products: Producto[];
 }
 
+// --- Placeholder para la función API --- 
+// Deberás implementar esto en tu archivo de servicios API (ej. frontend/src/services/api.ts)
+const api = {
+  calculatePricing: async (body: { productCode: string; [key: string]: any }) => {
+    console.log("[API Placeholder] Calling calculatePricing with body:", body);
+    // Simular llamada fetch a POST /api/pricing-overrides/calculate
+    // const response = await fetch('/api/pricing-overrides/calculate', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify(body)
+    // });
+    // if (!response.ok) throw new Error('Error en la respuesta del cálculo de precios');
+    // const data = await response.json();
+    // if (!data.success) throw new Error(data.message || 'Error en el cálculo de precios');
+    // return data.data; // Devolver solo la parte 'data' que contiene inputsUsed y calculations
+    
+    // --- Respuesta simulada (¡REEMPLAZAR!) ---
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simular delay
+    return { 
+      inputsUsed: { productCode: body.productCode, categoryId: 'simulated_category', totalMarginPercent: 0.35, landedCostUSD: 124112.35, appliedUsdClpRate: 978.5, netSalePriceCLP: 163954687, finalSalePriceCLP: 195106078 }, 
+      calculations: { landedCostUSD: 124112.35, appliedUsdClpRate: 978.5, landedCostCLP: 121447916, marginAmountCLP: 42506771, netSalePriceCLP: 163954687, saleIvaAmountCLP: 31151391, finalSalePriceCLP: 195106078 }
+    }; 
+    // --- Fin Respuesta simulada ---
+  }
+};
+// --- Fin Placeholder API ---
+
 export default function EquiposPanel() {
   // Estados principales (movidos de App.tsx)
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -89,6 +116,12 @@ export default function EquiposPanel() {
   // --- NUEVO: Estados para el Flujo de Cotización ---
   const [pasoCotizacion, setPasoCotizacion] = useState<number>(0); // 0: Tabla Equipos, 1: Detalles Carga, ...
   const [opcionalesConfirmados, setOpcionalesConfirmados] = useState<Producto[]>([]); // Guarda los opcionales seleccionados
+
+  // --- NUEVO: Estados para el Resultado del Cálculo --- 
+  const [pricingResult, setPricingResult] = useState<any>(null); // Almacenará la respuesta completa del cálculo
+  const [pricingLoading, setPricingLoading] = useState<boolean>(false);
+  const [pricingError, setPricingError] = useState<string | null>(null);
+  // -------------------------------------------------------
 
   // --- Estilos Unificados (Basados en Ver Detalle) ---
   const unifiedModalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1040 };
@@ -339,18 +372,53 @@ export default function EquiposPanel() {
     setPasoCotizacion(0); // Volver al paso 0: Tabla de Equipos
     setProductoParaCotizar(null); // Limpiar producto en cotización
     setOpcionalesConfirmados([]); // Limpiar opcionales confirmados
+    setPricingResult(null); // Limpiar resultado al volver
+    setPricingError(null);
   };
 
-  // --- NUEVO: Función para avanzar desde DetallesCargaPanel ---
-  const handleSiguienteDesdeDetalles = () => {
-    console.log("Avanzando a Detalles de Envío...");
-    setPasoCotizacion(2); // Avanzar al paso 2
+  // --- MODIFICADO: Función para avanzar desde DetallesCargaPanel y CALCULAR PRECIOS ---
+  const handleSiguienteDesdeDetalles = async () => {
+    if (!productoParaCotizar?.codigo_producto) {
+      console.error("No hay producto seleccionado para calcular precios.");
+      setPricingError("Error: No se seleccionó ningún producto.");
+      return;
+    }
+    
+    console.log(`Iniciando cálculo de precios para producto: ${productoParaCotizar.codigo_producto}`);
+    setPricingLoading(true);
+    setPricingError(null);
+    setPricingResult(null); // Limpiar resultado previo
+
+    try {
+      // Llamar a la API del backend
+      // Enviamos solo el productCode inicialmente para usar defaults de categoría
+      const result = await api.calculatePricing({ 
+        productCode: productoParaCotizar.codigo_producto 
+        // Podrías añadir aquí parámetros específicos si necesitas sobrescribir los defaults
+        // ej: discountPercentage: 0.15 
+      });
+      
+      console.log("Resultado del cálculo recibido:", result);
+      setPricingResult(result); // Guardar el resultado completo
+      setPasoCotizacion(2); // Avanzar al paso 2 (Detalles Envío) si el cálculo fue exitoso
+
+    } catch (error) {
+      console.error("Error al calcular precios:", error);
+      const errorMsg = error instanceof Error ? error.message : "Error desconocido al calcular precios.";
+      setPricingError(errorMsg);
+      // No avanzamos al paso 2 si hay error
+    } finally {
+      setPricingLoading(false);
+    }
   };
 
   // --- NUEVO: Función para volver desde DetallesEnvioPanel ---
   const handleVolverDesdeEnvio = () => {
     console.log("Volviendo a Detalles de Carga...");
     setPasoCotizacion(1); // Volver al paso 1
+    // No limpiamos el resultado aquí, podría ser útil verlo al volver
+    // setPricingResult(null); 
+    setPricingError(null); // Sí limpiar error
   };
 
   // --- NUEVO: Función para eliminar un opcional confirmado ---
@@ -375,7 +443,7 @@ export default function EquiposPanel() {
      );
   }
 
-  // --- NUEVO: Renderizar el panel de Detalles de Envío ---
+  // --- MODIFICADO: Renderizar el panel de Detalles de Envío con datos del cálculo ---
   if (pasoCotizacion === 2) {
     return (
       <DetallesEnvioPanel
@@ -383,6 +451,11 @@ export default function EquiposPanel() {
         opcionalesSeleccionados={opcionalesConfirmados}
         onVolver={handleVolverDesdeEnvio}
         onSiguiente={() => { console.log("Ir a Detalles Tributarios..."); /* Lógica futura */ }}
+        // --- Nuevas props para el resultado del cálculo ---
+        pricingResult={pricingResult}
+        isLoading={pricingLoading}
+        error={pricingError}
+        // --------------------------------------------------
       />
     );
   }
