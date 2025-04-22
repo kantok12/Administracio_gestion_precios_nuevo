@@ -480,430 +480,233 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState('calculos');
 
   return (
-    // Contenedor principal del panel con padding
-    <div style={{ padding: '0 24px 24px 24px' }}> 
-      
-      {/* --- Cabecera con Título, Tabs y Botón Guardar --- */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: `1px solid ${borderColor}`, paddingBottom: '16px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#111827' }}>
-          ADMINISTRACIÓN PARÁMETROS GLOBALES
-        </h1>
-        
-        {/* --- ACTUALIZAR BOTÓN GUARDAR --- */}
-        <button 
-          style={{...primaryButtonStyle, cursor: isSavingGlobalParams ? 'not-allowed' : 'pointer'}}
-          onClick={handleSaveAll}
-          disabled={isSavingGlobalParams}
-        >
-          {isSavingGlobalParams ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <Save size={16} />
+    <div style={{ padding: '24px', fontFamily: 'Inter, sans-serif' }}>
+      {/* Encabezado */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '22px', fontWeight: 600, color: '#1e293b' }}>Panel de Administración de Costos</h1>
+      </div>
+
+      {/* Sección Valores Actuales de Divisas (Arriba) */}
+      <div style={{ marginBottom: '24px' }}> {/* Contenedor para la sección de divisas */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+             <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b' }}>Valores Actuales de Divisas</h2>
+             <button 
+               onClick={handleActualizarDivisas}
+               style={isUpdatingCurrencies ? { ...secondaryButtonStyle, cursor: 'not-allowed' } : secondaryButtonStyle}
+               disabled={isUpdatingCurrencies}
+             >
+               {isUpdatingCurrencies ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+               Actualizar Divisas
+             </button>
+          </div>
+
+          {/* Grid para las 2 tarjetas de divisas */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+             {/* Tarjeta Dólar */}
+             <div style={currencyDisplayStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '4px' }}>
+                   <DollarSign size={20} style={{ color: primaryTextColor }} />
+                   <div style={currencyValueStyle}>{initialCurrencyLoading ? '...' : dolarActualCLP ?? '-'}</div>
+                </div>
+                <div style={{ fontSize: '13px', color: '#334155', marginBottom: '4px' }}>Dólar Observado Actual (CLP)</div>
+             </div>
+
+             {/* Tarjeta Euro */}
+             <div style={currencyDisplayStyle}>
+                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <Euro size={20} style={{ color: primaryTextColor }} />
+                    <div style={currencyValueStyle}>{initialCurrencyLoading ? '...' : euroActualCLP ?? '-'}</div>
+                 </div>
+                <div style={{ fontSize: '13px', color: '#334155', marginBottom: '4px' }}>Euro Observado Actual (CLP)</div>
+             </div>
+          </div>
+
+           {currencyUpdateError && (
+             <div style={{ fontSize: '12px', color: 'red', textAlign: 'center', marginTop: '12px' }}>Error al actualizar: {currencyUpdateError}</div>
+           )}
+
+           <div style={{ fontSize: '11px', color: secondaryTextColor, textAlign: 'center', marginTop: '12px' }}>
+            {initialCurrencyLoading ? (
+              <span>&nbsp;</span> // Espacio mientras carga para mantener altura
+            ) : fechaActualizacionDivisas ? (
+              <>
+                <Info size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                Última actualización: {fechaActualizacionDivisas}
+              </>
+            ) : initialCurrencyError ? (
+              <span style={{color: 'red'}}>Error al obtener última actualización.</span>
+            ) : (
+              <span>&nbsp;</span> // Espacio si no hay fecha ni error
+            )}
+           </div>
+      </div>
+      {/* --- Fin Sección Divisas --- */}
+
+
+      {/* Sección Parámetros (Debajo) */}
+      <div>
+          {/* Mensaje de Carga/Error de Parámetros Iniciales */}
+          {initialCostParamsLoading && (
+             <div style={{ padding: '20px', textAlign: 'center', color: secondaryTextColor }}>Cargando parámetros globales...</div>
+           )} 
+           {initialCostParamsError && (
+             <div style={{ padding: '20px', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', textAlign: 'center' }}>Error al cargar parámetros: {initialCostParamsError}</div>
+           )}
+
+          {/* Contenedor Grid para el resto de las tarjetas */}
+          {!initialCostParamsLoading && !initialCostParamsError && (
+             <div style={gridContainerStyle}>
+                {/* Tarjeta Tipo de Cambio y Buffers */}
+                <div style={gridCardStyle}>
+                  <h3 style={gridCardTitleStyle}>Tipo de Cambio y Buffers</h3>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="tipoCambio" style={labelStyle}>Tipo de Cambio EUR/USD:</label>
+                      <input id="tipoCambio" type="number" style={inputStyle} value={tipoCambio} onChange={handleInputChange(setTipoCambio)} placeholder="Ej: 1.1" />
+                      <p style={inputDescriptionStyle}>Tipo de cambio actual entre Euro y Dólar</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="bufferEurUsd" style={labelStyle}>Buffer EUR/USD (%):</label>
+                      <input id="bufferEurUsd" type="number" style={inputStyle} value={bufferEurUsd} onChange={handleInputChange(setBufferEurUsd)} placeholder="Ej: 2"/>
+                      <p style={inputDescriptionStyle}>Margen adicional para tipo cambio EUR/USD</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="bufferDolar" style={labelStyle}>Buffer USD/CLP (%):</label>
+                      <input id="bufferDolar" type="number" style={inputStyle} value={bufferDolar} onChange={handleInputChange(setBufferDolar)} placeholder="Ej: 1.8" />
+                      <p style={inputDescriptionStyle}>Margen adicional para Dólar Observado</p>
+                   </div>
+                </div>
+
+                {/* Tarjeta Parámetros de Margen y Seguro */}
+                <div style={gridCardStyle}>
+                  <h3 style={gridCardTitleStyle}>Parámetros de Margen y Seguro</h3>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="margenTotalGeneral" style={labelStyle}>Margen Total General (%):</label>
+                      <input id="margenTotalGeneral" type="number" style={inputStyle} value={margenTotalGeneral} onChange={handleInputChange(setMargenTotalGeneral)} placeholder="Ej: 35"/>
+                      <p style={inputDescriptionStyle}>Porcentaje de margen adicional</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="tasaSeguroGlobal" style={labelStyle}>Tasa de Seguro Global (%):</label>
+                      <input id="tasaSeguroGlobal" type="number" style={inputStyle} value={tasaSeguroGlobal} onChange={handleInputChange(setTasaSeguroGlobal)} placeholder="Ej: 0.6" />
+                      <p style={inputDescriptionStyle}>Porcentaje aplicado para calcular seguro</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="descuentoFabricanteGeneral" style={labelStyle}>Descuento Fabricante (%):</label>
+                      <input id="descuentoFabricanteGeneral" type="number" style={inputStyle} value={descuentoFabricanteGeneral} onChange={handleInputChange(setDescuentoFabricanteGeneral)} placeholder="Ej: 10"/>
+                      <p style={inputDescriptionStyle}>Descuento base sobre costo fábrica</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="factorActualizacionAnual" style={labelStyle}>Factor Actualización Anual (%):</label>
+                      <input id="factorActualizacionAnual" type="number" style={inputStyle} value={factorActualizacionAnual} onChange={handleInputChange(setFactorActualizacionAnual)} placeholder="Ej: 5" />
+                      <p style={inputDescriptionStyle}>Incremento anual sobre costo fábrica</p>
+                   </div>
+                </div>
+
+                {/* Tarjeta Parámetros de Transporte */}
+                <div style={gridCardStyle}>
+                  <h3 style={gridCardTitleStyle}>Parámetros de Transporte</h3>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="bufferTransporteGlobal" style={labelStyle}>Buffer Transporte (%):</label>
+                      <input id="bufferTransporteGlobal" type="number" style={inputStyle} value={bufferTransporteGlobal} onChange={handleInputChange(setBufferTransporteGlobal)} placeholder="Ej: 0"/>
+                      <p style={inputDescriptionStyle}>Margen adicional para costos de transporte</p>
+                   </div>
+                    <div style={inputGroupStyle}>
+                      <label htmlFor="transporteLocalEUR" style={labelStyle}>Transporte Local (EUR):</label>
+                      <input id="transporteLocalEUR" type="number" style={inputStyle} value={transporteLocalEUR} onChange={handleInputChange(setTransporteLocalEUR)} placeholder="Ej: 800"/>
+                      <p style={inputDescriptionStyle}>Costo de transporte local en origen</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="transporteNacionalCLP" style={labelStyle}>Transporte Nacional (CLP):</label>
+                      <input id="transporteNacionalCLP" type="number" style={inputStyle} value={transporteNacionalCLP} onChange={handleInputChange(setTransporteNacionalCLP)} placeholder="Ej: 950000"/>
+                      <p style={inputDescriptionStyle}>Costo de transporte nacional en destino</p>
+                   </div>
+                  <div style={inputGroupStyle}>
+                    <label htmlFor="fechaUltimaActualizacion" style={labelStyle}>Fecha Última Actualización Tarifas:</label>
+                    <input id="fechaUltimaActualizacion" type="date" style={inputStyle} value={fechaUltimaActualizacion} onChange={handleInputChange(setFechaUltimaActualizacion)}/>
+                    <p style={inputDescriptionStyle}>Fecha de última actualización de tarifas</p>
+                  </div>
+                </div>
+
+                {/* Tarjeta Costos Adicionales (EUR) */}
+                <div style={gridCardStyle}>
+                  <h3 style={gridCardTitleStyle}>Costos Adicionales (EUR)</h3>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="costoFabricaOriginalEUR" style={labelStyle}>Costo Fábrica Original (EUR):</label>
+                      <input id="costoFabricaOriginalEUR" type="number" style={inputStyle} value={costoFabricaOriginalEUR} onChange={handleInputChange(setCostoFabricaOriginalEUR)} placeholder="Ej: 100000" />
+                      <p style={inputDescriptionStyle}>Costo base de fábrica en Euros</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="gastoImportacionEUR" style={labelStyle}>Gasto Importación (EUR):</label>
+                      <input id="gastoImportacionEUR" type="number" style={inputStyle} value={gastoImportacionEUR} onChange={handleInputChange(setGastoImportacionEUR)} placeholder="Ej: 400" />
+                      <p style={inputDescriptionStyle}>Gastos de importación en Euros (Origen)</p>
+                   </div>
+                </div>
+
+                {/* Tarjeta Costos Adicionales (USD) */}
+                 <div style={gridCardStyle}>
+                  <h3 style={gridCardTitleStyle}>Costos Adicionales (USD)</h3>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="fleteMaritimosUSD" style={labelStyle}>Flete Marítimo (USD):</label>
+                      <input id="fleteMaritimosUSD" type="number" style={inputStyle} value={fleteMaritimosUSD} onChange={handleInputChange(setFleteMaritimosUSD)} placeholder="Ej: 2500"/>
+                      <p style={inputDescriptionStyle}>Costo de flete marítimo en USD</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="recargosDestinoUSD" style={labelStyle}>Recargos Destino (USD):</label>
+                      <input id="recargosDestinoUSD" type="number" style={inputStyle} value={recargosDestinoUSD} onChange={handleInputChange(setRecargosDestinoUSD)} placeholder="Ej: 500" />
+                      <p style={inputDescriptionStyle}>Recargos en destino en USD</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="honorariosAgenteAduanaUSD" style={labelStyle}>Honorarios Agente Aduana (USD):</label>
+                      <input id="honorariosAgenteAduanaUSD" type="number" style={inputStyle} value={honorariosAgenteAduanaUSD} onChange={handleInputChange(setHonorariosAgenteAduanaUSD)} placeholder="Ej: 600"/>
+                      <p style={inputDescriptionStyle}>Honorarios del agente de aduana</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="gastosPortuariosOtrosUSD" style={labelStyle}>Gastos Portuarios/Otros (USD):</label>
+                      <input id="gastosPortuariosOtrosUSD" type="number" style={inputStyle} value={gastosPortuariosOtrosUSD} onChange={handleInputChange(setGastosPortuariosOtrosUSD)} placeholder="Ej: 200" />
+                      <p style={inputDescriptionStyle}>Otros gastos portuarios en USD</p>
+                   </div>
+                </div>
+                
+                 {/* Tarjeta Impuestos */}
+                <div style={gridCardStyle}>
+                  <h3 style={gridCardTitleStyle}>Impuestos</h3>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="derechoAdValorem" style={labelStyle}>Derecho Ad Valorem (%):</label>
+                      <input id="derechoAdValorem" type="number" style={inputStyle} value={derechoAdValorem} onChange={handleInputChange(setDerechoAdValorem)} placeholder="Ej: 6"/>
+                      <p style={inputDescriptionStyle}>Impuesto aduanero (0 si aplica TLC)</p>
+                   </div>
+                   <div style={inputGroupStyle}>
+                      <label htmlFor="iva" style={labelStyle}>IVA (%):</label>
+                      <input id="iva" type="number" style={inputStyle} value={iva} onChange={handleInputChange(setIva)} placeholder="Ej: 19"/>
+                      <p style={inputDescriptionStyle}>Impuesto al Valor Agregado</p>
+                   </div>
+                </div>
+             </div>
           )}
-          {isSavingGlobalParams ? 'Guardando...' : 'Guardar Cambios'}
-        </button>
-        {/* ------------------------------ */} 
+      </div>
+      {/* --- Fin Sección Parámetros --- */}
+
+      {/* Sección Guardar Cambios Globales */}
+      <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: `1px solid ${borderColor}`, textAlign: 'right' }}>
+        {saveGlobalParamsSuccess && (
+             <div style={{ marginBottom: '16px', color: '#16a34a', textAlign: 'left' }}>
+                 <CheckCircle size={14} style={{ marginRight: '4px' }} /> {saveGlobalParamsSuccess}
+             </div>
+         )}
+         {saveGlobalParamsError && (
+             <div style={{ marginBottom: '16px', color: '#dc2626', textAlign: 'left' }}>
+                 <XCircle size={14} style={{ marginRight: '4px' }} /> Error: {saveGlobalParamsError}
+             </div>
+         )}
+          <button 
+              onClick={handleSaveAll} 
+              style={isSavingGlobalParams ? {...primaryButtonStyle, opacity: 0.6, cursor: 'not-allowed'} : primaryButtonStyle}
+              disabled={isSavingGlobalParams}
+          >
+            {isSavingGlobalParams ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+             Guardar Cambios Globales
+          </button>
       </div>
 
-      {/* --- MENSAJES DE FEEDBACK PARA GUARDADO --- */} 
-      {saveGlobalParamsSuccess && (
-        <div style={{ marginBottom: '16px', padding: '10px 15px', backgroundColor: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <CheckCircle size={18} /> {saveGlobalParamsSuccess}
-        </div>
-      )}
-      {saveGlobalParamsError && (
-        <div style={{ marginBottom: '16px', padding: '10px 15px', backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <XCircle size={18} /> Error al guardar: {saveGlobalParamsError}
-        </div>
-      )}
-      {/* ---------------------------------------- */} 
-
-      {/* --- Contenido Principal (Ya no depende de activeTab) --- */}
-      <div> 
-         {/* Título y Dropdown Categoría */}
-         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-           <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <SlidersHorizontal size={20} /> Parámetros de Cálculo y Costos
-           </h2>
-           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '12px', color: secondaryTextColor }}>Aplicar Parámetros a:</label>
-              <select 
-                  style={{ ...selectStyle, minWidth: '180px' }} 
-                  value={categoriaSeleccionadaParaAplicar} 
-                  onChange={handleCategoriaChange}
-                  disabled={isLoadingCategoryParams}
-              >
-                  {categoriasDisponibles.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                  ))}
-              </select>
-              {isLoadingCategoryParams && <Loader2 size={16} className="animate-spin" color={primaryTextColor}/>}
-              {loadCategoryParamsError && <XCircle size={16} color="#ef4444" />}
-           </div>
-         </div>
-
-         {/* Mensajes Éxito/Error Guardar */}
-         {initialCostParamsError && (
-           <div style={{ marginBottom: '16px', padding: '10px 15px', backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-               <XCircle size={18} /> Error cargando parámetros iniciales: {initialCostParamsError}
-           </div>
-         )}
-
-         {/* Sección Valores Actuales de Divisas */}
-         <div style={{ ...mainCardStyle, backgroundColor: lightGrayBg, border: `1px solid ${borderColor}`}}>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
-               <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#334155', margin: 0 }}>Valores Actuales de Divisas</h3>
-               <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                  <button 
-                    style={{...secondaryButtonStyle, cursor: isUpdatingCurrencies ? 'not-allowed' : 'pointer'}}
-                    onClick={handleActualizarDivisas} 
-                    disabled={isUpdatingCurrencies}
-                  >
-                     {isUpdatingCurrencies ? (
-                        <Loader2 size={14} className="animate-spin" />
-                     ) : (
-                        <RefreshCw size={14} />
-                     )}
-                     {isUpdatingCurrencies ? 'Actualizando...' : 'Actualizar Divisas'} 
-                  </button>
-                  {/* Mostrar fecha SÓLO si no hay error inicial y NO está cargando inicialmente */}
-                  {!initialCurrencyLoading && !initialCurrencyError && fechaActualizacionDivisas && (
-                    <span style={{ fontSize: '11px', color: secondaryTextColor }}>
-                      <Info size={12} style={{verticalAlign: 'middle', marginRight: '4px'}} />
-                      Última actualización: {fechaActualizacionDivisas}
-                    </span>
-                  )}
-                  {currencyUpdateError && (
-                     <div style={{ marginBottom: '12px', padding: '8px 12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '6px', fontSize: '12px' }}>
-                        Error al actualizar: {currencyUpdateError}
-                     </div>
-                  )}
-               </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom:'12px' }}>
-               {/* --- Mostrar estado inicial o valores --- */}
-               {initialCurrencyLoading ? (
-                  <div style={{...currencyDisplayStyle, justifyContent:'center', alignItems:'center', display:'flex', height: '110px'}}><Loader2 className="animate-spin" size={24}/></div>
-               ) : initialCurrencyError ? (
-                  <div style={{...currencyDisplayStyle, justifyContent:'center', alignItems:'center', display:'flex', height: '110px', color:'#b91c1c', fontSize:'12px'}}>Error: {initialCurrencyError}</div>
-               ) : (
-                  <div style={currencyDisplayStyle}>
-                     <DollarSign size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
-                     <div style={currencyValueStyle}>{dolarActualCLP ?? '-'}</div>
-                     <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Dólar Observado Actual (CLP)</div>
-                     <div style={currencyDateStyle}>Valor del {fechaActualizacionDivisas ? new Date(fechaActualizacionDivisas.split(', ')[0].split('/').reverse().join('-')).toLocaleDateString('es-CL') : '-'}</div>
-                  </div>
-               )}
-                {initialCurrencyLoading ? (
-                  <div style={{...currencyDisplayStyle, justifyContent:'center', alignItems:'center', display:'flex', height: '110px'}}><Loader2 className="animate-spin" size={24}/></div>
-               ) : initialCurrencyError ? (
-                  <div style={{...currencyDisplayStyle, justifyContent:'center', alignItems:'center', display:'flex', height: '110px', color:'#b91c1c', fontSize:'12px'}}>Error: {initialCurrencyError}</div>
-               ) : (
-                  <div style={currencyDisplayStyle}>
-                     <Euro size={16} color={secondaryTextColor} style={{marginBottom: '8px'}}/>
-                     <div style={currencyValueStyle}>{euroActualCLP ?? '-'}</div>
-                     <div style={{fontSize: '12px', color: '#334155', marginBottom:'4px'}}>Euro Observado Actual (CLP)</div>
-                     <div style={currencyDateStyle}>Valor del {fechaActualizacionDivisas ? new Date(fechaActualizacionDivisas.split(', ')[0].split('/').reverse().join('-')).toLocaleDateString('es-CL') : '-'}</div>
-                  </div>
-               )}
-               {/* ----------------------------------------- */}
-            </div>
-             <p style={{fontSize: '11px', color: secondaryTextColor, textAlign: 'center', margin: '12px 0 0 0'}}>
-                <Info size={12} style={{verticalAlign: 'middle', marginRight: '4px'}}/>
-                Los valores se actualizan automáticamente todos los días a las 12:00 PM. También puedes actualizar manualmente.
-             </p>
-         </div>
-
-         {/* Grid para los parámetros */}
-         {initialCostParamsLoading ? (
-            <div style={{display:'flex', justifyContent:'center', alignItems:'center', padding: '50px', color: '#64748b'}}>
-                <Loader2 className="animate-spin" size={24} style={{marginRight: '10px'}} /> Cargando parámetros...
-            </div>
-         ) : (
-            <div style={gridContainerStyle}>
-               {/* Sección 1: Parámetros Tipo de Cambio */}
-               <div style={gridCardStyle}>
-                  <h4 style={gridCardTitleStyle}>Tipo de Cambio y Buffers</h4>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Tipo de Cambio EUR/USD:</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={tipoCambio}
-                        onChange={handleInputChange(setTipoCambio)}
-                        min="0"
-                        step="0.01"
-                     />
-                     <p style={inputDescriptionStyle}>Tipo de cambio actual entre Euro y Dólar</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Buffer EUR/USD (%):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={bufferEurUsd}
-                        onChange={handleInputChange(setBufferEurUsd)}
-                        min="0"
-                        step="0.1"
-                     />
-                     <p style={inputDescriptionStyle}>Margen adicional para tipo cambio EUR/USD</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Buffer USD/CLP (%):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={bufferDolar}
-                        onChange={handleInputChange(setBufferDolar)}
-                        min="0"
-                        step="0.1"
-                     />
-                     <p style={inputDescriptionStyle}>Margen adicional para tipo cambio USD/CLP</p>
-                  </div>
-               </div>
-               
-               {/* Sección 2: Parámetros Generales */}
-               <div style={gridCardStyle}>
-                  <h4 style={gridCardTitleStyle}>Parámetros de Margen y Seguro</h4>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Margen Total General (%):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={margenTotalGeneral}
-                        onChange={handleInputChange(setMargenTotalGeneral)}
-                        min="0"
-                        step="0.1"
-                     />
-                     <p style={inputDescriptionStyle}>Porcentaje de margen adicional</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Tasa de Seguro Global (%):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={tasaSeguroGlobal}
-                        onChange={handleInputChange(setTasaSeguroGlobal)}
-                        min="0"
-                        step="0.1"
-                     />
-                     <p style={inputDescriptionStyle}>Porcentaje aplicado para calcular seguro</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Descuento Fabricante (%):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={descuentoFabricanteGeneral}
-                        onChange={handleInputChange(setDescuentoFabricanteGeneral)}
-                        min="0"
-                        step="0.1"
-                     />
-                     <p style={inputDescriptionStyle}>Descuento aplicado por el fabricante</p>
-                  </div>
-               </div>
-               
-               {/* Sección 3: Parámetros de Transporte */}
-               <div style={gridCardStyle}>
-                  <h4 style={gridCardTitleStyle}>Parámetros de Transporte</h4>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Buffer Transporte (%):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={bufferTransporteGlobal}
-                        onChange={handleInputChange(setBufferTransporteGlobal)}
-                        min="0"
-                        step="0.1"
-                     />
-                     <p style={inputDescriptionStyle}>Margen adicional para costos de transporte</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Fecha Última Actualización:</label>
-                     <input 
-                        type="date"
-                        style={inputStyle}
-                        value={fechaUltimaActualizacion}
-                        onChange={handleInputChange(setFechaUltimaActualizacion)}
-                     />
-                     <p style={inputDescriptionStyle}>Fecha de última actualización de tarifas</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Transporte Local EUR:</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={transporteLocalEUR}
-                        onChange={handleInputChange(setTransporteLocalEUR)}
-                        min="0"
-                        step="1"
-                     />
-                     <p style={inputDescriptionStyle}>Costo de transporte local en EUR</p>
-                  </div>
-               </div>
-               
-               {/* Sección 4: Costos Adicionales EUR */}
-               <div style={gridCardStyle}>
-                  <h4 style={gridCardTitleStyle}>Costos Adicionales (EUR)</h4>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Costo Fábrica Original (EUR):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={costoFabricaOriginalEUR}
-                        onChange={handleInputChange(setCostoFabricaOriginalEUR)}
-                        min="0"
-                        step="1"
-                     />
-                     <p style={inputDescriptionStyle}>Costo base de fábrica en Euros</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Gasto Importación (EUR):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={gastoImportacionEUR}
-                        onChange={handleInputChange(setGastoImportacionEUR)}
-                        min="0"
-                        step="1"
-                     />
-                     <p style={inputDescriptionStyle}>Gastos de importación en Euros</p>
-                  </div>
-               </div>
-               
-               {/* Sección 5: Costos Adicionales USD */}
-               <div style={gridCardStyle}>
-                  <h4 style={gridCardTitleStyle}>Costos Adicionales (USD)</h4>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Flete Marítimo (USD):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={fleteMaritimosUSD}
-                        onChange={handleInputChange(setFleteMaritimosUSD)}
-                        min="0"
-                        step="1"
-                     />
-                     <p style={inputDescriptionStyle}>Costo de flete marítimo en USD</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Recargos Destino (USD):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={recargosDestinoUSD}
-                        onChange={handleInputChange(setRecargosDestinoUSD)}
-                        min="0"
-                        step="1"
-                     />
-                     <p style={inputDescriptionStyle}>Recargos en destino en USD</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Honorarios Agente Aduana (USD):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={honorariosAgenteAduanaUSD}
-                        onChange={handleInputChange(setHonorariosAgenteAduanaUSD)}
-                        min="0"
-                        step="1"
-                     />
-                     <p style={inputDescriptionStyle}>Honorarios de agencia aduanera</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Gastos Portuarios y Otros (USD):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={gastosPortuariosOtrosUSD}
-                        onChange={handleInputChange(setGastosPortuariosOtrosUSD)}
-                        min="0"
-                        step="1"
-                     />
-                     <p style={inputDescriptionStyle}>Gastos adicionales en puerto</p>
-                  </div>
-               </div>
-               
-               {/* Sección 6: Costos Adicionales CLP e Impuestos */}
-               <div style={gridCardStyle}>
-                  <h4 style={gridCardTitleStyle}>Costos Locales e Impuestos</h4>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Transporte Nacional (CLP):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={transporteNacionalCLP}
-                        onChange={handleInputChange(setTransporteNacionalCLP)}
-                        min="0"
-                        step="1"
-                     />
-                     <p style={inputDescriptionStyle}>Costo de transporte dentro de Chile</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Factor Act. Anual (%):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={factorActualizacionAnual}
-                        onChange={handleInputChange(setFactorActualizacionAnual)}
-                        min="0"
-                        step="0.1"
-                     />
-                     <p style={inputDescriptionStyle}>Factor de actualización anual</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>Derecho Ad Valorem (%):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={derechoAdValorem}
-                        onChange={handleInputChange(setDerechoAdValorem)}
-                        min="0"
-                        step="0.1"
-                     />
-                     <p style={inputDescriptionStyle}>Tasa de derechos arancelarios</p>
-                  </div>
-                  
-                  <div style={inputGroupStyle}>
-                     <label style={labelStyle}>IVA (%):</label>
-                     <input 
-                        type="number"
-                        style={inputStyle}
-                        value={iva}
-                        onChange={handleInputChange(setIva)}
-                        min="0"
-                        step="0.1"
-                     />
-                     <p style={inputDescriptionStyle}>Impuesto al Valor Agregado</p>
-                  </div>
-               </div>
-            </div>
-         )}
-      </div>
-
-      {/* >>> MOVER LA ETIQUETA STYLE AQUÍ (dentro del div principal) <<< */}
-      <style>{`
-         @keyframes spin { to { transform: rotate(360deg); } }
-         .animate-spin { animation: spin 1s linear infinite; }
-      `}</style>
-    </div>
+    </div> // Fin del div principal del return
   );
 } 

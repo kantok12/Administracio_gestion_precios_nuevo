@@ -2,6 +2,32 @@ const mongoose = require('mongoose');
 
 console.log('[Database] Initializing PricingOverride model...');
 
+// --- NUEVO: Sub-Esquema para los campos de costos ---
+const costosSchema = new mongoose.Schema({
+  tipo_cambio_eur_usd: { type: Number, default: 1.1 },
+  buffer_eur_usd: { type: Number, default: 0.02, min: 0, max: 1 }, // Porcentaje 0-1
+  dolar_observado_actual: { type: Number, default: 975 },
+  buffer_usd_clp: { type: Number, default: 0.018, min: 0, max: 1 }, // Porcentaje 0-1
+  tasa_seguro: { type: Number, default: 0.006, min: 0, max: 1 }, // 0.6%
+  margen_adicional_total: { type: Number, default: 0.35, min: 0 }, // Margen
+  costo_fabrica_original_eur: { type: Number, default: 100000, min: 0 },
+  descuento_fabricante: { type: Number, default: 0.10, min: 0, max: 1 }, // 10%
+  factor_actualizacion_anual: { type: Number, default: 0.05, min: 0 }, // 5%
+  transporte_local_eur: { type: Number, default: 800, min: 0 },
+  gasto_importacion_eur: { type: Number, default: 400, min: 0 },
+  flete_maritimo_usd: { type: Number, default: 3500, min: 0 },
+  recargos_destino_usd: { type: Number, default: 500, min: 0 },
+  honorarios_agente_aduana_usd: { type: Number, default: 600, min: 0 },
+  gastos_portuarios_otros_usd: { type: Number, default: 200, min: 0 },
+  transporte_nacional_clp: { type: Number, default: 950000, min: 0 },
+  derecho_ad_valorem: { type: Number, default: 0.06, min: 0, max: 1 }, // 6%
+  iva: { type: Number, default: 0.19, min: 0, max: 1 }, // 19%
+  // Campos adicionales mencionados (añadir si son necesarios y definir su tipo)
+  buffer_transporte: { type: Number, default: 0 }, // Ejemplo: añadido como número, default 0
+  fecha_ultima_actualizacion_transporte_local: { type: Date, default: null } // Ejemplo: añadido como fecha
+}, { _id: false }); // No crear _id para el subdocumento
+
+// --- Esquema Principal (Modificado) ---
 const pricingOverrideSchema = new mongoose.Schema({
   _id: {
     type: String,
@@ -23,15 +49,9 @@ const pricingOverrideSchema = new mongoose.Schema({
     index: true
   },
   costos: {
-    type: mongoose.Schema.Types.Mixed,
-    default: {},
-    required: [true, 'Los costos son requeridos'],
-    validate: {
-      validator: function(v) {
-        return typeof v === 'object' && v !== null;
-      },
-      message: 'Los costos deben ser un objeto válido'
-    }
+    type: costosSchema,
+    default: () => ({}),
+    required: [true, 'El objeto costos es requerido']
   },
   metadata: {
     type: {
@@ -84,45 +104,34 @@ const pricingOverrideSchema = new mongoose.Schema({
 // Middleware para logging
 pricingOverrideSchema.pre('save', function(next) {
   console.log(`[PricingOverride] Guardando documento ${this._id}...`);
+  if (this.isNew && typeof this.costos === 'object' && Object.keys(this.costos).length === 0) {
+       this.costos = {};
+  }
+  if (!this.metadata) {
+      this.metadata = { ultima_actualizacion: new Date(), actualizado_por: 'system_presave' };
+  } else {
+      if (!this.metadata.ultima_actualizacion) this.metadata.ultima_actualizacion = new Date();
+      if (!this.metadata.actualizado_por) this.metadata.actualizado_por = 'system_presave';
+  }
+  this.metadata.ultima_actualizacion = new Date();
+  
   next();
 });
 
-pricingOverrideSchema.post('save', function(doc) {
+pricingOverrideSchema.post('save', function(doc, next) {
   console.log(`[PricingOverride] Documento ${doc._id} guardado exitosamente`);
+  next();
 });
 
 // Función para inicializar documentos por defecto
 pricingOverrideSchema.statics.initializeDefaults = async function() {
   console.log('[PricingOverride] Iniciando inicialización de documentos por defecto...');
   
-  const defaultGlobal = {
+  const defaultGlobalData = {
     _id: "global",
     nivel: "global",
-    costos: {
-      tipo_cambio_eur_usd: 1.1,
-      buffer_eur_usd: 0.02,
-      dolar_observado_actual: 975,
-      buffer_dolar: 0.03,
-      tasa_seguro: 0.006,
-      margen_adicional_total: 0.35,
-      costo_fabrica_original_eur: 100000,
-      descuento_fabricante: 0.1,
-      buffer_transporte: 0.05,
-      fecha_ultima_actualizacion_transporte_local: "2025-04-21",
-      transporte_local_eur: 800,
-      gasto_importacion_eur: 400,
-      flete_maritimo_usd: 3500,
-      recargos_destino_usd: 500,
-      honorarios_agente_aduana_usd: 600,
-      gastos_portuarios_otros_usd: 200,
-      transporte_nacional_clp: 950000,
-      factor_actualizacion_anual: 0.05,
-      derecho_ad_valorem: 0.06,
-      iva: 0.19
-    },
     metadata: {
-      ultima_actualizacion: new Date("2025-04-21T00:00:00Z"),
-      actualizado_por: "admin"
+      actualizado_por: "system_init"
     }
   };
   
@@ -131,9 +140,9 @@ pricingOverrideSchema.statics.initializeDefaults = async function() {
     const existingGlobal = await this.findOne({ _id: 'global' });
     
     if (!existingGlobal) {
-      console.log('[PricingOverride] Documento global no encontrado. Creando...');
-      await this.create(defaultGlobal);
-      console.log('[PricingOverride] ✅ Documento global creado exitosamente');
+      console.log('[PricingOverride] Documento global no encontrado. Creando con defaults del esquema...');
+      await this.create(defaultGlobalData);
+      console.log('[PricingOverride] ✅ Documento global creado exitosamente con defaults');
     } else {
       console.log('[PricingOverride] ℹ️ Documento global ya existe');
       console.log('[PricingOverride] Última actualización:', existingGlobal.metadata.ultima_actualizacion);
@@ -150,25 +159,6 @@ pricingOverrideSchema.statics.initializeDefaults = async function() {
     });
     return false;
   }
-};
-
-// Método para validar estructura de costos
-pricingOverrideSchema.methods.validateCostos = function() {
-  const requiredFields = [
-    'tipo_cambio_eur_usd',
-    'buffer_eur_usd',
-    'dolar_observado_actual',
-    'tasa_seguro',
-    'margen_adicional_total'
-  ];
-  
-  const missingFields = requiredFields.filter(field => !(field in this.costos));
-  
-  if (missingFields.length > 0) {
-    throw new Error(`Campos requeridos faltantes en costos: ${missingFields.join(', ')}`);
-  }
-  
-  return true;
 };
 
 // Eliminar el modelo si ya existe

@@ -1,13 +1,15 @@
 // backend/controllers/pricingController.js
 
+const PricingOverride = require('../models/PricingOverride'); // <-- Importar el modelo real
+
 // Placeholder para obtener datos necesarios (ej. tipos de cambio, costo producto)
 // Estos deberían interactuar con otros controladores/servicios o modelos
 const getExchangeRate = async (from, to) => {
   // Lógica para obtener tipo de cambio (ej. desde DB, API externa, caché)
   console.log(`Placeholder: Obteniendo tipo de cambio ${from}/${to}`);
   // Valores de ejemplo basados en tu cálculo
-  if (from === 'EUR' && to === 'USD') return 1.08; 
-  if (from === 'USD' && to === 'CLP') return 950; 
+  if (from === 'EUR' && to === 'USD') return 1.08;
+  if (from === 'USD' && to === 'CLP') return 950;
   return 1; // Fallback
 };
 
@@ -23,47 +25,47 @@ const getProductCategoryAndId = async (productCode) => {
   console.log(`Placeholder: Obteniendo categoría para ${productCode}`);
   // Lógica real para buscar el producto y obtener su categoría/ID
   // Ejemplo:
-  if (productCode.startsWith("CHM")) return { categoryName: "Chipeadoras Motor", categoryId: "chipeadora_motor" };
-  if (productCode.startsWith("CHP")) return { categoryName: "Chipeadoras PTO", categoryId: "chipeadora_pto" };
-  return { categoryName: "Desconocida", categoryId: "global" }; // Fallback a global o null?
+  if (productCode.startsWith("CHM")) return { categoryName: "Chipeadoras Motor", categoryId: "cat_chipeadora_motor" }; // <-- Asegurar prefijo si aplica
+  if (productCode.startsWith("CHP")) return { categoryName: "Chipeadoras PTO", categoryId: "cat_chipeadora_pto" };
+  // Decidir qué hacer si no es chipeadora. Usar 'global'? O lanzar error?
+  return { categoryName: "Global", categoryId: "global" }; // Fallback a global
 };
 
-// Obtiene los datos de override para una categoría específica (simula fetch interno)
+// --- MODIFICADO: Obtiene los datos de override REALES desde MongoDB ---
 const fetchCategoryOverrideData = async (categoryId) => {
-  console.log(`Placeholder: Fetching override data for category ID: ${categoryId}`);
-  // Lógica real para buscar el documento de override en MongoDB u otra fuente
-  // Devuelve un objeto similar al que se guardaría/obtendría en categoryOverridesController
-  // Ejemplo con algunos valores por defecto:
-  return {
-    costos: {
-      tipo_cambio_eur_usd: 1.08, // Ejemplo
-      buffer_usd_clp: 0.03,      // 3%
-      tasa_seguro: 0.006,       // 0.6%
-      buffer_transporte: 0.05,  // 5%
-      margen_adicional_total: 0.35, // 35%
-      descuento_fabricante: 0.10,   // 10%
-      buffer_eur_usd: 0.02,         // 2%
-      // ... otros campos que existen en el modelo de override
-      transporte_local_eur: 1200,
-      gasto_importacion_eur: 400, // Asumiendo que este corresponde a originCostsEUR
-      flete_maritimo_usd: 3500,
-      recargos_destino_usd: 500,
-      honorarios_agente_aduana_usd: 600,
-      gastos_portuarios_otros_usd: 200,
-      transporte_nacional_clp: 950000,
-      factor_actualizacion_anual: 0.05, // 5%
-      derecho_ad_valorem: 0.06,         // 6%
-      iva: 0.19                       // 19%
+  console.log(`[fetchCategoryOverrideData] Attempting to fetch REAL override data for category ID: ${categoryId}`);
+  try {
+    // Busca primero el override específico de la categoría
+    const override = await PricingOverride.findOne({ _id: categoryId });
+    if (override) {
+      console.log(`[fetchCategoryOverrideData] Specific override data found for ${categoryId}.`);
+      return override.toObject(); // Devuelve el objeto completo
+    } else {
+      console.log(`[fetchCategoryOverrideData] No specific override found for ${categoryId}. Attempting fallback to global.`);
+      // Si no hay específico, busca el global
+      const globalOverride = await PricingOverride.findOne({ _id: 'global' });
+      if (globalOverride) {
+        console.log('[fetchCategoryOverrideData] Global override data found.');
+        return globalOverride.toObject(); // Devuelve el objeto global
+      } else {
+         console.warn('[fetchCategoryOverrideData] No override data found for category and global fallback failed.');
+         // Considera si devolver un objeto vacío o lanzar un error es más apropiado aquí
+         return null; // O return { costos: {} }; si prefieres defaults
+      }
     }
-  };
+  } catch (error) {
+    console.error(`[fetchCategoryOverrideData] Error fetching override data for ${categoryId}:`, error);
+    // Lanzar el error para que sea manejado por el controlador principal
+    throw new Error(`Error al obtener datos de override para ${categoryId}: ${error.message}`);
+  }
 };
 
-// --- Controlador Principal para el Cálculo --- 
+// --- Controlador Principal para el Cálculo (Modificado para usar datos reales y respuesta completa) ---
 const calculatePricing = async (req, res) => {
   try {
-    // 1. Extraer Inputs del Request Body (ahora pueden ser opcionales para override)
+    // 1. Extraer Inputs del Request Body
     const {
-      productCode,          // Sigue siendo requerido
+      productCode,
       discountPercentage: bodyDiscount,
       yearsDifference: bodyYearsDiff,
       eurUsdBufferPercent: bodyEurUsdBuffer,
@@ -76,9 +78,9 @@ const calculatePricing = async (req, res) => {
       nationalTransportCLP: bodyNatTransport,
       usdClpBufferPercent: bodyUsdClpBuffer,
       totalMarginPercent: bodyMargin,
-      applyTLC: bodyApplyTLC, // Permitir override de TLC
-      updateFactorManual: bodyUpdateFactor // Permitir override del factor de actualización
-      // Añadir más parámetros si se pueden sobrescribir
+      applyTLC: bodyApplyTLC,
+      updateFactorManual: bodyUpdateFactor,
+      originalFactoryCostEUR: bodyOriginalFactoryCost // Permitir override del costo base si viene del body
     } = req.body;
 
     // Validación mínima
@@ -86,127 +88,115 @@ const calculatePricing = async (req, res) => {
       return res.status(400).json({ success: false, message: 'El código de producto es requerido.' });
     }
 
-    // 2. Obtener Categoría y Datos Predeterminados de Override
+    // 2. Obtener Categoría y Datos Reales de Override desde DB
     const { categoryId } = await getProductCategoryAndId(productCode);
-    const overrideData = await fetchCategoryOverrideData(categoryId);
-    const defaultParams = overrideData?.costos || {}; // Usar {} si no hay overrides
+    const overrideData = await fetchCategoryOverrideData(categoryId); // Llama a la función real
+    // Extraer los costos del override o usar un objeto vacío si no hay overrideData o costos
+    const dbParams = overrideData?.costos || {}; 
 
-    // 3. Combinar Parámetros (Prioridad: req.body > override > fallback)
-    const discountPercentage = bodyDiscount ?? defaultParams.descuento_fabricante ?? 0;
-    const yearsDifference = bodyYearsDiff ?? 2; // Fallback si no está en override ni body
-    const eurUsdBufferPercent = bodyEurUsdBuffer ?? defaultParams.buffer_eur_usd ?? 0;
-    const originCostsEUR = bodyOriginCosts ?? defaultParams.gasto_importacion_eur ?? 0; // Asumiendo mapeo
-    const mainFreightUSD = bodyFreight ?? defaultParams.flete_maritimo_usd ?? 0;
-    const destinationChargesUSD = bodyDestCharges ?? defaultParams.recargos_destino_usd ?? 0;
-    const insuranceRatePercent = bodyInsuranceRate ?? defaultParams.tasa_seguro ?? 0;
-    const customsAgentFeeUSD = bodyAgentFee ?? defaultParams.honorarios_agente_aduana_usd ?? 0;
-    const portExpensesUSD = bodyPortExpenses ?? defaultParams.gastos_portuarios_otros_usd ?? 0;
-    const nationalTransportCLP = bodyNatTransport ?? defaultParams.transporte_nacional_clp ?? 0;
-    const usdClpBufferPercent = bodyUsdClpBuffer ?? defaultParams.buffer_usd_clp ?? 0;
-    const totalMarginPercent = bodyMargin ?? defaultParams.margen_adicional_total ?? 0;
-    const applyTLC = bodyApplyTLC ?? false; // Default a no aplicar TLC si no se especifica
-    const factorActualizacionAnual = defaultParams.factor_actualizacion_anual ?? 0.05; // 5% fallback
+    // 3. Combinar Parámetros (Prioridad: req.body > override DB > fallback/placeholders)
+    // Nota: Los valores de override (dbParams) ya deberían estar en formato decimal gracias al Schema
+    const discountPercentage = bodyDiscount ?? dbParams.descuento_fabricante ?? 0;
+    const yearsDifference = bodyYearsDiff ?? 2; // Usar 2 como fallback si no viene en body ni override
+    const eurUsdBufferPercent = bodyEurUsdBuffer ?? dbParams.buffer_eur_usd ?? 0;
+    // Asumiendo que 'gasto_importacion_eur' en DB mapea a originCostsEUR
+    const originCostsEUR = bodyOriginCosts ?? dbParams.gasto_importacion_eur ?? 0; 
+    const mainFreightUSD = bodyFreight ?? dbParams.flete_maritimo_usd ?? 0;
+    const destinationChargesUSD = bodyDestCharges ?? dbParams.recargos_destino_usd ?? 0;
+    const insuranceRatePercent = bodyInsuranceRate ?? dbParams.tasa_seguro ?? 0;
+    const customsAgentFeeUSD = bodyAgentFee ?? dbParams.honorarios_agente_aduana_usd ?? 0;
+    const portExpensesUSD = bodyPortExpenses ?? dbParams.gastos_portuarios_otros_usd ?? 0;
+    const nationalTransportCLP = bodyNatTransport ?? dbParams.transporte_nacional_clp ?? 0;
+    const usdClpBufferPercent = bodyUsdClpBuffer ?? dbParams.buffer_usd_clp ?? 0;
+    const totalMarginPercent = bodyMargin ?? dbParams.margen_adicional_total ?? 0;
+    const applyTLC = bodyApplyTLC ?? false; // Default false
+    const factorActualizacionAnual = dbParams.factor_actualizacion_anual ?? 0.05; // Fallback 5%
+    const adValoremRate = applyTLC ? 0 : (dbParams.derecho_ad_valorem ?? 0.06); // Fallback 6%
+    const ivaRate = dbParams.iva ?? 0.19; // Fallback 19%
 
     // 4. Obtener Datos Adicionales (Tipos de Cambio, Costo Base)
-    const currentEurUsdRate = await getExchangeRate('EUR', 'USD'); // Podría venir de overrideData también?
-    const currentUsdClpRate = await getExchangeRate('USD', 'CLP'); // Podría venir de overrideData también?
-    const originalFactoryCostEUR = await getProductBaseCost(productCode);
+    // Prioridad: override DB > Placeholder API > fallback
+    const currentEurUsdRate = dbParams.tipo_cambio_eur_usd ?? await getExchangeRate('EUR', 'USD');
+    const currentUsdClpRate = dbParams.dolar_observado_actual ?? await getExchangeRate('USD', 'CLP');
+    // Prioridad: body > override DB > Placeholder API > fallback
+    const originalFactoryCostEUR = bodyOriginalFactoryCost ?? dbParams.costo_fabrica_original_eur ?? await getProductBaseCost(productCode);
 
     // --- 5. Ejecutar Lógica de Cálculo Detallada ---
-
-    // Paso 1-5: Costo Fábrica Actualizado y con Descuento (EXW EUR)
     const updateFactor = bodyUpdateFactor ?? Math.pow(1 + factorActualizacionAnual, yearsDifference);
     const updatedFactoryCostEUR = originalFactoryCostEUR * updateFactor;
     const finalFactoryCostEUR_EXW = updatedFactoryCostEUR * (1 - discountPercentage);
-
-    // Paso 6-9: Conversión EUR a USD con Buffer
     const appliedEurUsdRate = currentEurUsdRate * (1 + eurUsdBufferPercent);
     const finalFactoryCostUSD_EXW = finalFactoryCostEUR_EXW * appliedEurUsdRate;
-
-    // Paso 10-14: Costos Logísticos Totales (USD)
     const originCostsUSD = originCostsEUR * appliedEurUsdRate;
     const totalFreightHandlingUSD = originCostsUSD + mainFreightUSD + destinationChargesUSD;
-
-    // Paso 15-18: Cálculo Seguro (USD)
     const cfrApproxUSD = finalFactoryCostUSD_EXW + totalFreightHandlingUSD;
-    const insuranceBaseUSD = cfrApproxUSD * 1.10; // Asegurando 110%
+    const insuranceBaseUSD = cfrApproxUSD * 1.10; 
     const insurancePremiumUSD = insuranceBaseUSD * insuranceRatePercent;
-
-    // Paso 19: Valor CIF (USD)
     const cifValueUSD = finalFactoryCostUSD_EXW + totalFreightHandlingUSD + insurancePremiumUSD;
-
-    // Paso 20-24: Costos Importación (USD)
-    const adValoremRate = applyTLC ? 0 : (defaultParams.derecho_ad_valorem ?? 0.06); // Usar override o fallback
     const adValoremAmountUSD = cifValueUSD * adValoremRate;
     const ivaBaseUSD = cifValueUSD + adValoremAmountUSD;
-    const ivaRate = defaultParams.iva ?? 0.19; // Usar override o fallback
     const ivaAmountUSD = ivaBaseUSD * ivaRate;
     const totalImportCostsUSD = adValoremAmountUSD + customsAgentFeeUSD + portExpensesUSD;
-
-    // Paso 25-27: Transporte Nacional (USD)
     const nationalTransportUSD = nationalTransportCLP / currentUsdClpRate;
-
-    // Paso 28: Landed Cost (USD) - Sin IVA
     const landedCostUSD = cifValueUSD + totalImportCostsUSD + nationalTransportUSD;
-
-    // Paso 29-31: Conversión a CLP con Buffer
     const appliedUsdClpRate = currentUsdClpRate * (1 + usdClpBufferPercent);
     const landedCostCLP = landedCostUSD * appliedUsdClpRate;
-
-    // Paso 32-34: Aplicación Margen y Precio Venta Neto (CLP)
     const marginAmountCLP = landedCostCLP * totalMarginPercent;
     const netSalePriceCLP = landedCostCLP + marginAmountCLP;
-
-    // Paso 35-36: Cálculo IVA Venta y Precio Venta Total (CLP)
     const saleIvaAmountCLP = netSalePriceCLP * ivaRate;
     const finalSalePriceCLP = netSalePriceCLP + saleIvaAmountCLP;
 
-    // 6. Estructurar Respuesta
+    // 6. Estructurar Respuesta (CORREGIDO y COMPLETO en inputsUsed)
     const results = {
-      inputsUsed: { // Mostrar qué valores se usaron finalmente
-        productCode,
-        categoryId,
-        discountPercentage,
-        yearsDifference,
-        eurUsdBufferPercent,
-        originCostsEUR,
+      inputsUsed: { 
+        // Identificación
+        productCode, 
+        categoryId: overrideData?._id || 'N/A', // Usar el _id del override encontrado (global o cat_...)
+        // Parámetros base y de configuración (los valores *finales* usados en el cálculo)
+        originalFactoryCostEUR, // El costo base ANTES de actualizar
+        discountPercentage, 
+        yearsDifference, 
+        factorActualizacionAnual, // El factor ANUAL base
+        updateFactorManual: bodyUpdateFactor, // Incluir si se envió un factor manual
+        eurUsdBufferPercent, 
+        originCostsEUR, 
         mainFreightUSD,
-        destinationChargesUSD,
-        insuranceRatePercent,
-        customsAgentFeeUSD,
+        destinationChargesUSD, 
+        insuranceRatePercent, 
+        customsAgentFeeUSD, 
         portExpensesUSD,
-        nationalTransportCLP,
-        usdClpBufferPercent,
-        totalMarginPercent,
+        nationalTransportCLP, 
+        usdClpBufferPercent, 
+        totalMarginPercent, 
         applyTLC,
-        updateFactor,
-        factorActualizacionAnual,
-        adValoremRate,
-        ivaRate
+        adValoremRate, // La tasa final usada (0 si TLC=true)
+        ivaRate,
+        // Tipos de cambio base (antes de buffer)
+        currentEurUsdRate, 
+        currentUsdClpRate  
       },
       calculations: {
-        originalFactoryCostEUR,
-        updatedFactoryCostEUR,
+        // Resultados intermedios y finales
+        updateFactor, // El factor de actualización total aplicado
+        updatedFactoryCostEUR, 
         finalFactoryCostEUR_EXW,
-        currentEurUsdRate,
-        appliedEurUsdRate,
-        finalFactoryCostUSD_EXW,
-        originCostsUSD,
-        totalFreightHandlingUSD,
-        cfrApproxUSD,
-        insurancePremiumUSD,
+        appliedEurUsdRate, // Tipo de cambio CON buffer
+        finalFactoryCostUSD_EXW, 
+        originCostsUSD, 
+        totalFreightHandlingUSD, 
+        cfrApproxUSD, 
+        insurancePremiumUSD, 
         cifValueUSD,
-        adValoremAmountUSD,
-        totalImportCostsUSD,
-        ivaAmountUSD, // IVA de importación calculado
-        currentUsdClpRate,
-        nationalTransportUSD,
-        landedCostUSD,
-        appliedUsdClpRate,
+        adValoremAmountUSD, // El monto calculado
+        totalImportCostsUSD, 
+        ivaAmountUSD, // El IVA de importación calculado 
+        nationalTransportUSD, 
+        landedCostUSD, 
+        appliedUsdClpRate, // Tipo de cambio CON buffer
         landedCostCLP,
-        marginAmountCLP,
-        netSalePriceCLP,
-        saleIvaAmountCLP, // IVA de venta calculado
+        marginAmountCLP, 
+        netSalePriceCLP, 
+        saleIvaAmountCLP, // El IVA de la venta calculado
         finalSalePriceCLP
       }
     };
@@ -219,7 +209,7 @@ const calculatePricing = async (req, res) => {
   }
 };
 
+// Exportar solo la función de cálculo principal como solicitado
 module.exports = {
-  calculatePricing,
-  // Exportar otras funciones si se crean más en este controlador
+  calculatePricing
 }; 
