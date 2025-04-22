@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { SlidersHorizontal, DollarSign, Euro, RefreshCw, Info, Save, Calendar, Filter, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { api } from '../services/api';
 import { CostParams, CurrencyWebhookResponse, CostParamsWebhookResponse } from '../types/costParams';
+import DashboardPanel from './DashboardPanel';
 
 // --- Interfaz Placeholder para un Perfil de Costos (la mantenemos por si se usa en otras tabs) ---
 interface PerfilCostoCategoria {

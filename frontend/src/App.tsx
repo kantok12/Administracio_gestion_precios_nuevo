@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, X, ArrowLeft, ArrowRight, Check, Settings, Eye, List, Loader2 } from 'lucide-react';
+import { Search, Filter, X, ArrowLeft, ArrowRight, Check, Settings, Eye, List, Loader2, LayoutDashboard } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import ecoAllianceLogo from './assets/Logotipo_EAX-EA.png';
@@ -338,233 +338,79 @@ export default function App() {
     setDetalleProducto(null);
   };
 
-  // Estilos base para los enlaces de navegación
-  const baseLinkStyle: LinkStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '12px 16px',
-    fontSize: '14px',
-    fontWeight: 500,
-    textDecoration: 'none',
-    color: '#374151', // Color por defecto
-    borderLeft: '4px solid transparent' // Borde transparente por defecto
-  };
-
-  // Estilos para el enlace activo
-  const activeLinkStyle: LinkStyle = {
-    ...baseLinkStyle,
-    backgroundColor: '#e3f2fd',
-    color: '#1e88e5',
-    borderLeft: '4px solid #1e88e5'
-  };
-
-  // Función para determinar el estilo del enlace
+  // Función para determinar el estilo del enlace activo
   const getLinkStyle = (path: string): LinkStyle => {
-    const currentPath = location.pathname;
+    const isActive = location.pathname === path;
+    const baseStyle: LinkStyle = {
+      display: 'flex',
+      alignItems: 'center',
+      padding: '10px 16px', // Equivalente a px-4 py-2.5
+      borderRadius: '6px', // Equivalente a rounded-md
+      fontSize: '14px', // Equivalente a text-sm
+      fontWeight: 500, // Equivalente a font-medium
+      textDecoration: 'none',
+      transition: 'background-color 0.15s ease, color 0.15s ease',
+      marginBottom: '4px', // Espacio entre botones
+    };
+    const activeStyle: LinkStyle = {
+      backgroundColor: '#e0f2fe', // bg-sky-100
+      color: '#0369a1', // text-sky-700
+      borderLeft: '4px solid #0ea5e9', // border-l-4 border-sky-500
+      paddingLeft: '12px', // Ajustar padding por el borde
+    };
+    const inactiveStyle: LinkStyle = {
+      color: '#4b5563', // text-gray-600
+    };
+     // Estilo hover para inactivos (simulado con CSS o lógica más compleja si es necesario)
+     // En un componente real, usarías :hover en CSS o estados onMouseEnter/Leave
     
-    // Si estamos en la ruta raíz, activar EQUIPOS
-    if (currentPath === '/' && path === '/equipos') {
-      return activeLinkStyle;
-    }
-    
-    // Para cualquier otra ruta, activar solo si coincide exactamente
-    return currentPath === path ? activeLinkStyle : baseLinkStyle;
+    return { ...baseStyle, ...(isActive ? activeStyle : inactiveStyle) };
   };
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      backgroundColor: '#f9fafb', 
-      display: 'flex',
-      fontFamily: 'Inter, system-ui, Avenir, Helvetica, Arial, sans-serif'
-    }}>
-      {/* Sidebar */}
+    <div style={{ display: 'flex', height: '100vh', backgroundColor: '#f3f4f6' /* bg-gray-100 */ }}>
+      {/* Barra lateral */}
       <aside style={{ 
-        width: '240px', 
-        backgroundColor: 'white', 
-        boxShadow: '0 2px 4px rgba(0,0,0,0.05)', 
-        display: 'flex', 
-        flexDirection: 'column',
-        borderRight: '1px solid #e5e7eb' 
-      }}>
-        <div style={{ 
-          padding: '24px 16px 16px 16px', 
+          width: '240px', // Ancho fijo
+          backgroundColor: 'white', 
+          borderRight: '1px solid #e5e7eb', // border-r border-gray-200
           display: 'flex', 
-          justifyContent: 'center' 
-        }}>
-          <img 
-            src={ecoAllianceLogo} 
-            alt="Eco Alliance Logo" 
-            style={{ height: '40px', width: 'auto' }} 
-          />
+          flexDirection: 'column',
+          padding: '16px' // p-4
+       }}>
+        {/* Logo */}
+        <div style={{ marginBottom: '24px', padding: '8px 0' }}>
+          <img src={ecoAllianceLogo} alt="Eco Alliance Logo" style={{ height: '40px', display: 'block', margin: '0 auto' }} />
         </div>
 
-        <nav style={{ marginTop: '16px', flex: '1', padding: '0 8px' }}>
+        {/* Navegación */}
+        <nav style={{ flexGrow: 1 }}>
+          {/* --- ENLACE DASHBOARD --- */}
+          <Link to="/dashboard" style={getLinkStyle('/dashboard')}>
+            <LayoutDashboard size={18} style={{ marginRight: '12px' /* mr-3 */ }} />
+            DASHBOARD
+          </Link>
+          {/* --- ENLACE EQUIPOS --- */}
           <Link to="/" style={getLinkStyle('/')}>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '8px', 
-              padding: '12px 16px', 
-              fontSize: '14px', 
-              fontWeight: '500'
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="9"></rect>
-                <rect x="14" y="3" width="7" height="5"></rect>
-                <rect x="14" y="12" width="7" height="9"></rect>
-                <rect x="3" y="16" width="7" height="5"></rect>
-              </svg>
-              DASHBOARD
-            </div>
+            <List size={18} style={{ marginRight: '12px' }} />
+            EQUIPOS
           </Link>
-          <Link to="/equipos" style={getLinkStyle('/equipos')}>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '8px', 
-              padding: '12px 16px', 
-              fontSize: '14px', 
-              fontWeight: '500'
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20V10"></path>
-                <path d="M18 20V4"></path>
-                <path d="M6 20v-8"></path>
-              </svg>
-              EQUIPOS
-            </div>
-          </Link>
+          {/* --- ENLACE ADMIN --- */}
           <Link to="/admin" style={getLinkStyle('/admin')}>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '8px', 
-              padding: '12px 16px', 
-              fontSize: '14px', 
-              fontWeight: '500'
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-              </svg>
-              ADMIN
-            </div>
+            <Settings size={18} style={{ marginRight: '12px' }} />
+            ADMIN
           </Link>
         </nav>
 
-        <div style={{ padding: '16px', marginTop: 'auto', borderTop: '1px solid #e5e7eb' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            padding: '8px 16px', 
-            fontSize: '14px', 
-            fontWeight: '500',
-            borderRadius: '4px'
-          }}>
-            CONFIGURACIÓN
-          </div>
-        </div>
+        {/* Footer de la barra lateral (opcional) */}
+        {/* <div>Footer</div> */}
       </aside>
 
-      {/* Panel Principal - Aquí se renderizará la ruta activa */}
-      <main style={{ 
-        flex: '1', 
-        overflow: 'auto',
-        animation: 'fadeIn 0.5s ease-out' 
-      }}>
-        <Outlet /> {/* Componente de react-router-dom que renderiza la ruta hija */} 
+      {/* Contenido principal */}
+      <main style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f9fafb' /* Slightly different gray */ }}>
+        {/* Outlet renderizará el componente de la ruta activa */}
+        <Outlet /> 
       </main>
-      
-      {/* Mantener los estilos globales si es necesario */}
-      <style>
-        {`
-           @keyframes spin { /* ... */ }
-           @keyframes fadeIn { /* ... */ }
-           @keyframes slideIn { /* ... */ }
-           /* ... otros estilos globales ... */
-           @keyframes spin { 
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-
-          @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-          }
-
-          @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-          }
-
-          @keyframes shimmer {
-            0% { background-position: -1000px 0; }
-            100% { background-position: 1000px 0; }
-          }
-
-          .loading-shimmer {
-            animation: shimmer 2s infinite linear;
-            background: linear-gradient(to right, #f6f7f8 8%, #edeef1 18%, #f6f7f8 33%);
-            background-size: 1000px 100%;
-          }
-
-          .hover-scale {
-            transition: transform 0.2s ease;
-          }
-
-          .hover-scale:hover {
-            transform: scale(1.02);
-          }
-
-          .fade-in {
-            animation: fadeIn 0.3s ease-in;
-          }
-
-          .slide-in {
-            animation: slideIn 0.5s ease-out;
-          }
-
-          .table-row {
-            transition: background-color 0.2s ease;
-          }
-
-          .table-row:hover {
-            background-color: #f8fafc !important;
-          }
-
-          .button-hover {
-            transition: all 0.2s ease;
-          }
-
-          .button-hover:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            background-color: #f3f4f6;
-          }
-
-          .button-hover:active {
-            transform: translateY(0);
-            background-color: #e5e7eb;
-          }
-
-          .modal-overlay {
-            animation: fadeIn 0.2s ease-out;
-          }
-
-          .modal-content {
-            animation: slideIn 0.3s ease-out;
-          }
-        `}
-      </style>
     </div>
   );
 }

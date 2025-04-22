@@ -57,7 +57,7 @@ const formatCurrency = (value: number | undefined | null, currency: 'CLP' | 'USD
     minimumFractionDigits: currency === 'CLP' ? 0 : 2,
     maximumFractionDigits: currency === 'CLP' ? 0 : 2,
   };
-  const locale = currency === 'CLP' ? 'es-CL' : 'de-DE'; 
+  const locale = currency === 'CLP' ? 'es-CL' : (currency === 'EUR' ? 'de-DE' : 'en-US');
   return new Intl.NumberFormat(locale, options).format(value);
 };
 
@@ -73,9 +73,13 @@ const formatNumber = (value: number | undefined | null, decimals = 0) => {
 };
 
 const formatDate = (value: string | undefined | null) => {
-  if (value === undefined || value === null || value === '') return '-';
-  const date = new Date(value);
-  return date.toLocaleDateString();
+  if (!value) return '-';
+  try {
+    // Intentar mostrar solo la fecha YYYY-MM-DD
+    return new Date(value).toISOString().split('T')[0];
+  } catch (e) {
+    return value; // Devolver el string original si no se puede parsear
+  }
 };
 
 // --- ASEGURARSE DE QUE ESTA DEFINICIÓN ESTÉ AQUÍ ---
@@ -103,7 +107,74 @@ const costLabelsAndFormatters: { [key: string]: { label: string; format: (val: a
 };
 // -------------------------------------------------------------
 
-// --- Fin Helpers ---
+// --- NUEVO: Mapeo para inputs y cálculos ---
+// (Necesitaríamos mapeos similares a costLabelsAndFormatters para inputsUsed y calculations)
+// Ejemplo simple (DEBES COMPLETARLO CON TODAS LAS CLAVES Y ETIQUETAS CORRECTAS):
+const inputLabels: { [key: string]: string } = {
+  productCode: "Código Producto:",
+  categoryId: "Categoría Usada:",
+  originalFactoryCostEUR: "Costo Fábrica Original (Input):",
+  discountPercentage: "Descuento Aplicado (Input):",
+  yearsDifference: "Años Diferencia (Input):",
+  factorActualizacionAnual: "Factor Act. Anual (Input):",
+  // ... Añadir TODAS las claves de inputsUsed ...
+  // Asumiendo algunas claves comunes basadas en la lógica anterior
+  currentEurUsdRate: "Tipo Cambio EUR/USD (Base Input):",
+  eurUsdBufferPercent: "Buffer EUR/USD (Input %):",
+  originCostsEUR: "Costos Origen EUR (Input):",
+  mainFreightUSD: "Flete Marítimo USD (Input):",
+  destinationChargesUSD: "Recargos Destino USD (Input):",
+  insuranceRatePercent: "Tasa Seguro (Input %):",
+  customsAgentFeeUSD: "Agente Aduana USD (Input):",
+  portExpensesUSD: "Gastos Portuarios USD (Input):",
+  nationalTransportCLP: "Transp. Nacional CLP (Input):",
+  currentUsdClpRate: "Tipo Cambio USD/CLP (Obs Input):",
+  usdClpBufferPercent: "Buffer USD/CLP (Input %):", 
+  totalMarginPercent: "Margen Total (Input %):",
+  applyTLC: "TLC Aplicado (Input):",
+  adValoremRate: "Ad Valorem (Input %):",
+  ivaRate: "IVA (Input %):"
+};
+
+const calculationLabels: { [key: string]: string } = {
+  updateFactor: "Factor Actualización Aplicado:",
+  updatedFactoryCostEUR: "Costo Fábrica Act. EUR:",
+  finalFactoryCostEUR_EXW: "Costo Final Fábrica EXW EUR:",
+  appliedEurUsdRate: "Tipo Cambio EUR/USD Aplicado:",
+  finalFactoryCostUSD_EXW: "Costo Final Fábrica EXW USD:",
+  originCostsUSD: "Costos Origen USD:",
+  // ... Añadir TODAS las claves de calculations ...
+  // Asumiendo algunas claves comunes
+  totalFreightHandlingUSD: "Flete y Manejos Totales USD:",
+  cfrApproxUSD: "Valor CFR Aprox. USD:",
+  insurancePremiumUSD: "Prima Seguro USD:",
+  cifValueUSD: "Valor CIF USD:",
+  adValoremAmountUSD: "Monto Ad Valorem USD:",
+  totalImportCostsUSD: "Costos Importación USD (sin IVA Imp.):",
+  ivaAmountUSD: "IVA Importación USD:",
+  nationalTransportUSD: "Transp. Nacional USD:",
+  landedCostUSD: "Landed Cost USD (Neto):",
+  appliedUsdClpRate: "Tipo Cambio USD/CLP Aplicado:",
+  landedCostCLP: "Landed Cost CLP (Neto):",
+  marginAmountCLP: "Monto Margen CLP:",
+  netSalePriceCLP: "Precio Venta Neto CLP:",
+  saleIvaAmountCLP: "Monto IVA Venta CLP:",
+  finalSalePriceCLP: "Precio Venta Total Cliente (CLP):"
+};
+
+// Función helper genérica para formatear valores (simplificada)
+const formatValue = (key: string, value: any): string => {
+  if (value === undefined || value === null) return '-';
+  if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+  if (key.toLowerCase().includes('eur')) return formatCurrency(value, 'EUR');
+  if (key.toLowerCase().includes('usd')) return formatCurrency(value, 'USD');
+  if (key.toLowerCase().includes('clp')) return formatCurrency(value, 'CLP');
+  // Ajuste: buscar 'percent' o 'rate' en la CLAVE, no en el VALOR
+  if (key.toLowerCase().includes('percent') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('factor') || key.toLowerCase().includes('anual')) return formatPercent(value);
+  if (typeof value === 'number') return formatNumber(value, key.includes('Rate') || key.includes('Factor') ? 4 : (key.includes('CLP') ? 0 : 2)); // Más decimales para tasas
+  return String(value);
+}
+// --- Fin Mapeo y Formato ---
 
 export default function DetallesEnvioPanel({
   productoPrincipal,
@@ -151,7 +222,7 @@ export default function DetallesEnvioPanel({
   // -----------------------------------------------------------
 
   // --- Estilos (como los teníamos antes, MÁS COMPLETOS) ---
-  const cardStyle: React.CSSProperties = { backgroundColor: 'white', borderRadius: '8px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '24px' };
+  const cardStyle: React.CSSProperties = { backgroundColor: 'white', borderRadius: '8px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '24px', minHeight: '200px' };
   const footerStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '32px' };
   const buttonStyle: React.CSSProperties = { padding: '10px 20px', borderRadius: '6px', border: '1px solid transparent', cursor: 'pointer', fontSize: '14px', fontWeight: 500 };
   const primaryButtonStyle: React.CSSProperties = { ...buttonStyle, backgroundColor: '#1e88e5', color: 'white', borderColor: '#1e88e5' };
@@ -166,23 +237,10 @@ export default function DetallesEnvioPanel({
   const valueStyle: React.CSSProperties = { color: '#343a40', fontWeight: 500, textAlign: 'right', wordBreak: 'break-word'}; // Permitir salto de línea
   const loadingStyle: React.CSSProperties = { textAlign: 'center', padding: '40px', color: '#6c757d' };
   const errorStyle: React.CSSProperties = { textAlign: 'center', padding: '20px', color: '#dc3545', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px' };
-  const finalPriceStyle: React.CSSProperties = { ...itemStyle, backgroundColor: '#e3f2fd', marginTop: '16px', gridColumn: '1 / -1' }; // Ocupa todo el ancho
-  const finalLabelStyle: React.CSSProperties = { ...labelStyle, color: '#1e88e5', fontWeight: 600, fontSize: '14px' }; // Más grande
-  const finalValueStyle: React.CSSProperties = { ...valueStyle, color: '#1e88e5', fontWeight: 600, fontSize: '15px' }; // Más grande
-  const preStyle: React.CSSProperties = { backgroundColor: '#f8f9fa', border: '1px solid #eee', padding: '15px', borderRadius: '4px', fontSize: '12px', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' };
-  // --- Fin Estilos ---
-
-  // Extraer datos para facilitar acceso
-  const inputs = pricingResult?.inputsUsed;
-  const calcs = pricingResult?.calculations;
-
-  // !!! --- AÑADIDO PARA DEPURACIÓN --- !!!
-  React.useEffect(() => {
-    console.log('>>> DetallesEnvioPanel - Received pricingResult:', pricingResult);
-    console.log('>>> DetallesEnvioPanel - Extracted inputs:', inputs);
-    console.log('>>> DetallesEnvioPanel - Extracted calcs:', calcs);
-  }, [pricingResult, inputs, calcs]); // Se ejecuta cuando cambian estos valores
-  // !!! ------------------------------ !!!
+  const sectionSeparatorStyle: React.CSSProperties = { borderTop: '1px dashed #ccc', margin: '32px 0' };
+  const finalPriceStyle: React.CSSProperties = { ...itemStyle, backgroundColor: '#e3f2fd', marginTop: '16px', gridColumn: '1 / -1' }; 
+  const finalLabelStyle: React.CSSProperties = { ...labelStyle, color: '#1e88e5', fontWeight: 600, fontSize: '14px' }; 
+  const finalValueStyle: React.CSSProperties = { ...valueStyle, color: '#1e88e5', fontWeight: 600, fontSize: '15px' }; 
 
   return (
     <div style={{ padding: '24px' }}> 
@@ -247,6 +305,60 @@ export default function DetallesEnvioPanel({
            </div>
          )}
       </div>
+
+      {/* --- SEPARADOR --- */}
+      <div style={sectionSeparatorStyle}></div>
+      {/* --- FIN SEPARADOR --- */}
+
+      {/* --- MODIFICADO: SECCIÓN 2 PARA MOSTRAR pricingResult FORMATEADO --- */}
+      <h2 style={panelTitleStyle}> 
+         Resultado del Cálculo (Desde /calculate)
+      </h2>
+      <div> 
+        {isLoading && ( <div style={loadingStyle}>Calculando precios...</div> )}
+        {error && ( <div style={errorStyle}><strong>Error al calcular precios:</strong> {error}</div> )}
+
+        {!isLoading && !error && pricingResult && pricingResult.inputsUsed && pricingResult.calculations && (
+          <>
+            {/* --- Parámetros Utilizados --- */}
+            <h3 style={sectionTitleStyle}>Parámetros Utilizados en Cálculo (Origen: {pricingResult.inputsUsed.categoryId || 'Desconocido'})</h3>
+            <div style={gridStyle}>
+              {Object.entries(pricingResult.inputsUsed).map(([key, value]) => (
+                <div key={`input-${key}`} style={itemStyle}>
+                  <span style={labelStyle}>{inputLabels[key] || key}:</span> {/* Usar etiqueta o clave original */}
+                  <span style={valueStyle}>{formatValue(key, value)}</span> {/* Usar formateador genérico */}
+                </div>
+              ))}
+            </div>
+
+            {/* --- Desglose del Cálculo --- */}
+            <h3 style={{...sectionTitleStyle, marginTop: '24px'}}>Desglose del Cálculo</h3>
+            <div style={gridStyle}>
+               {Object.entries(pricingResult.calculations)
+                 .filter(([key]) => key !== 'finalSalePriceCLP') // Excluir precio final de la grilla principal
+                 .map(([key, value]) => (
+                   <div key={`calc-${key}`} style={itemStyle}>
+                     <span style={labelStyle}>{calculationLabels[key] || key}:</span>
+                     <span style={valueStyle}>{formatValue(key, value)}</span>
+                   </div>
+               ))}
+            </div>
+
+            {/* --- Precio Final Resaltado --- */}
+            {pricingResult.calculations.finalSalePriceCLP !== undefined && (
+               <div style={finalPriceStyle}>
+                  <span style={finalLabelStyle}>{calculationLabels['finalSalePriceCLP'] || 'Precio Venta Total Cliente (CLP)'}:</span>
+                  <span style={finalValueStyle}>{formatValue('finalSalePriceCLP', pricingResult.calculations.finalSalePriceCLP)}</span>
+               </div>
+            )}
+          </>
+        )}
+        
+         {!isLoading && !error && !pricingResult && (
+           <p style={{ color: '#6c757d', fontStyle: 'italic', textAlign:'center', marginTop: '20px' }}>No se ha recibido resultado del cálculo aún o la llamada falló.</p>
+         )}
+      </div>
+      {/* --- FIN SECCIÓN 2 --- */}
 
       {/* Footer de navegación */}
       <div style={footerStyle}>

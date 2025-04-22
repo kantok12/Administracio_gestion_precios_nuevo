@@ -60,7 +60,7 @@ const fetchCategoryOverrideData = async (categoryId) => {
   }
 };
 
-// --- Controlador Principal para el Cálculo (Modificado para usar datos reales y respuesta completa) ---
+// --- Controlador Principal para el Cálculo (Modificado para incluir detailedSteps) ---
 const calculatePricing = async (req, res) => {
   try {
     // 1. Extraer Inputs del Request Body
@@ -96,70 +96,140 @@ const calculatePricing = async (req, res) => {
 
     // 3. Combinar Parámetros (Prioridad: req.body > override DB > fallback/placeholders)
     // Nota: Los valores de override (dbParams) ya deberían estar en formato decimal gracias al Schema
-    const discountPercentage = bodyDiscount ?? dbParams.descuento_fabricante ?? 0;
-    const yearsDifference = bodyYearsDiff ?? 2; // Usar 2 como fallback si no viene en body ni override
-    const eurUsdBufferPercent = bodyEurUsdBuffer ?? dbParams.buffer_eur_usd ?? 0;
-    // Asumiendo que 'gasto_importacion_eur' en DB mapea a originCostsEUR
-    const originCostsEUR = bodyOriginCosts ?? dbParams.gasto_importacion_eur ?? 0; 
-    const mainFreightUSD = bodyFreight ?? dbParams.flete_maritimo_usd ?? 0;
-    const destinationChargesUSD = bodyDestCharges ?? dbParams.recargos_destino_usd ?? 0;
-    const insuranceRatePercent = bodyInsuranceRate ?? dbParams.tasa_seguro ?? 0;
-    const customsAgentFeeUSD = bodyAgentFee ?? dbParams.honorarios_agente_aduana_usd ?? 0;
-    const portExpensesUSD = bodyPortExpenses ?? dbParams.gastos_portuarios_otros_usd ?? 0;
-    const nationalTransportCLP = bodyNatTransport ?? dbParams.transporte_nacional_clp ?? 0;
-    const usdClpBufferPercent = bodyUsdClpBuffer ?? dbParams.buffer_usd_clp ?? 0;
-    const totalMarginPercent = bodyMargin ?? dbParams.margen_adicional_total ?? 0;
+    const discountPercentage = bodyDiscount ?? dbParams.descuento_fabricante ?? 0.10; // Ejemplo: default 10%
+    const yearsDifference = bodyYearsDiff ?? 2; // Ejemplo: default 2 años
+    const eurUsdBufferPercent = (bodyEurUsdBuffer ?? dbParams.buffer_eur_usd) ?? 0.02; // Ejemplo: default 2%
+    const originCostsEUR = bodyOriginCosts ?? dbParams.transporte_local_eur + (dbParams.gasto_importacion_eur || 0) ?? 1200; // Sumar locales + importación si existen, fallback 1200
+    const mainFreightUSD = bodyFreight ?? dbParams.flete_maritimo_usd ?? 3500; // Ejemplo: default 3500
+    const destinationChargesUSD = bodyDestCharges ?? dbParams.recargos_destino_usd ?? 500; // Ejemplo: default 500
+    const insuranceRatePercent = (bodyInsuranceRate ?? dbParams.tasa_seguro) ?? 0.006; // Ejemplo: default 0.6%
+    const customsAgentFeeUSD = bodyAgentFee ?? dbParams.honorarios_agente_aduana_usd ?? 600; // Ejemplo: default 600
+    const portExpensesUSD = bodyPortExpenses ?? dbParams.gastos_portuarios_otros_usd ?? 200; // Ejemplo: default 200
+    const nationalTransportCLP = bodyNatTransport ?? dbParams.transporte_nacional_clp ?? 950000; // Ejemplo: default 950000
+    const usdClpBufferPercent = (bodyUsdClpBuffer ?? dbParams.buffer_usd_clp) ?? 0.03; // Ejemplo: default 3%
+    const totalMarginPercent = (bodyMargin ?? dbParams.margen_adicional_total) ?? 0.35; // Ejemplo: default 35%
     const applyTLC = bodyApplyTLC ?? false; // Default false
     const factorActualizacionAnual = dbParams.factor_actualizacion_anual ?? 0.05; // Fallback 5%
     const adValoremRate = applyTLC ? 0 : (dbParams.derecho_ad_valorem ?? 0.06); // Fallback 6%
     const ivaRate = dbParams.iva ?? 0.19; // Fallback 19%
 
-    // 4. Obtener Datos Adicionales (Tipos de Cambio, Costo Base)
-    // Prioridad: override DB > Placeholder API > fallback
-    const currentEurUsdRate = dbParams.tipo_cambio_eur_usd ?? await getExchangeRate('EUR', 'USD');
-    const currentUsdClpRate = dbParams.dolar_observado_actual ?? await getExchangeRate('USD', 'CLP');
-    // Prioridad: body > override DB > Placeholder API > fallback
-    const originalFactoryCostEUR = bodyOriginalFactoryCost ?? dbParams.costo_fabrica_original_eur ?? await getProductBaseCost(productCode);
+    // 4. Obtener Datos Adicionales 
+    const currentEurUsdRate = dbParams.tipo_cambio_eur_usd ?? 1.08; // Ejemplo: default 1.08
+    const currentUsdClpRate = dbParams.dolar_observado_actual ?? 950; // Ejemplo: default 950
+    const originalFactoryCostEUR = bodyOriginalFactoryCost ?? dbParams.costo_fabrica_original_eur ?? 100000; // Ejemplo: default 100000
 
-    // --- 5. Ejecutar Lógica de Cálculo Detallada ---
+    // --- 5. Ejecutar Lógica de Cálculo Detallada Y REGISTRAR PASOS ---
+    const detailedSteps = []; // <<< INICIALIZAR ARRAY
+
+    // Registrar Inputs clave como "pasos" iniciales
+    detailedSteps.push({ step: 1, description: "Costo Fábrica Original (EUR)", value: originalFactoryCostEUR, currency: "EUR" });
+    detailedSteps.push({ step: 2, description: "Años Diferencia", value: yearsDifference });
+    // (Añadir otros inputs relevantes si se desea verlos explícitamente al inicio)
+    detailedSteps.push({ step: 6, description: "Tipo Cambio EUR/USD Actual", value: currentEurUsdRate });
+    detailedSteps.push({ step: 7, description: "Buffer % EUR/USD", value: eurUsdBufferPercent });
+    detailedSteps.push({ step: 10, description: "Costos en Origen (EUR)", value: originCostsEUR, currency: "EUR" });
+    detailedSteps.push({ step: 12, description: "Flete Marítimo Principal (USD)", value: mainFreightUSD, currency: "USD" });
+    detailedSteps.push({ step: 13, description: "Recargos Destino (USD)", value: destinationChargesUSD, currency: "USD" });
+    detailedSteps.push({ step: 16, description: "Tasa Seguro (%)", value: insuranceRatePercent });
+     detailedSteps.push({ step: 23, description: "Honorarios Agente Aduana (USD)", value: customsAgentFeeUSD, currency: "USD" });
+     detailedSteps.push({ step: 24, description: "Gastos Portuarios/Otros (USD)", value: portExpensesUSD, currency: "USD" });
+     detailedSteps.push({ step: 25, description: "Transporte Nacional (CLP)", value: nationalTransportCLP, currency: "CLP" });
+     detailedSteps.push({ step: 26, description: "Tipo Cambio USD/CLP Actual (Observado)", value: currentUsdClpRate });
+     detailedSteps.push({ step: 29, description: "Buffer % USD/CLP", value: usdClpBufferPercent });
+     detailedSteps.push({ step: 32, description: "% Adicional Total (Margen sobre Costo)", value: totalMarginPercent });
+    // ... (puedes añadir más inputs si es necesario)
+
+    // Cálculos y registro
     const updateFactor = bodyUpdateFactor ?? Math.pow(1 + factorActualizacionAnual, yearsDifference);
-    const updatedFactoryCostEUR = originalFactoryCostEUR * updateFactor;
-    const finalFactoryCostEUR_EXW = updatedFactoryCostEUR * (1 - discountPercentage);
-    const appliedEurUsdRate = currentEurUsdRate * (1 + eurUsdBufferPercent);
-    const finalFactoryCostUSD_EXW = finalFactoryCostEUR_EXW * appliedEurUsdRate;
-    const originCostsUSD = originCostsEUR * appliedEurUsdRate;
-    const totalFreightHandlingUSD = originCostsUSD + mainFreightUSD + destinationChargesUSD;
-    const cfrApproxUSD = finalFactoryCostUSD_EXW + totalFreightHandlingUSD;
-    const insuranceBaseUSD = cfrApproxUSD * 1.10; 
-    const insurancePremiumUSD = insuranceBaseUSD * insuranceRatePercent;
-    const cifValueUSD = finalFactoryCostUSD_EXW + totalFreightHandlingUSD + insurancePremiumUSD;
-    const adValoremAmountUSD = cifValueUSD * adValoremRate;
-    const ivaBaseUSD = cifValueUSD + adValoremAmountUSD;
-    const ivaAmountUSD = ivaBaseUSD * ivaRate;
-    const totalImportCostsUSD = adValoremAmountUSD + customsAgentFeeUSD + portExpensesUSD;
-    const nationalTransportUSD = nationalTransportCLP / currentUsdClpRate;
-    const landedCostUSD = cifValueUSD + totalImportCostsUSD + nationalTransportUSD;
-    const appliedUsdClpRate = currentUsdClpRate * (1 + usdClpBufferPercent);
-    const landedCostCLP = landedCostUSD * appliedUsdClpRate;
-    const marginAmountCLP = landedCostCLP * totalMarginPercent;
-    const netSalePriceCLP = landedCostCLP + marginAmountCLP;
-    const saleIvaAmountCLP = netSalePriceCLP * ivaRate;
-    const finalSalePriceCLP = netSalePriceCLP + saleIvaAmountCLP;
+    detailedSteps.push({ step: 3, description: "Factor Actualización", value: updateFactor });
 
-    // 6. Estructurar Respuesta (CORREGIDO y COMPLETO en inputsUsed)
+    const updatedFactoryCostEUR = originalFactoryCostEUR * updateFactor;
+    detailedSteps.push({ step: 4, description: "Costo Fábrica Actualizado (EUR)", value: updatedFactoryCostEUR, currency: "EUR" });
+
+    const finalFactoryCostEUR_EXW = updatedFactoryCostEUR * (1 - discountPercentage);
+    detailedSteps.push({ step: 5, description: "Costo Final Fábrica (EUR) - EXW", value: finalFactoryCostEUR_EXW, currency: "EUR" });
+    
+    const appliedEurUsdRate = currentEurUsdRate * (1 + eurUsdBufferPercent);
+    detailedSteps.push({ step: 8, description: "Tipo Cambio EUR/USD Aplicado", value: appliedEurUsdRate });
+
+    const finalFactoryCostUSD_EXW = finalFactoryCostEUR_EXW * appliedEurUsdRate;
+    detailedSteps.push({ step: 9, description: "Costo Final Fábrica (USD) - EXW", value: finalFactoryCostUSD_EXW, currency: "USD" });
+
+    const originCostsUSD = originCostsEUR * appliedEurUsdRate;
+    detailedSteps.push({ step: 11, description: "Costos en Origen (USD)", value: originCostsUSD, currency: "USD" });
+
+    const totalFreightHandlingUSD = originCostsUSD + mainFreightUSD + destinationChargesUSD;
+    detailedSteps.push({ step: 14, description: "Costo Total Flete y Manejos (USD)", value: totalFreightHandlingUSD, currency: "USD" });
+
+    const cfrApproxUSD = finalFactoryCostUSD_EXW + totalFreightHandlingUSD;
+    detailedSteps.push({ step: 15, description: "Base para Seguro (CFR Aprox - USD)", value: cfrApproxUSD, currency: "USD" });
+
+    const insuranceBaseUSD = cfrApproxUSD * 1.10; 
+    // Podríamos añadir un paso para insuranceBaseUSD si quisiéramos verlo
+    // detailedSteps.push({ step: 16.5, description: "Valor Asegurado (110% CFR)", value: insuranceBaseUSD, currency: "USD" });
+
+    const insurancePremiumUSD = insuranceBaseUSD * insuranceRatePercent;
+    detailedSteps.push({ step: 17, description: "Prima Seguro (USD)", value: insurancePremiumUSD, currency: "USD" });
+    
+    // Este paso 18 no parece necesario si el 19 es CIF = EXW + FleteManejos + Seguro
+    // const totalTransporteSeguroEXWUSD = totalFreightHandlingUSD + insurancePremiumUSD;
+    // detailedSteps.push({ step: 18, description: "Total Transporte y Seguro EXW (USD)", value: totalTransporteSeguroEXWUSD, currency: "USD" });
+
+    const cifValueUSD = finalFactoryCostUSD_EXW + totalFreightHandlingUSD + insurancePremiumUSD; // CIF = EXW + Flete/Manejos + Seguro
+    detailedSteps.push({ step: 19, description: "Valor CIF (USD)", value: cifValueUSD, currency: "USD" });
+
+    const adValoremAmountUSD = cifValueUSD * adValoremRate;
+    detailedSteps.push({ step: 20, description: `Derecho Ad Valorem (${adValoremRate * 100}%) (USD)`, value: adValoremAmountUSD, currency: "USD" });
+
+    const ivaBaseUSD = cifValueUSD + adValoremAmountUSD;
+    detailedSteps.push({ step: 21, description: "Base IVA (USD)", value: ivaBaseUSD, currency: "USD" });
+
+    const ivaAmountUSD = ivaBaseUSD * ivaRate;
+    detailedSteps.push({ step: 22, description: `IVA (${ivaRate * 100}%) (USD)`, value: ivaAmountUSD, currency: "USD" });
+    
+    // Este cálculo de "totalImportCostsUSD" no parece coincidir exactamente con el paso 28. El paso 28 suma CIF + AdValorem + Agente + Otros + TranspNacUSD.
+    // const totalImportCostsUSD = adValoremAmountUSD + customsAgentFeeUSD + portExpensesUSD; 
+    // detailedSteps.push({ step: XX, description: "Costos Importación (AdVal+Agente+Otros) USD", value: totalImportCostsUSD, currency: "USD" });
+
+    const nationalTransportUSD = nationalTransportCLP / currentUsdClpRate;
+    detailedSteps.push({ step: 27, description: "Transporte Nacional (USD)", value: nationalTransportUSD, currency: "USD" });
+
+    // Recalcular Landed Cost según descripción paso 28
+    const landedCostUSD = cifValueUSD + adValoremAmountUSD + customsAgentFeeUSD + portExpensesUSD + nationalTransportUSD;
+    detailedSteps.push({ step: 28, description: "Precio Neto Compra Base (USD) o "Landed Cost"", value: landedCostUSD, currency: "USD" });
+
+    const appliedUsdClpRate = currentUsdClpRate * (1 + usdClpBufferPercent);
+    detailedSteps.push({ step: 30, description: "Tipo Cambio USD/CLP Aplicado", value: appliedUsdClpRate });
+
+    const landedCostCLP = landedCostUSD * appliedUsdClpRate;
+    detailedSteps.push({ step: 31, description: "Precio Neto Compra Base (CLP)", value: landedCostCLP, currency: "CLP" });
+
+    const marginAmountCLP = landedCostCLP * totalMarginPercent;
+    detailedSteps.push({ step: 33, description: `Margen (${totalMarginPercent * 100}% sobre Costo) (CLP)`, value: marginAmountCLP, currency: "CLP" });
+
+    const netSalePriceCLP = landedCostCLP + marginAmountCLP;
+    detailedSteps.push({ step: 34, description: "Precio Venta Neto (CLP)", value: netSalePriceCLP, currency: "CLP" });
+
+    const saleIvaAmountCLP = netSalePriceCLP * ivaRate;
+    detailedSteps.push({ step: 35, description: `IVA Venta (${ivaRate * 100}%) (CLP)`, value: saleIvaAmountCLP, currency: "CLP" });
+
+    const finalSalePriceCLP = netSalePriceCLP + saleIvaAmountCLP;
+    detailedSteps.push({ step: 36, description: "Precio Venta Total Cliente (CLP)", value: finalSalePriceCLP, currency: "CLP" });
+
+
+    // 6. Estructurar Respuesta (AÑADIR detailedSteps)
     const results = {
+      // Mantener inputsUsed y calculations por si son útiles en otro lado
       inputsUsed: { 
-        // Identificación
         productCode, 
-        categoryId: overrideData?._id || 'N/A', // Usar el _id del override encontrado (global o cat_...)
-        // Parámetros base y de configuración (los valores *finales* usados en el cálculo)
-        originalFactoryCostEUR, // El costo base ANTES de actualizar
+        categoryId: overrideData?._id || 'N/A', 
+        originalFactoryCostEUR, 
         discountPercentage, 
         yearsDifference, 
-        factorActualizacionAnual, // El factor ANUAL base
-        updateFactorManual: bodyUpdateFactor, // Incluir si se envió un factor manual
+        factorActualizacionAnual, 
+        updateFactorManual: bodyUpdateFactor,
         eurUsdBufferPercent, 
-        originCostsEUR, 
+        originCostsEUR, // El valor combinado usado
         mainFreightUSD,
         destinationChargesUSD, 
         insuranceRatePercent, 
@@ -169,36 +239,37 @@ const calculatePricing = async (req, res) => {
         usdClpBufferPercent, 
         totalMarginPercent, 
         applyTLC,
-        adValoremRate, // La tasa final usada (0 si TLC=true)
+        adValoremRate, // Tasa final
         ivaRate,
-        // Tipos de cambio base (antes de buffer)
-        currentEurUsdRate, 
-        currentUsdClpRate  
+        currentEurUsdRate, // Tasa base
+        currentUsdClpRate  // Tasa base
       },
       calculations: {
-        // Resultados intermedios y finales
-        updateFactor, // El factor de actualización total aplicado
+        // Los resultados finales de cada cálculo importante
+        updateFactor, 
         updatedFactoryCostEUR, 
         finalFactoryCostEUR_EXW,
-        appliedEurUsdRate, // Tipo de cambio CON buffer
+        appliedEurUsdRate, 
         finalFactoryCostUSD_EXW, 
         originCostsUSD, 
         totalFreightHandlingUSD, 
         cfrApproxUSD, 
         insurancePremiumUSD, 
         cifValueUSD,
-        adValoremAmountUSD, // El monto calculado
-        totalImportCostsUSD, 
-        ivaAmountUSD, // El IVA de importación calculado 
+        adValoremAmountUSD, 
+        ivaAmountUSD, 
         nationalTransportUSD, 
         landedCostUSD, 
-        appliedUsdClpRate, // Tipo de cambio CON buffer
+        appliedUsdClpRate, 
         landedCostCLP,
         marginAmountCLP, 
         netSalePriceCLP, 
-        saleIvaAmountCLP, // El IVA de la venta calculado
+        saleIvaAmountCLP, 
         finalSalePriceCLP
-      }
+      },
+      // --- Añadir el array de pasos detallados ---
+      detailedSteps: detailedSteps 
+      // -------------------------------------------
     };
 
     res.status(200).json({ success: true, data: results });
