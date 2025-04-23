@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Producto } from './EquiposPanel';
+import type { Producto } from '../types/product';
 
 // --- Interfaz para el resultado del cálculo --- 
 interface PricingCalculationResult {

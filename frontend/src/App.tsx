@@ -5,7 +5,9 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import ecoAllianceLogo from './assets/Logotipo_EAX-EA.png';
 
 // --- Constants ---
-const sidebarWidth = 220; // Define sidebar width here
+// const sidebarWidth = 220; // Define sidebar width here - Reemplazada por SIDEBAR_WIDTH
+const SIDEBAR_WIDTH = 220; // Ancho fijo de la barra lateral
+const HEADER_HEIGHT = 60; // Altura fija de la cabecera
 
 // Interfaces
 interface Producto {
@@ -64,25 +66,28 @@ type LinkStyle = React.CSSProperties;
 interface HeaderProps {
   logoPath: string;
   sidebarWidth: number; // Add sidebarWidth prop
+  headerHeight: number; // Add headerHeight prop
 }
 
-const Header: React.FC<HeaderProps> = ({ logoPath, sidebarWidth }) => {
+const Header: React.FC<HeaderProps> = ({ logoPath, sidebarWidth, headerHeight }) => {
   const headerStyle: React.CSSProperties = {
-    backgroundColor: '#60a5fa', // Lighter blue background
+    backgroundColor: '#ffffff', // Changed to white
     padding: '12px 24px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between', // Keeps logo left, icons right
-    color: 'white',
-    height: '60px', 
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    color: '#334155', // Default text color for header (if any text added later)
+    height: `${headerHeight}px`, // Usa la constante de altura
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)', // Slightly softer shadow for white bg
+    borderBottom: '1px solid #e5e7eb', // Add subtle border like sidebar
+    flexShrink: 0, // Evita que la cabecera se encoja
   };
 
   // Style for the container that centers the logo relative to sidebar
   const logoContainerStyle: React.CSSProperties = {
     width: `${sidebarWidth}px`, // Match sidebar width
     display: 'flex',
-    justifyContent: 'center', // Center the logo within this container
+    justifyContent: 'center',
     alignItems: 'center',
   };
 
@@ -95,11 +100,35 @@ const Header: React.FC<HeaderProps> = ({ logoPath, sidebarWidth }) => {
   const rightSectionStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    gap: '20px',
+    gap: '24px', // Increased gap slightly for more space
   };
 
   const iconStyle: React.CSSProperties = {
     cursor: 'pointer',
+    color: '#64748b', // Changed icon color to medium gray
+    flexShrink: 0, // Prevent icons from shrinking
+  };
+
+  // New styles for user info
+  const userInfoContainerStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  };
+  const userInfoTextStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    fontSize: '13px',
+    lineHeight: '1.4', // Adjusted line height
+    color: '#334155', // Use default dark gray
+    textAlign: 'right', // Align text to the right
+  };
+  const userNameStyle: React.CSSProperties = {
+    fontWeight: 500,
+  };
+  const userEmailStyle: React.CSSProperties = {
+    fontSize: '11px',
+    color: '#64748b', // Medium gray for email
   };
 
   return (
@@ -111,7 +140,16 @@ const Header: React.FC<HeaderProps> = ({ logoPath, sidebarWidth }) => {
       {/* Right side icons */} 
       <div style={rightSectionStyle}>
         <Bell size={20} style={iconStyle} />
-        <User size={20} style={iconStyle} />
+        {/* User Info Block */}
+        <div style={userInfoContainerStyle}>
+           {/* Text Section */} 
+           <div style={userInfoTextStyle}>
+             <span style={userNameStyle}>ADMIN</span>
+             <span style={userEmailStyle}>Ecoalliance33@gmail.com</span>
+           </div>
+           {/* Icon */} 
+           <User size={24} style={{...iconStyle, color: '#4b5563'}} /> {/* Slightly larger user icon? */}
+        </div>
       </div>
     </header>
   );
@@ -418,14 +456,15 @@ export default function App() {
 
   // Estilos de la aplicación
   const sidebarStyle: React.CSSProperties = {
-    width: `${sidebarWidth}px`, // Use the constant
-    minWidth: `${sidebarWidth}px`, // Use the constant
-    backgroundColor: '#f8fafc',
-    padding: '20px',
+    width: `${SIDEBAR_WIDTH}px`, // Usa la constante de ancho
+    backgroundColor: '#ffffff',
     borderRight: '1px solid #e5e7eb',
+    padding: '20px 0', // Padding arriba/abajo, no a los lados
     display: 'flex',
     flexDirection: 'column',
-    overflowY: 'auto',
+    height: `calc(100vh - ${HEADER_HEIGHT}px)`, // Altura restante después de la cabecera
+    overflowY: 'auto', // Scroll si el contenido excede
+    flexShrink: 0, // Evita que la barra lateral se encoja
   };
 
   const logoContainerStyle: React.CSSProperties = {
@@ -488,12 +527,25 @@ export default function App() {
     };
   };
 
+  const contentStyle: React.CSSProperties = {
+    flexGrow: 1, // Ocupa el espacio restante
+    overflow: 'auto', // Scroll si el contenido excede
+    height: `calc(100vh - ${HEADER_HEIGHT}px)`, // Altura restante después de la cabecera
+    // El padding se aplica dentro del componente PageLayout o directamente en las páginas
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <Header logoPath={ecoAllianceLogo} sidebarWidth={sidebarWidth} />
-      <div style={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+      <Header logoPath={ecoAllianceLogo} sidebarWidth={SIDEBAR_WIDTH} headerHeight={HEADER_HEIGHT} />
+      <div style={{ display: 'flex', flexGrow: 1, overflow: 'hidden' /* Evita scroll doble */ }}>
         <div style={sidebarStyle}>
-          <nav style={{ flexGrow: 1 }}>
+          <nav style={{ flexGrow: 1, padding: '0 15px' /* Padding interno para enlaces */ }}>
+            {/* Logo dentro de la barra lateral - Opcional, ya está en header */}
+            {/* 
+            <div style={logoContainerStyle}>
+              <img src={ecoAllianceLogo} alt="Logo" style={logoImageStyle} />
+            </div> 
+            */}
             <Link to="/dashboard" style={getLinkStyle('/dashboard')}>
                <div style={navLinkTextStyle}> 
                  <LayoutDashboard size={18} style={navIconStyle} />
@@ -551,7 +603,7 @@ export default function App() {
             )}
           </nav>
         </div>
-        <div style={{ flexGrow: 1, overflow: 'auto', padding: '24px' }}>
+        <div style={contentStyle}> {/* Contenedor del contenido principal */}
           <Outlet />
         </div>
       </div>

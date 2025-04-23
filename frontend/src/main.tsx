@@ -5,6 +5,9 @@ import './index.css'
 import App from './App.tsx'
 import EquiposPanel from './pages/EquiposPanel'
 import AdminPanel from './pages/AdminPanel'
+import CostosAdminPanel from './pages/CostosAdminPanel'
+import PerfilesPanel from './pages/PerfilesPanel'
+import CargaEquiposPanel from './pages/CargaEquiposPanel'
 import DashboardPanel from './pages/DashboardPanel'
 import PlaceholderPanel from './pages/PlaceholderPanel'
 import DetallesEnvioPanel from './pages/DetallesEnvioPanel'
@@ -35,13 +38,13 @@ if (rootElement) {
               <Route index element={<EquiposPanel />} />
               <Route path="equipos" element={<EquiposPanel />} />
               <Route path="admin" element={<AdminPanel />}>
-                <Route index element={<EquiposPanel />} />
-                <Route path="costos" element={<EquiposPanel />} />
-                <Route path="perfiles" element={<EquiposPanel />} />
+                <Route index element={<CostosAdminPanel />} />
+                <Route path="costos" element={<CostosAdminPanel />} />
+                <Route path="perfiles" element={<PerfilesPanel />} />
+                <Route path="carga-equipos" element={<CargaEquiposPanel />} />
               </Route>
               <Route path="dashboard" element={<DashboardPanel />} />
               <Route path="placeholder" element={<PlaceholderPanel />} />
-              <Route path="detalles-envio/:calculoId" element={<DetallesEnvioPanel />} />
             </Route>
           </Routes>
         </BrowserRouter>
@@ -80,13 +83,13 @@ if (rootElement) {
             <Route index element={<EquiposPanel />} />
             <Route path="equipos" element={<EquiposPanel />} />
             <Route path="admin" element={<AdminPanel />}>
-              <Route index element={<EquiposPanel />} />
-              <Route path="costos" element={<EquiposPanel />} />
-              <Route path="perfiles" element={<EquiposPanel />} />
+              <Route index element={<CostosAdminPanel />} />
+              <Route path="costos" element={<CostosAdminPanel />} />
+              <Route path="perfiles" element={<PerfilesPanel />} />
+              <Route path="carga-equipos" element={<CargaEquiposPanel />} />
             </Route>
             <Route path="dashboard" element={<DashboardPanel />} />
             <Route path="placeholder" element={<PlaceholderPanel />} />
-            <Route path="detalles-envio/:calculoId" element={<DetallesEnvioPanel />} />
           </Route>
         </Routes>
       </BrowserRouter>

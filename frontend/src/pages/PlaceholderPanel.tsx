@@ -1,9 +1,10 @@
 import React from 'react';
+import PageLayout from '../components/PageLayout';
 
 // --- Componente PlaceholderPanel (Página de Destino) ---
 export default function PlaceholderPanel() {
   return (
-    <div style={{ padding: '24px' }}>
+    <PageLayout>
       <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', marginBottom: '16px' }}>
         Panel Placeholder
       </h1>
@@ -12,6 +13,6 @@ export default function PlaceholderPanel() {
         El contenido principal está mayormente vacío como se solicitó.
       </p>
       {/* Aquí podrías añadir más contenido si fuera necesario */}
-    </div>
+    </PageLayout>
   );
 } 

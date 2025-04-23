@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom'; // Import Link for navigation
 import { ArrowRight, TrendingUp, FileText, DollarSign, BarChart, PieChart, Clock } from 'lucide-react'; // Example icons
+import PageLayout from '../components/PageLayout'; // Importar PageLayout
 
 // --- Interfaces para Datos Inventados ---
 interface ConfiguracionReciente {
@@ -88,7 +89,7 @@ export default function DashboardPanel() {
   const chartPlaceholderStyle: React.CSSProperties = { backgroundColor: lightGrayBg, border: `1px dashed ${borderColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: secondaryTextColor, fontStyle: 'italic', padding: '20px', borderRadius: '6px', minHeight: '150px' };
 
   return (
-    <div /* style={{ padding: '24px' }} */ >
+    <PageLayout>
       <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px', color: '#111827' }}>
         Dashboard de Cotizaciones y Costos
       </h1>
@@ -183,7 +184,6 @@ export default function DashboardPanel() {
            </div>
         </div>
       </div>
-
-    </div>
+    </PageLayout>
   );
 } 

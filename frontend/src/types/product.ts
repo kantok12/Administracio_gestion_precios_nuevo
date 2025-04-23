@@ -1,13 +1,12 @@
-export interface Product {
-  codigo_producto: string;
-  nombre_del_producto: string;
+export interface Producto {
+  codigo_producto?: string;
+  nombre_del_producto?: string;
   Descripcion?: string;
   Modelo?: string;
   categoria?: string;
   pf_eur?: string | number;
   dimensiones?: string;
-  // Campos opcionales adicionales
-  ay?: string;
+  PESO?: string | null;
   transporte_nacional?: string;
-  PESO?: string;
+  ay?: string;
 }
