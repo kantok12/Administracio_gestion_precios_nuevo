@@ -1,10 +1,13 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Outlet, NavLink } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import EquiposPanel from './pages/EquiposPanel'
 import AdminPanel from './pages/AdminPanel'
+import DashboardPanel from './pages/DashboardPanel'
+import PlaceholderPanel from './pages/PlaceholderPanel'
+import DetallesEnvioPanel from './pages/DetallesEnvioPanel'
 
 // Forzar modo claro
 document.documentElement.setAttribute('data-color-mode', 'light');
@@ -31,7 +34,14 @@ if (rootElement) {
             <Route path="/" element={<App />}>
               <Route index element={<EquiposPanel />} />
               <Route path="equipos" element={<EquiposPanel />} />
-              <Route path="admin" element={<AdminPanel />} />
+              <Route path="admin" element={<AdminPanel />}>
+                <Route index element={<EquiposPanel />} />
+                <Route path="costos" element={<EquiposPanel />} />
+                <Route path="perfiles" element={<EquiposPanel />} />
+              </Route>
+              <Route path="dashboard" element={<DashboardPanel />} />
+              <Route path="placeholder" element={<PlaceholderPanel />} />
+              <Route path="detalles-envio/:calculoId" element={<DetallesEnvioPanel />} />
             </Route>
           </Routes>
         </BrowserRouter>
@@ -69,7 +79,14 @@ if (rootElement) {
           <Route path="/" element={<App />}>
             <Route index element={<EquiposPanel />} />
             <Route path="equipos" element={<EquiposPanel />} />
-            <Route path="admin" element={<AdminPanel />} />
+            <Route path="admin" element={<AdminPanel />}>
+              <Route index element={<EquiposPanel />} />
+              <Route path="costos" element={<EquiposPanel />} />
+              <Route path="perfiles" element={<EquiposPanel />} />
+            </Route>
+            <Route path="dashboard" element={<DashboardPanel />} />
+            <Route path="placeholder" element={<PlaceholderPanel />} />
+            <Route path="detalles-envio/:calculoId" element={<DetallesEnvioPanel />} />
           </Route>
         </Routes>
       </BrowserRouter>

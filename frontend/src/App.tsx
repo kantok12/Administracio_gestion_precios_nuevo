@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, X, ArrowLeft, ArrowRight, Check, Settings, Eye, List, Loader2, LayoutDashboard } from 'lucide-react';
+import { Search, Filter, X, ArrowLeft, ArrowRight, Check, Settings, Eye, List, Loader2, LayoutDashboard, FileCog, Users, Menu, Bell, User } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import ecoAllianceLogo from './assets/Logotipo_EAX-EA.png';
@@ -56,6 +56,57 @@ interface OpcionalesResponse {
 
 // Definir tipo para los estilos de los enlaces (para legibilidad)
 type LinkStyle = React.CSSProperties;
+
+// --- New Header Component ---
+interface HeaderProps {
+  logoPath: string;
+}
+
+const Header: React.FC<HeaderProps> = ({ logoPath }) => {
+  const headerStyle: React.CSSProperties = {
+    backgroundColor: '#60a5fa', // Lighter blue background
+    padding: '12px 24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    color: 'white',
+    height: '60px', // Fixed header height
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  };
+
+  const logoStyle: React.CSSProperties = {
+    height: '40px', // Adjust as needed
+    width: 'auto',
+  };
+
+  const rightSectionStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
+  };
+
+  const iconStyle: React.CSSProperties = {
+    cursor: 'pointer',
+  };
+
+  const userNameStyle: React.CSSProperties = {
+    fontSize: '14px',
+  };
+
+  return (
+    <header style={headerStyle}>
+      <img src={logoPath} alt="Logo" style={logoStyle} />
+      <div style={rightSectionStyle}>
+        {/* Placeholders for right-side elements */}
+        {/* <button>Feedback</button> */}
+        <Bell size={20} style={iconStyle} />
+        <User size={20} style={iconStyle} />
+        {/* <span style={userNameStyle}>User Name</span> */}
+      </div>
+    </header>
+  );
+};
+// --- End Header Component ---
 
 // Versión funcional con diseño simplificado
 export default function App() {
@@ -338,79 +389,104 @@ export default function App() {
     setDetalleProducto(null);
   };
 
-  // Función para determinar el estilo del enlace activo
+  // Estilos de la aplicación
+  const sidebarStyle: React.CSSProperties = {
+    width: '240px',
+    backgroundColor: '#f8fafc', // Light gray background
+    padding: '20px',
+    borderRight: '1px solid #e5e7eb', // Subtle border
+    display: 'flex',
+    flexDirection: 'column',
+    overflowY: 'auto',
+  };
+
+  const logoContainerStyle: React.CSSProperties = {
+    marginBottom: '30px',
+    paddingLeft: '10px', // Align logo slightly
+  };
+
+  const logoImageStyle: React.CSSProperties = {
+    height: '40px', // Maintain logo size
+    width: 'auto',
+  };
+
+  const navLinkBaseStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '10px 15px',
+    marginBottom: '8px',
+    borderRadius: '6px',
+    textDecoration: 'none',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: '#334155', // Default text color
+    transition: 'background-color 0.2s ease, color 0.2s ease',
+  };
+
+  const navLinkHoverStyle: React.CSSProperties = {
+    backgroundColor: '#e2e8f0', // Light hover background
+  };
+
+  const navLinkActiveStyle: React.CSSProperties = {
+    backgroundColor: '#e0f2fe', // Light blue background for active
+    color: '#0c4a6e', // Darker blue text for active
+  };
+
+  const navIconStyle: React.CSSProperties = {
+    marginRight: '12px',
+    flexShrink: 0, // Prevent icon from shrinking
+  };
+
+  // Función para obtener el estilo del enlace dinámicamente
   const getLinkStyle = (path: string): LinkStyle => {
-    const isActive = location.pathname === path;
-    const baseStyle: LinkStyle = {
-      display: 'flex',
-      alignItems: 'center',
-      padding: '10px 16px', // Equivalente a px-4 py-2.5
-      borderRadius: '6px', // Equivalente a rounded-md
-      fontSize: '14px', // Equivalente a text-sm
-      fontWeight: 500, // Equivalente a font-medium
-      textDecoration: 'none',
-      transition: 'background-color 0.15s ease, color 0.15s ease',
-      marginBottom: '4px', // Espacio entre botones
+    const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
+    return {
+      ...navLinkBaseStyle,
+      ...(isActive ? navLinkActiveStyle : {}),
+      // Simple hover effect can be done with CSS pseudo-classes if preferred
     };
-    const activeStyle: LinkStyle = {
-      backgroundColor: '#e0f2fe', // bg-sky-100
-      color: '#0369a1', // text-sky-700
-      borderLeft: '4px solid #0ea5e9', // border-l-4 border-sky-500
-      paddingLeft: '12px', // Ajustar padding por el borde
-    };
-    const inactiveStyle: LinkStyle = {
-      color: '#4b5563', // text-gray-600
-    };
-     // Estilo hover para inactivos (simulado con CSS o lógica más compleja si es necesario)
-     // En un componente real, usarías :hover en CSS o estados onMouseEnter/Leave
-    
-    return { ...baseStyle, ...(isActive ? activeStyle : inactiveStyle) };
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', backgroundColor: '#f3f4f6' /* bg-gray-100 */ }}>
-      {/* Barra lateral */}
-      <aside style={{ 
-          width: '240px', // Ancho fijo
-          backgroundColor: 'white', 
-          borderRight: '1px solid #e5e7eb', // border-r border-gray-200
-          display: 'flex', 
-          flexDirection: 'column',
-          padding: '16px' // p-4
-       }}>
-        {/* Logo */}
-        <div style={{ marginBottom: '24px', padding: '8px 0' }}>
-          <img src={ecoAllianceLogo} alt="Eco Alliance Logo" style={{ height: '40px', display: 'block', margin: '0 auto' }} />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <Header logoPath={ecoAllianceLogo} /> {/* Add the new Header */}
+      <div style={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}> {/* Container for sidebar + content */}
+        {/* Sidebar */}
+        <div style={sidebarStyle}>
+          {/* Logo se movió al Header, dejamos espacio o lo eliminamos */}
+          {/* <div style={logoContainerStyle}>
+            <img src={ecoAllianceLogo} alt="Eco Alliance Logo" style={logoImageStyle} />
+          </div> */}
+
+          {/* Navegación */}
+          <nav style={{ flexGrow: 1 }}>
+            {/* Link para DASHBOARD */}
+            <Link to="/dashboard" style={getLinkStyle('/dashboard')}>
+              <LayoutDashboard size={18} style={navIconStyle} />
+              DASHBOARD
+            </Link>
+            {/* Link para EQUIPOS */}
+            <Link to="/" style={getLinkStyle('/')}>
+               <Menu size={18} style={navIconStyle} /> {/* Changed Icon */}
+              EQUIPOS
+            </Link>
+            {/* Link para ADMIN */}
+            <Link to="/admin" style={getLinkStyle('/admin')}>
+              <FileCog size={18} style={navIconStyle} /> {/* Use FileCog or Settings */}
+              ADMIN
+            </Link>
+            {/* Puedes añadir más enlaces aquí */}
+          </nav>
+
+          {/* Sección inferior de la barra lateral (si es necesario) */}
+          {/* <div>User Info / Logout</div> */}
         </div>
 
-        {/* Navegación */}
-        <nav style={{ flexGrow: 1 }}>
-          {/* --- ENLACE DASHBOARD --- */}
-          <Link to="/dashboard" style={getLinkStyle('/dashboard')}>
-            <LayoutDashboard size={18} style={{ marginRight: '12px' /* mr-3 */ }} />
-            DASHBOARD
-          </Link>
-          {/* --- ENLACE EQUIPOS --- */}
-          <Link to="/" style={getLinkStyle('/')}>
-            <List size={18} style={{ marginRight: '12px' }} />
-            EQUIPOS
-          </Link>
-          {/* --- ENLACE ADMIN --- */}
-          <Link to="/admin" style={getLinkStyle('/admin')}>
-            <Settings size={18} style={{ marginRight: '12px' }} />
-            ADMIN
-          </Link>
-        </nav>
-
-        {/* Footer de la barra lateral (opcional) */}
-        {/* <div>Footer</div> */}
-      </aside>
-
-      {/* Contenido principal */}
-      <main style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f9fafb' /* Slightly different gray */ }}>
-        {/* Outlet renderizará el componente de la ruta activa */}
-        <Outlet /> 
-      </main>
+        {/* Área de Contenido Principal */}
+        <div style={{ flexGrow: 1, overflow: 'auto', padding: '24px' }}> {/* Added padding */}
+          <Outlet /> {/* Aquí se renderizarán las rutas hijas */}
+        </div>
+      </div>
     </div>
   );
 }

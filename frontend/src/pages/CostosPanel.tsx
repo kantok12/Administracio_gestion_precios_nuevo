@@ -4,9 +4,10 @@ import { SlidersHorizontal, DollarSign, Euro, RefreshCw, Info, Save, Calendar, F
 import { api } from '../services/api';
 import { CostParams, CurrencyWebhookResponse, CostParamsWebhookResponse } from '../types/costParams';
 
-// --- Componente AdminPanel (Restaurado con la lógica original) ---
-export default function AdminPanel() {
+// --- Componente CostosPanel (Contiene la lógica original de AdminPanel) ---
+export default function CostosPanel() {
   // --- Estados, Handlers, useEffects y JSX originales de AdminPanel ---
+  // (Copiado directamente de la versión anterior de AdminPanel.tsx)
 
   // Función de mapeo de categorías
   const getCategoryId = (categoria: string) => {
@@ -56,10 +57,6 @@ export default function AdminPanel() {
   const secondaryTextColor = '#64748b';
   const lightGrayBg = '#f8fafc';
   const borderColor = '#e5e7eb';
-  // Estilo para el contenedor general del panel
-  const panelContainerStyle: React.CSSProperties = { padding: '24px' };
-  // Estilo para el título principal
-  const mainTitleStyle: React.CSSProperties = { fontSize: '22px', fontWeight: 600, color: '#1e293b', marginBottom: '24px' };
   const gridContainerStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '24px' };
   const gridCardStyle: React.CSSProperties = { backgroundColor: lightGrayBg, borderRadius: '8px', padding: '20px', border: `1px solid ${borderColor}` };
   const gridCardTitleStyle: React.CSSProperties = { fontSize: '14px', fontWeight: 600, color: '#334155', marginBottom: '16px' };
@@ -94,7 +91,7 @@ export default function AdminPanel() {
 
   // --- Funciones API ---
   const fetchAndSetCurrencies = async (updateTimestamp?: Date) => {
-    console.log("[AdminPanel] Fetching currencies from webhook...");
+    console.log("[CostosPanel] Fetching currencies from webhook...");
     setIsUpdatingCurrencies(true);
     setCurrencyUpdateError(null);
     try {
@@ -110,12 +107,12 @@ export default function AdminPanel() {
         const displayTime = updateTimestamp || new Date();
         setFechaActualizacionDivisas(displayTime.toLocaleString('es-CL'));
         if (dolarSuccessfullySet && euroSuccessfullySet) {
-          console.log(`[AdminPanel] Currency values updated (D: ${roundedDolar}, E: ${roundedEuro}). Attempting to update in DB...`);
+          console.log(`[CostosPanel] Currency values updated (D: ${roundedDolar}, E: ${roundedEuro}). Attempting to update in DB...`);
           try {
             await api.updateCurrenciesInDB({ dolar_observado_actual: roundedDolar, euro_observado_actual: roundedEuro });
-            //console.log('[AdminPanel] Backend confirmed currency update:', updateResult);
+            //console.log('[CostosPanel] Backend confirmed currency update:', updateResult);
           } catch (backendError) {
-            console.error('[AdminPanel] Error updating currencies in backend:', backendError);
+            console.error('[CostosPanel] Error updating currencies in backend:', backendError);
           }
         }
         return true;
@@ -135,18 +132,18 @@ export default function AdminPanel() {
   const fetchInitialGlobalParams = async () => {
     setInitialCostParamsLoading(true);
     setInitialCostParamsError(null);
-    console.log('[AdminPanel] Fetching initial global cost parameters from DB...');
+    console.log('[CostosPanel] Fetching initial global cost parameters from DB...');
     try {
       const data = await api.fetchGlobalParams();
       if (!data || !data.costos) { // Cambiado: verificar data.costos aquí
-        console.log('[AdminPanel] Global override document not found or invalid. Using default form values.');
+        console.log('[CostosPanel] Global override document not found or invalid. Using default form values.');
       } else {
-        //console.log('[AdminPanel] Initial global parameters received from DB:', data);
+        //console.log('[CostosPanel] Initial global parameters received from DB:', data);
         applyCostDataToState(data.costos); // Usar helper para aplicar datos
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
-      console.error('[AdminPanel] Error fetching initial global parameters:', error);
+      console.error('[CostosPanel] Error fetching initial global parameters:', error);
       setInitialCostParamsError(errorMsg.includes('fetch') ? 'Error de conexión cargando parámetros.' : errorMsg);
     } finally {
       setInitialCostParamsLoading(false);
@@ -180,25 +177,25 @@ export default function AdminPanel() {
 
   const fetchAndApplyCategoryParams = async (categoria: string) => {
      if (categoria === 'Global') {
-      console.log('[AdminPanel] Selected Global. Reloading global params...');
+      console.log('[CostosPanel] Selected Global. Reloading global params...');
       await fetchInitialGlobalParams();
       return;
     }
     setIsLoadingCategoryParams(true);
     setLoadCategoryParamsError(null);
-    console.log(`[AdminPanel] Fetching parameters for category: ${categoria}`);
+    console.log(`[CostosPanel] Fetching parameters for category: ${categoria}`);
     try {
       const categoryId = getCategoryId(categoria);
       await fetchInitialGlobalParams(); // Asegurar que los globales estén cargados como base
       const data = await api.fetchCategoryParams(categoryId);
       if (!data || !data.costos) {
-        console.log(`[AdminPanel] No override found for ${categoria}. Using global values.`);
+        console.log(`[CostosPanel] No override found for ${categoria}. Using global values.`);
       } else {
-        console.log(`[AdminPanel] Override found for ${categoria}. Applying specific values...`);
+        console.log(`[CostosPanel] Override found for ${categoria}. Applying specific values...`);
         applyCostDataToState(data.costos); // Aplicar solo los específicos encontrados
       }
     } catch (error) {
-      console.error('[AdminPanel] Error fetching category parameters:', error);
+      console.error('[CostosPanel] Error fetching category parameters:', error);
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
       setLoadCategoryParamsError(errorMsg);
       if(initialCostParamsLoading) await fetchInitialGlobalParams();
@@ -221,7 +218,7 @@ export default function AdminPanel() {
   }, []);
 
   useEffect(() => {
-    console.log('[AdminPanel] Component mounted, fetching initial global parameters...');
+    console.log('[CostosPanel] Component mounted, fetching initial global parameters...');
     fetchInitialGlobalParams();
   }, []);
 
@@ -241,17 +238,17 @@ export default function AdminPanel() {
   };
 
   const handleSaveAll = async () => {
-    console.log('[AdminPanel] Starting save operation...');
+    console.log('[CostosPanel] Starting save operation...');
     setIsSavingGlobalParams(true);
     setSaveGlobalParamsError(null);
     setSaveGlobalParamsSuccess(null);
     try {
       const categoryId = getCategoryId(categoriaSeleccionadaParaAplicar);
-      //console.log(`[AdminPanel] Saving parameters for category: ${categoriaSeleccionadaParaAplicar} (ID: ${categoryId})`);
+      //console.log(`[CostosPanel] Saving parameters for category: ${categoriaSeleccionadaParaAplicar} (ID: ${categoryId})`);
       const buildParam = (value: string, defaultValue = 0): number => { const p = parseFloat(value); return isNaN(p) ? defaultValue : p; };
       const buildPercentage = (value: string, defaultValue = 0): number => { const p = parseFloat(value); return isNaN(p) ? defaultValue : p / 100; };
 
-      // Crear el objeto params directamente con la estructura CostParams
+      // Corrección: Crear el objeto params directamente con la estructura CostParams
       const params: CostParams = {
           tipo_cambio_eur_usd: buildParam(tipoCambio, 1.1),
           buffer_usd_clp: buildPercentage(bufferDolar),
@@ -292,11 +289,11 @@ export default function AdminPanel() {
       } else {
         result = await api.updateCategoryParams(categoryId, apiPayload);
       }
-      //console.log(`[AdminPanel] Parameters saved successfully for ${categoriaSeleccionadaParaAplicar}:`, result);
+      //console.log(`[CostosPanel] Parameters saved successfully for ${categoriaSeleccionadaParaAplicar}:`, result);
       setSaveGlobalParamsSuccess(`Parámetros guardados para ${categoriaSeleccionadaParaAplicar}.`);
       setTimeout(() => setSaveGlobalParamsSuccess(null), 5000);
     } catch (error) {
-      console.error('[AdminPanel] Error saving parameters:', error);
+      console.error('[CostosPanel] Error saving parameters:', error);
       const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
       setSaveGlobalParamsError(errorMsg);
       setTimeout(() => setSaveGlobalParamsError(null), 8000);
@@ -305,14 +302,10 @@ export default function AdminPanel() {
     }
   };
 
-  // --- JSX del Panel de Administración ---
+  // --- JSX del Panel de Costos ---
   return (
-    <div style={panelContainerStyle}>
-      {/* Encabezado Principal del Panel de Administración */}
-      <h1 style={mainTitleStyle}>
-        Panel de Administración
-      </h1>
-
+    // Quitar el div envolvente que estaba en AdminPanel, ya que este es el contenido principal ahora
+    <>
       {/* Sección Valores Actuales de Divisas */}
       <div style={{ marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -521,6 +514,6 @@ export default function AdminPanel() {
              Guardar Cambios ({categoriaSeleccionadaParaAplicar})
           </button>
       </div>
-    </div> // Fin del div contenedor principal
+    </> // Fin del fragment
   );
 } 
