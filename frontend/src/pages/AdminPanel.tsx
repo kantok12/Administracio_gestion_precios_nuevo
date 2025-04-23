@@ -73,16 +73,22 @@ export default function AdminPanel() {
   const primaryButtonStyle: React.CSSProperties = { ...buttonBaseStyle, backgroundColor: primaryTextColor, color: 'white', borderColor: primaryTextColor };
   const secondaryButtonStyle: React.CSSProperties = { ...buttonBaseStyle, backgroundColor: 'white', color: '#334155', borderColor: borderColor };
   const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'none', background: `url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23${secondaryTextColor.substring(1)}%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.4-12.8z%22%2F%3E%3C%2Fsvg%3E') no-repeat right 12px center`, backgroundSize: '10px' };
-
+  const formSectionStyle: React.CSSProperties = { 
+    backgroundColor: '#f0f9ff', // Light blue background 
+    border: '1px solid #bae6fd', 
+    borderRadius: '8px', 
+    padding: '24px', 
+    marginTop: '24px', 
+    marginBottom: '24px' 
+  };
+  const formTitleStyle: React.CSSProperties = { fontSize: '18px', fontWeight: 600, color: '#0c4a6e', marginBottom: '20px' };
+  const formGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px 24px' };
 
   // --- Estados Carga/Error ---
   const [isUpdatingCurrencies, setIsUpdatingCurrencies] = useState(false);
   const [currencyUpdateError, setCurrencyUpdateError] = useState<string | null>(null);
   const [initialCurrencyLoading, setInitialCurrencyLoading] = useState(true);
   const [initialCurrencyError, setInitialCurrencyError] = useState<string | null>(null);
-  // const [isApplyingCategorySettings, setIsApplyingCategorySettings] = useState(false); // Removido por ahora
-  // const [applyCategorySettingsError, setApplyCategorySettingsError] = useState<string | null>(null);
-  // const [applyCategorySettingsSuccess, setApplyCategorySettingsSuccess] = useState<string | null>(null);
   const [initialCostParamsLoading, setInitialCostParamsLoading] = useState(true);
   const [initialCostParamsError, setInitialCostParamsError] = useState<string | null>(null);
   const [isLoadingCategoryParams, setIsLoadingCategoryParams] = useState(false);
@@ -308,11 +314,11 @@ export default function AdminPanel() {
   // --- JSX del Panel de Administración ---
   return (
     <div style={panelContainerStyle}>
-      {/* Encabezado Principal del Panel de Administración */}
-      <h1 style={mainTitleStyle}>
-        Panel de Administración
-      </h1>
-
+      {/* Encabezado Principal */}
+       <h1 style={mainTitleStyle}>
+          Panel de Administración
+        </h1>
+      
       {/* Sección Valores Actuales de Divisas */}
       <div style={{ marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>

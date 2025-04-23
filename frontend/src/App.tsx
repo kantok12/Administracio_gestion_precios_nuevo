@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, X, ArrowLeft, ArrowRight, Check, Settings, Eye, List, Loader2, LayoutDashboard, FileCog, Users, Menu, Bell, User } from 'lucide-react';
+import { Search, Filter, X, ArrowLeft, ArrowRight, Check, Settings, Eye, List, Loader2, LayoutDashboard, FileCog, Users, Menu, Bell, User, SlidersHorizontal, ChevronDown, ChevronUp, UploadCloud } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import ecoAllianceLogo from './assets/Logotipo_EAX-EA.png';
+
+// --- Constants ---
+const sidebarWidth = 220; // Define sidebar width here
 
 // Interfaces
 interface Producto {
@@ -60,23 +63,33 @@ type LinkStyle = React.CSSProperties;
 // --- New Header Component ---
 interface HeaderProps {
   logoPath: string;
+  sidebarWidth: number; // Add sidebarWidth prop
 }
 
-const Header: React.FC<HeaderProps> = ({ logoPath }) => {
+const Header: React.FC<HeaderProps> = ({ logoPath, sidebarWidth }) => {
   const headerStyle: React.CSSProperties = {
     backgroundColor: '#60a5fa', // Lighter blue background
     padding: '12px 24px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'space-between', // Keeps logo left, icons right
     color: 'white',
-    height: '60px', // Fixed header height
+    height: '60px', 
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
   };
 
+  // Style for the container that centers the logo relative to sidebar
+  const logoContainerStyle: React.CSSProperties = {
+    width: `${sidebarWidth}px`, // Match sidebar width
+    display: 'flex',
+    justifyContent: 'center', // Center the logo within this container
+    alignItems: 'center',
+  };
+
   const logoStyle: React.CSSProperties = {
-    height: '40px', // Adjust as needed
+    height: '40px', 
     width: 'auto',
+    display: 'block', // Ensure image behaves like a block
   };
 
   const rightSectionStyle: React.CSSProperties = {
@@ -89,19 +102,16 @@ const Header: React.FC<HeaderProps> = ({ logoPath }) => {
     cursor: 'pointer',
   };
 
-  const userNameStyle: React.CSSProperties = {
-    fontSize: '14px',
-  };
-
   return (
     <header style={headerStyle}>
-      <img src={logoPath} alt="Logo" style={logoStyle} />
+      {/* Wrap logo in a container sized to the sidebar */}
+      <div style={logoContainerStyle}>
+        <img src={logoPath} alt="Logo" style={logoStyle} />
+      </div>
+      {/* Right side icons */} 
       <div style={rightSectionStyle}>
-        {/* Placeholders for right-side elements */}
-        {/* <button>Feedback</button> */}
         <Bell size={20} style={iconStyle} />
         <User size={20} style={iconStyle} />
-        {/* <span style={userNameStyle}>User Name</span> */}
       </div>
     </header>
   );
@@ -112,6 +122,23 @@ const Header: React.FC<HeaderProps> = ({ logoPath }) => {
 export default function App() {
   const location = useLocation(); // Hook para obtener la ruta actual
   
+  // State for Admin Submenu
+  const [isAdminOpen, setIsAdminOpen] = useState(location.pathname.startsWith('/admin'));
+
+  // Effect to open admin menu if navigating directly to a sub-route
+  useEffect(() => {
+    setIsAdminOpen(location.pathname.startsWith('/admin'));
+  }, [location.pathname]);
+
+  // Toggle function for Admin menu
+  const toggleAdminMenu = (e: React.MouseEvent) => {
+    // Prevent navigation if we are just toggling the already active section
+    if (location.pathname.startsWith('/admin')) {
+       // e.preventDefault(); // Optional: Uncomment to prevent navigation when toggling within admin
+    }
+    setIsAdminOpen(!isAdminOpen);
+  };
+
   // Estados principales
   const [productos, setProductos] = useState<Producto[]>([]);
   const [productosOriginales, setProductosOriginales] = useState<Producto[]>([]);
@@ -391,11 +418,11 @@ export default function App() {
 
   // Estilos de la aplicación
   const sidebarStyle: React.CSSProperties = {
-    width: '220px',
-    minWidth: '220px',
-    backgroundColor: '#f8fafc', // Light gray background
+    width: `${sidebarWidth}px`, // Use the constant
+    minWidth: `${sidebarWidth}px`, // Use the constant
+    backgroundColor: '#f8fafc',
     padding: '20px',
-    borderRight: '1px solid #e5e7eb', // Subtle border
+    borderRight: '1px solid #e5e7eb',
     display: 'flex',
     flexDirection: 'column',
     overflowY: 'auto',
@@ -414,6 +441,7 @@ export default function App() {
   const navLinkBaseStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between', // Make space for chevron
     padding: '10px 15px',
     marginBottom: '8px',
     borderRadius: '6px',
@@ -441,54 +469,90 @@ export default function App() {
     flexShrink: 0, // Prevent icon from shrinking
   };
 
+  // Combined style for the text part of the link
+  const navLinkTextStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center', 
+  };
+
   // Función para obtener el estilo del enlace dinámicamente
-  const getLinkStyle = (path: string): LinkStyle => {
-    const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
+  const getLinkStyle = (path: string, isSubItem: boolean = false): LinkStyle => {
+    const isActive = location.pathname === path;
+    // Highlight parent admin link if any admin route is active
+    const isAdminParentActive = path === '/admin' && location.pathname.startsWith('/admin');
+    
     return {
       ...navLinkBaseStyle,
-      ...(isActive ? navLinkActiveStyle : {}),
-      // Simple hover effect can be done with CSS pseudo-classes if preferred
+      ...(isActive || (isAdminParentActive && !isSubItem) ? navLinkActiveStyle : {}),
+      paddingLeft: isSubItem ? '30px' : '15px', // Adjust base padding for subitems
     };
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <Header logoPath={ecoAllianceLogo} /> {/* Add the new Header */}
-      <div style={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}> {/* Container for sidebar + content */}
-        {/* Sidebar */}
+      <Header logoPath={ecoAllianceLogo} sidebarWidth={sidebarWidth} />
+      <div style={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
         <div style={sidebarStyle}>
-          {/* Logo se movió al Header, dejamos espacio o lo eliminamos */}
-          {/* <div style={logoContainerStyle}>
-            <img src={ecoAllianceLogo} alt="Eco Alliance Logo" style={logoImageStyle} />
-          </div> */}
-
-          {/* Navegación */}
           <nav style={{ flexGrow: 1 }}>
-            {/* Link para DASHBOARD */}
             <Link to="/dashboard" style={getLinkStyle('/dashboard')}>
-              <LayoutDashboard size={18} style={navIconStyle} />
-              DASHBOARD
+               <div style={navLinkTextStyle}> 
+                 <LayoutDashboard size={18} style={navIconStyle} />
+                 DASHBOARD
+               </div>
             </Link>
-            {/* Link para EQUIPOS */}
             <Link to="/" style={getLinkStyle('/')}>
-               <Menu size={18} style={navIconStyle} /> {/* Changed Icon */}
-              EQUIPOS
+               <div style={navLinkTextStyle}> 
+                 <Menu size={18} style={navIconStyle} /> 
+                 EQUIPOS
+               </div>
             </Link>
-            {/* Link para ADMIN */}
-            <Link to="/admin" style={getLinkStyle('/admin')}>
-              <FileCog size={18} style={navIconStyle} /> {/* Use FileCog or Settings */}
-              ADMIN
+            <Link 
+              to="/admin" 
+              style={getLinkStyle('/admin')} 
+              onClick={toggleAdminMenu}
+            >
+              <div style={navLinkTextStyle}> 
+                 <FileCog size={18} style={navIconStyle} />
+                 ADMIN
+              </div>
+              {isAdminOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </Link>
-            {/* Puedes añadir más enlaces aquí */}
+            
+            {isAdminOpen && (
+              <>
+                <Link 
+                  to="/admin/costos" 
+                  style={getLinkStyle('/admin/costos', true)} 
+                >
+                   <div style={navLinkTextStyle}> 
+                      <SlidersHorizontal size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
+                      Costos
+                   </div>
+                </Link>
+                <Link 
+                  to="/admin/perfiles" 
+                  style={getLinkStyle('/admin/perfiles', true)} 
+                >
+                   <div style={navLinkTextStyle}> 
+                      <Users size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
+                      Perfiles
+                   </div>
+                </Link>
+                <Link 
+                  to="/admin/carga-equipos" 
+                  style={getLinkStyle('/admin/carga-equipos', true)} 
+                >
+                   <div style={navLinkTextStyle}> 
+                      <UploadCloud size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
+                      Cargar Equipos
+                   </div>
+                </Link>
+              </>
+            )}
           </nav>
-
-          {/* Sección inferior de la barra lateral (si es necesario) */}
-          {/* <div>User Info / Logout</div> */}
         </div>
-
-        {/* Área de Contenido Principal */}
-        <div style={{ flexGrow: 1, overflow: 'auto', padding: '24px' }}> {/* Added padding */}
-          <Outlet /> {/* Aquí se renderizarán las rutas hijas */}
+        <div style={{ flexGrow: 1, overflow: 'auto', padding: '24px' }}>
+          <Outlet />
         </div>
       </div>
     </div>
