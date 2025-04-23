@@ -56,8 +56,8 @@ export default function AdminPanel() {
   const secondaryTextColor = '#64748b';
   const lightGrayBg = '#f8fafc';
   const borderColor = '#e5e7eb';
-  // Estilo para el contenedor general del panel
-  const panelContainerStyle: React.CSSProperties = { padding: '24px' };
+  // Estilo para el contenedor general del panel (REMOVED PADDING)
+  const panelContainerStyle: React.CSSProperties = { /* padding: '24px' */ };
   // Estilo para el título principal
   const mainTitleStyle: React.CSSProperties = { fontSize: '22px', fontWeight: 600, color: '#1e293b', marginBottom: '24px' };
   const gridContainerStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '24px' };

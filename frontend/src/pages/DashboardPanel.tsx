@@ -88,7 +88,7 @@ export default function DashboardPanel() {
   const chartPlaceholderStyle: React.CSSProperties = { backgroundColor: lightGrayBg, border: `1px dashed ${borderColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: secondaryTextColor, fontStyle: 'italic', padding: '20px', borderRadius: '6px', minHeight: '150px' };
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div /* style={{ padding: '24px' }} */ >
       <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px', color: '#111827' }}>
         Dashboard de Cotizaciones y Costos
       </h1>

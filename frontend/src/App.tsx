@@ -391,7 +391,8 @@ export default function App() {
 
   // Estilos de la aplicación
   const sidebarStyle: React.CSSProperties = {
-    width: '240px',
+    width: '220px',
+    minWidth: '220px',
     backgroundColor: '#f8fafc', // Light gray background
     padding: '20px',
     borderRight: '1px solid #e5e7eb', // Subtle border
@@ -421,6 +422,9 @@ export default function App() {
     fontWeight: 500,
     color: '#334155', // Default text color
     transition: 'background-color 0.2s ease, color 0.2s ease',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
   };
 
   const navLinkHoverStyle: React.CSSProperties = {
