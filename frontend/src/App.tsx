@@ -3,6 +3,10 @@ import { Search, Filter, X, ArrowLeft, ArrowRight, Check, Settings, Eye, List, L
 import type { LucideProps } from 'lucide-react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import ecoAllianceLogo from './assets/Logotipo_EAX-EA.png';
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { theme } from './theme'; // <-- Importación nombrada
+import ChatWidget from './components/ChatWidget'; // <-- Importar el ChatWidget
 
 // --- Constants ---
 // const sidebarWidth = 220; // Define sidebar width here - Reemplazada por SIDEBAR_WIDTH
@@ -535,78 +539,82 @@ export default function App() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      <Header logoPath={ecoAllianceLogo} sidebarWidth={SIDEBAR_WIDTH} headerHeight={HEADER_HEIGHT} />
-      <div style={{ display: 'flex', flexGrow: 1, overflow: 'hidden' /* Evita scroll doble */ }}>
-        <div style={sidebarStyle}>
-          <nav style={{ flexGrow: 1, padding: '0 15px' /* Padding interno para enlaces */ }}>
-            {/* Logo dentro de la barra lateral - Opcional, ya está en header */}
-            {/* 
-            <div style={logoContainerStyle}>
-              <img src={ecoAllianceLogo} alt="Logo" style={logoImageStyle} />
-            </div> 
-            */}
-            <Link to="/dashboard" style={getLinkStyle('/dashboard')}>
-               <div style={navLinkTextStyle}> 
-                 <LayoutDashboard size={18} style={navIconStyle} />
-                 DASHBOARD
-               </div>
-            </Link>
-            <Link to="/" style={getLinkStyle('/')}>
-               <div style={navLinkTextStyle}> 
-                 <Menu size={18} style={navIconStyle} /> 
-                 EQUIPOS
-               </div>
-            </Link>
-            <Link 
-              to="/admin/costos" 
-              style={getLinkStyle('/admin')} 
-              onClick={toggleAdminMenu}
-            >
-              <div style={navLinkTextStyle}> 
-                 <FileCog size={18} style={navIconStyle} />
-                 ADMIN
-              </div>
-              {isAdminOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </Link>
-            
-            {isAdminOpen && (
-              <>
-                <Link 
-                  to="/admin/costos" 
-                  style={getLinkStyle('/admin/costos', true)} 
-                >
-                   <div style={navLinkTextStyle}> 
-                      <SlidersHorizontal size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
-                      Costos
-                   </div>
-                </Link>
-                <Link 
-                  to="/admin/perfiles" 
-                  style={getLinkStyle('/admin/perfiles', true)} 
-                >
-                   <div style={navLinkTextStyle}> 
-                      <Users size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
-                      Perfiles
-                   </div>
-                </Link>
-                <Link 
-                  to="/admin/carga-equipos" 
-                  style={getLinkStyle('/admin/carga-equipos', true)} 
-                >
-                   <div style={navLinkTextStyle}> 
-                      <UploadCloud size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
-                      Cargar Equipos
-                   </div>
-                </Link>
-              </>
-            )}
-          </nav>
-        </div>
-        <div style={contentStyle}> {/* Contenedor del contenido principal */}
-          <Outlet />
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <Header logoPath={ecoAllianceLogo} sidebarWidth={SIDEBAR_WIDTH} headerHeight={HEADER_HEIGHT} />
+        <div style={{ display: 'flex', flexGrow: 1, overflow: 'hidden' /* Evita scroll doble */ }}>
+          <div style={sidebarStyle}>
+            <nav style={{ flexGrow: 1, padding: '0 15px' /* Padding interno para enlaces */ }}>
+              {/* Logo dentro de la barra lateral - Opcional, ya está en header */}
+              {/* 
+              <div style={logoContainerStyle}>
+                <img src={ecoAllianceLogo} alt="Logo" style={logoImageStyle} />
+              </div> 
+              */}
+              <Link to="/dashboard" style={getLinkStyle('/dashboard')}>
+                 <div style={navLinkTextStyle}> 
+                   <LayoutDashboard size={18} style={navIconStyle} />
+                   DASHBOARD
+                 </div>
+              </Link>
+              <Link to="/" style={getLinkStyle('/')}>
+                 <div style={navLinkTextStyle}> 
+                   <Menu size={18} style={navIconStyle} /> 
+                   EQUIPOS
+                 </div>
+              </Link>
+              <Link 
+                to="/admin/costos" 
+                style={getLinkStyle('/admin')} 
+                onClick={toggleAdminMenu}
+              >
+                <div style={navLinkTextStyle}> 
+                   <FileCog size={18} style={navIconStyle} />
+                   ADMIN
+                </div>
+                {isAdminOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </Link>
+              
+              {isAdminOpen && (
+                <>
+                  <Link 
+                    to="/admin/costos" 
+                    style={getLinkStyle('/admin/costos', true)} 
+                  >
+                     <div style={navLinkTextStyle}> 
+                        <SlidersHorizontal size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
+                        Costos
+                     </div>
+                  </Link>
+                  <Link 
+                    to="/admin/perfiles" 
+                    style={getLinkStyle('/admin/perfiles', true)} 
+                  >
+                     <div style={navLinkTextStyle}> 
+                        <Users size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
+                        Perfiles
+                     </div>
+                  </Link>
+                  <Link 
+                    to="/admin/carga-equipos" 
+                    style={getLinkStyle('/admin/carga-equipos', true)} 
+                  >
+                     <div style={navLinkTextStyle}> 
+                        <UploadCloud size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
+                        Cargar Equipos
+                     </div>
+                  </Link>
+                </>
+              )}
+            </nav>
+          </div>
+          <div style={contentStyle}> {/* Contenedor del contenido principal */}
+            <Outlet />
+          </div>
         </div>
       </div>
-    </div>
+      <ChatWidget />
+    </ThemeProvider>
   );
 }

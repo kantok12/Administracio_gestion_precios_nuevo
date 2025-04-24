@@ -8,6 +8,8 @@ const productRoutes = require('./routes/productRoutes');
 const costosRoutes = require('./routes/costosRoutes');
 const overridesRoutes = require('./routes/overridesRoutes');
 const categoryOverridesRoutes = require('./routes/categoryOverridesRoutes');
+// Importar las nuevas rutas de Langchain
+const langchainRoutes = require('./routes/langchainRoutes');
 const { fetchCurrencyValuesController, fetchProducts } = require('./controllers/productController');
 const { port } = require('./config/env');
 const PricingOverride = require('./models/PricingOverride');
@@ -42,6 +44,8 @@ const initializeServer = async () => {
     app.use('/api/overrides', overridesRoutes);
     app.use('/api/category-overrides', categoryOverridesRoutes);
     app.use('/api', costosRoutes);
+    // Registrar las nuevas rutas de Langchain
+    app.use('/api/langchain', langchainRoutes);
     
     // Inicializar caché
     console.log('[Server] Initializing cache...');
