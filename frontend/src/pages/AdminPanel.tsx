@@ -11,12 +11,6 @@ export default function AdminPanel() {
   return (
     <PageLayout> {/* Envolver el contenido principal */} 
       <div> {/* Mantener este div como contenedor interno */}
-        <h1 style={{ fontSize: '22px', fontWeight: 600, color: '#1e293b', marginBottom: '24px' }}>
-          Panel de Administración
-        </h1>
-        
-        {/* Navegación Interna (REMOVED) */}
-
         {/* Área donde se renderizará el contenido de la sub-ruta */}
         <div style={{ marginTop: '24px' /* Added margin top to compensate for removed nav */ }}>
           <Outlet />

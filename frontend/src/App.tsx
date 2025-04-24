@@ -559,7 +559,7 @@ export default function App() {
                </div>
             </Link>
             <Link 
-              to="/admin" 
+              to="/admin/costos" 
               style={getLinkStyle('/admin')} 
               onClick={toggleAdminMenu}
             >

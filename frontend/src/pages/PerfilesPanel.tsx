@@ -15,35 +15,56 @@ interface CostProfile {
 const mockProfiles: CostProfile[] = [
   {
     id: 'profile_1',
-    nombre: 'Perfil Estándar Q1 2024',
-    descripcion: 'Configuración base para chipeadoras motorizadas.',
+    nombre: 'Equipo - Pequeño',
+    descripcion: 'Equipos que permiten 4 unidades por contenedor de 20 pies. Ej: Chipeadoras compactas, accesorios.',
     fechaCreacion: '2024-03-15T10:00:00Z',
     costos: {
       margen_adicional_total: 0.35,
       tasa_seguro: 0.01,
       tipo_cambio_eur_usd: 1.09,
-      buffer_usd_clp: 0.02
+      buffer_usd_clp: 0.02,
+      unidades_por_contenedor: 4,
+      tipo_contenedor: '20'
     }
   },
   {
     id: 'profile_2',
-    nombre: 'Oferta Especial Invierno',
-    fechaCreacion: '2024-05-01T14:30:00Z',
-    costos: {
-      margen_adicional_total: 0.28,
-      descuento_fabricante: 0.05,
-      tipo_cambio_eur_usd: 1.08,
-    }
-  },
-  {
-    id: 'profile_3',
-    nombre: 'Configuración PTO Básico',
-    descripcion: 'Solo parámetros esenciales para equipos PTO.',
+    nombre: 'Equipo - Mediano',
+    descripcion: 'Equipos que permiten 2 unidades por contenedor de 20 pies. Ej: Chipeadoras estándar, minicargadores.',
     fechaCreacion: '2024-04-10T09:15:00Z',
     costos: {
       margen_adicional_total: 0.30,
       tasa_seguro: 0.008,
       flete_maritimo_usd: 3200,
+      unidades_por_contenedor: 2,
+      tipo_contenedor: '20'
+    }
+  },
+  {
+    id: 'profile_3',
+    nombre: 'Equipo - Grande',
+    descripcion: 'Equipos que ocupan un contenedor de 40 pies completo. Ej: Chipeadoras industriales, equipos pesados.',
+    fechaCreacion: '2024-04-10T09:15:00Z',
+    costos: {
+      margen_adicional_total: 0.40,
+      tasa_seguro: 0.012,
+      flete_maritimo_usd: 4500,
+      unidades_por_contenedor: 1,
+      tipo_contenedor: '40'
+    }
+  },
+  {
+    id: 'profile_4',
+    nombre: 'Equipo - Especial',
+    descripcion: 'Equipos que requieren contenedores especiales o configuración específica. Ej: Equipos de gran altura, dimensiones no estándar.',
+    fechaCreacion: '2024-04-10T09:15:00Z',
+    costos: {
+      margen_adicional_total: 0.45,
+      tasa_seguro: 0.015,
+      flete_maritimo_usd: 6000,
+      unidades_por_contenedor: 1,
+      tipo_contenedor: '40HC',
+      requiere_aprobacion_especial: true
     }
   }
 ];
@@ -181,7 +202,7 @@ export default function PerfilesPanel() {
   return (
     <div style={panelStyle}>
       <div style={headerStyle}>
-        <h1 style={titleStyle}>Administración de Perfiles de Costos</h1>
+        <h1 style={titleStyle}>Perfiles</h1>
         <button onClick={handleCreateNewProfile} style={primaryButtonStyle} title="Crear nuevo perfil basado en costos actuales (no implementado)">
           <PlusCircle size={16} />
           Crear Nuevo Perfil

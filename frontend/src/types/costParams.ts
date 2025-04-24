@@ -31,6 +31,11 @@ export interface CostParams {
   factor_actualizacion_anual?: number;
   derecho_ad_valorem?: number;
   iva?: number;
+
+  // Parámetros de contenedor
+  unidades_por_contenedor?: number;
+  tipo_contenedor?: string;
+  requiere_aprobacion_especial?: boolean;
 }
 
 // Interfaz para la respuesta del webhook de parámetros de costos

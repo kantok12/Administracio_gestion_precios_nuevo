@@ -477,6 +477,65 @@ const getPricingOverrides = async (req, res) => {
   }
 };
 
+const createIndividualEquipment = async (req, res) => {
+  try {
+    const equipmentData = req.body;
+
+    // Validate required fields
+    const requiredFields = [
+      'Codigo_Producto',
+      'nombre_del_producto',
+      'modelo',
+      'categoria',
+      'largo_cm',
+      'ancho_cm',
+      'alto_cm',
+      'peso_kg',
+      'linea_de_producto',
+      'combustible',
+      'hp',
+      'clasificacion_easysystems',
+      'codigo_ea',
+      'proveedor',
+      'procedencia'
+    ];
+
+    for (const field of requiredFields) {
+      if (!equipmentData[field]) {
+        return res.status(400).json({ 
+          message: `El campo ${field} es requerido`,
+          field: field
+        });
+      }
+    }
+
+    // Validate numeric fields
+    const numericFields = ['largo_cm', 'ancho_cm', 'alto_cm', 'peso_kg', 'hp'];
+    for (const field of numericFields) {
+      if (isNaN(Number(equipmentData[field]))) {
+        return res.status(400).json({ 
+          message: `El campo ${field} debe ser un número`,
+          field: field
+        });
+      }
+    }
+
+    // TODO: Add database integration here
+    // For now, just return success
+    res.status(201).json({
+      message: 'Equipo creado exitosamente',
+      data: equipmentData
+    });
+
+  } catch (error) {
+    console.error('Error creating equipment:', error);
+    res.status(500).json({ 
+      message: 'Error al crear el equipo',
+      error: error.message 
+    });
+  }
+};
+
 module.exports = { 
   fetchProducts, 
   getCachedProducts, 
@@ -489,5 +548,6 @@ module.exports = {
   clearCache,
   getProductDetail,
   getOptionalProducts,
-  getPricingOverrides
+  getPricingOverrides,
+  createIndividualEquipment
 };

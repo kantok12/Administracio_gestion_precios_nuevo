@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { Search, Filter, X, ArrowLeft, ArrowRight, Check, MessageCircle } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
 import OpcionalesCotizacionModal from '../components/OpcionalesCotizacionModal';
 import DetallesCargaPanel from './DetallesCargaPanel';
@@ -126,6 +126,28 @@ export default function EquiposPanel() {
   const unifiedFooterStyle: React.CSSProperties = { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f8f9fa' }; // Gris claro footer
   const unifiedSecondaryButtonStyle: React.CSSProperties = { padding: '8px 16px', borderRadius: '6px', border: '1px solid #D1D5DB', backgroundColor: 'white', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 500 }; // Reducido a 13px
   const unifiedDisabledSecondaryButtonStyle: React.CSSProperties = { ...unifiedSecondaryButtonStyle, backgroundColor: '#F9FAFB', color: '#9CA3AF', cursor: 'not-allowed' };
+
+  // Estilo para el botón flotante de chat
+  const [isHoveringChat, setIsHoveringChat] = useState(false);
+  const chatButtonStyle: React.CSSProperties = {
+    position: 'fixed',
+    bottom: '24px',
+    right: '24px',
+    backgroundColor: isHoveringChat ? '#1d4ed8' : '#2563eb',
+    color: 'white',
+    width: '56px',
+    height: '56px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    cursor: 'pointer',
+    border: 'none',
+    transition: 'transform 0.2s ease, background-color 0.2s ease',
+    zIndex: 1000,
+    transform: isHoveringChat ? 'scale(1.05)' : 'scale(1)'
+  };
 
   // Funciones (movidas de App.tsx)
   const handleVerDetalle = async (producto: Producto) => {
@@ -418,6 +440,13 @@ export default function EquiposPanel() {
     );
   };
 
+  // Función para manejar el clic en el botón de chat
+  const handleChatClick = () => {
+    // Por ahora solo mostramos un mensaje en consola
+    console.log('Chat IA - Funcionalidad futura');
+    // Aquí irá la lógica para abrir el chat con IA
+  };
+
   // JSX (movido de App.tsx, corresponde al <main>...</main>)
   if (pasoCotizacion === 1) {
     // Renderizar el panel de Detalles de la Carga
@@ -663,6 +692,17 @@ export default function EquiposPanel() {
             </div>
           </div>
         )}
+
+        {/* Botón flotante de chat */}
+        <button 
+          onClick={handleChatClick}
+          onMouseEnter={() => setIsHoveringChat(true)}
+          onMouseLeave={() => setIsHoveringChat(false)}
+          style={chatButtonStyle}
+          title="Asistente IA (Próximamente)"
+        >
+          <MessageCircle size={24} />
+        </button>
       </div>
     </PageLayout>
   );
