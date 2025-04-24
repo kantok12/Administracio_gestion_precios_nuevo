@@ -1,10 +1,65 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Send } from 'lucide-react';
+import { Send, MessageSquare, X, Minus } from 'lucide-react';
 import './ChatWidget.css'; // Crearemos este archivo para los estilos
 
+// --- Definición de ProductTable (Movido aquí) ---
+// (Asegúrate que la interfaz Product aquí y abajo coincidan)
+interface ProductForTable {
+  codigo_producto?: string;
+  nombre_del_producto?: string;
+  Modelo?: string;
+  Categoria?: string;
+  // Añade otros campos si los necesitas
+}
+
+interface ProductTableProps {
+  products: ProductForTable[];
+}
+
+const ProductTable: React.FC<ProductTableProps> = ({ products }) => {
+  if (!products || products.length === 0) {
+    return <p>No hay productos para mostrar.</p>;
+  }
+  const headers = ['Código', 'Nombre', 'Modelo', 'Categoría'];
+  return (
+    <div className="product-table-container">
+      <table>
+        <thead>
+          <tr>
+            {headers.map(header => <th key={header}>{header}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {products.map((product, index) => (
+            <tr key={product.codigo_producto || index}> 
+              <td>{product.codigo_producto || '-'}</td>
+              <td>{product.nombre_del_producto || '-'}</td>
+              <td>{product.Modelo || '-'}</td>
+              <td>{product.Categoria || '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+// --- Fin Definición de ProductTable ---
+
+// Interfaz para los datos generales del producto (puede ser la misma)
+interface Product {
+  codigo_producto?: string;
+  nombre_del_producto?: string;
+  Modelo?: string;
+  Categoria?: string;
+  // Añade otros campos que quieras mostrar en la tabla
+}
+
+// Actualizar interfaz Message para incluir tipo y datos de producto
 interface Message {
   sender: 'user' | 'bot';
-  text: string;
+  type: 'text' | 'table'; // Tipo de mensaje
+  text?: string; // Opcional si es tabla
+  products?: Product[]; // Opcional si es texto
 }
 
 const ChatWidget: React.FC = () => {
@@ -36,7 +91,7 @@ const ChatWidget: React.FC = () => {
     setIsOpen(!isOpen);
     if (!isOpen && messages.length === 0) {
       // Mensaje inicial del bot al abrir por primera vez
-      setMessages([{ sender: 'bot', text: '¡Hola! Soy EcoAsistente. ¿En qué puedo ayudarte hoy?' }]);
+      setMessages([{ sender: 'bot', text: '¡Hola! Soy EcoAsistente. ¿En qué puedo ayudarte hoy?', type: 'text' }]);
     }
   };
 
@@ -51,8 +106,8 @@ const ChatWidget: React.FC = () => {
     // Log ANTES de enviar
     console.log('[ChatWidget] Enviando mensaje. Conversation ID actual:', conversationId);
 
-    // Añadir mensaje del usuario al chat
-    setMessages(prev => [...prev, { sender: 'user', text: userMessage }]);
+    // Añadir mensaje del usuario al chat (siempre es de tipo texto)
+    setMessages(prev => [...prev, { sender: 'user', text: userMessage, type: 'text' }]);
     setInputValue('');
     setIsLoading(true);
 
@@ -80,11 +135,40 @@ const ChatWidget: React.FC = () => {
       }
 
       const data = await response.json();
-      
-      // Añadir respuesta del bot al chat
-      setMessages(prev => [...prev, { sender: 'bot', text: data.response }]);
+      const botResponseText = data.response; // Respuesta del agente
 
-      // Actualizar el conversationId con el devuelto por el backend
+      // --- Procesar respuesta del bot ---
+      const tablePrefix = "PRODUCTS_TABLE::";
+      let botMessage: Message;
+
+      if (typeof botResponseText === 'string' && botResponseText.startsWith(tablePrefix)) {
+        try {
+          const jsonString = botResponseText.substring(tablePrefix.length);
+          const productsData = JSON.parse(jsonString);
+          if (Array.isArray(productsData) && productsData.length > 0) {
+            // Crear mensaje de tipo tabla
+            botMessage = { sender: 'bot', type: 'table', products: productsData };
+            console.log('[ChatWidget] Mostrando tabla de productos.');
+          } else {
+            // Si el JSON está vacío o no es array, mostrar texto genérico
+            botMessage = { sender: 'bot', type: 'text', text: "Se encontraron algunos productos, pero no se pueden mostrar en tabla." };
+            console.warn('[ChatWidget] Se recibió prefijo de tabla, pero los datos no son válidos.', productsData);
+          }
+        } catch (parseError) {
+          console.error('[ChatWidget] Error al parsear JSON de productos:', parseError);
+          // Fallback a mensaje de texto si falla el parseo
+          botMessage = { sender: 'bot', type: 'text', text: "Recibí una lista de productos, pero hubo un problema al mostrarla." };
+        }
+      } else {
+        // Respuesta normal de texto
+        botMessage = { sender: 'bot', type: 'text', text: botResponseText || "No se recibió respuesta." };
+      }
+
+      // Añadir el mensaje procesado del bot al estado
+      setMessages(prev => [...prev, botMessage]);
+      // --- Fin Procesar respuesta del bot ---
+
+      // Actualizar el conversationId
       if (data.conversationId) {
         console.log('[ChatWidget] Recibido/Actualizado Conversation ID desde backend:', data.conversationId);
         setConversationId(data.conversationId);
@@ -93,13 +177,21 @@ const ChatWidget: React.FC = () => {
     } catch (error) {
       console.error("Error al enviar mensaje:", error);
       const errorMessage = error instanceof Error ? error.message : 'Error de conexión con el asistente.';
-      setMessages(prev => [...prev, { sender: 'bot', text: `Lo siento, hubo un error: ${errorMessage}` }]);
+      setMessages(prev => [...prev, { sender: 'bot', type: 'text', text: `Lo siento, hubo un error: ${errorMessage}` }]);
     } finally {
       setIsLoading(false);
       // Enfocar input después de recibir respuesta
       inputRef.current?.focus(); 
     }
   }, [inputValue, backendUrl, conversationId]);
+
+  // Función para cerrar y resetear el chat
+  const handleCloseAndReset = () => {
+    setIsOpen(false);
+    setMessages([]); // Limpiar mensajes
+    setConversationId(null); // Resetear ID de conversación
+    console.log('[ChatWidget] Chat cerrado y reseteado.');
+  };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && !isLoading) {
@@ -113,12 +205,23 @@ const ChatWidget: React.FC = () => {
         <div className="chat-window">
           <div className="chat-header">
             <span>EcoAsistente</span>
-            <button onClick={toggleChat} className="close-button">✕</button>
+            <div className="chat-header-buttons">
+              <button onClick={toggleChat} className="header-button minimize-button" title="Minimizar">
+                <Minus size={18} />
+              </button>
+              <button onClick={handleCloseAndReset} className="header-button close-button" title="Cerrar y Reiniciar">
+                <X size={18} />
+              </button>
+            </div>
           </div>
           <div className="chat-messages">
             {messages.map((msg, index) => (
               <div key={index} className={`message ${msg.sender}`}>
-                {msg.text}
+                {/* Renderizar texto o tabla según el tipo */} 
+                {msg.type === 'text' && msg.text}
+                {msg.type === 'table' && msg.products && (
+                  <ProductTable products={msg.products} />
+                )}
               </div>
             ))}
             {isLoading && (
@@ -145,7 +248,7 @@ const ChatWidget: React.FC = () => {
         </div>
       ) : (
         <button onClick={toggleChat} className="chat-bubble">
-          💬
+          <MessageSquare size={30} />
         </button>
       )}
     </div>

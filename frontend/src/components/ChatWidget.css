@@ -27,6 +27,11 @@
   background-color: #0056b3; /* Azul más oscuro */
 }
 
+/* Ajuste para icono dentro de la burbuja */
+.chat-bubble svg {
+  color: white;
+}
+
 /* Ventana del chat */
 .chat-window {
   width: 350px;
@@ -51,12 +56,29 @@
   font-weight: bold;
 }
 
-.close-button {
+/* Contenedor para botones del header */
+.chat-header-buttons {
+  display: flex;
+  gap: 5px; /* Espacio entre botones */
+}
+
+/* Estilo base para botones del header */
+.header-button {
   background: none;
   border: none;
-  font-size: 20px;
+  padding: 3px;
   cursor: pointer;
   color: #6c757d; /* Gris secundario */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px; /* Ligeramente redondeado */
+  transition: background-color 0.2s ease;
+}
+
+.header-button:hover {
+  background-color: #e2e6ea; /* Gris claro al pasar el mouse */
+  color: #343a40; /* Texto más oscuro al pasar el mouse */
 }
 
 /* Área de mensajes */
@@ -159,4 +181,36 @@
 .send-button svg {
   width: 18px;
   height: 18px;
+}
+
+/* --- Estilos para ProductTable --- */
+
+.product-table-container {
+  overflow-x: auto; /* Permite scroll horizontal si la tabla es muy ancha */
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.product-table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px; /* Tamaño de fuente más pequeño para tabla */
+  background-color: #fff; /* Fondo blanco para la tabla */
+}
+
+.product-table-container th,
+.product-table-container td {
+  border: 1px solid #dee2e6; /* Bordes de celda */
+  padding: 6px 8px; /* Espaciado interno de celda */
+  text-align: left;
+}
+
+.product-table-container th {
+  background-color: #f8f9fa; /* Fondo ligero para cabeceras */
+  font-weight: bold;
+}
+
+/* Estilo para filas alternas (opcional) */
+.product-table-container tbody tr:nth-child(odd) {
+  background-color: #f8f9fa;
 } 

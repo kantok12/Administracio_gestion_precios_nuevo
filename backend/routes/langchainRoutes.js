@@ -23,24 +23,55 @@ const INTERNAL_API_BASE_URL = `http://localhost:${port}/api`;
 
 const equiposTool = new DynamicTool({
   name: "buscar_equipos_por_categoria",
-  description: "Devuelve una lista de equipos disponibles filtrados por categoría. La entrada debe ser únicamente el nombre de la categoría.",
-  func: async (categoria) => {
-    console.log(`[Tool:equipos] Buscando equipos para categoría: ${categoria}`);
+  description: "Busca equipos disponibles por categoría, código o modelo. La entrada debe ser el nombre de la categoría, el código exacto del producto o parte del nombre del modelo.",
+  func: async (input) => {
+    console.log(`[Tool:equipos] Buscando equipos con input: ${input}`);
+    const lowerInput = input.toLowerCase();
     try {
-      // Llama a la función que obtiene *todos* los productos desde el webhook
+      // Obtener todos los productos
       const allProducts = await fetchAvailableProducts();
-      
-      // Filtra los productos por la categoría proporcionada (insensible a mayúsculas/minúsculas)
-      const filteredProducts = allProducts.filter(product => 
-        product.Categoria?.toLowerCase() === categoria.toLowerCase()
-      );
+      let filteredProducts = [];
 
-      console.log(`[Tool:equipos] Encontrados ${filteredProducts.length} equipos para la categoría "${categoria}".`);
-      // Devuelve los productos filtrados como un string JSON para el agente
-      return JSON.stringify(filteredProducts); 
+      // 1. Intentar filtrar por Código (si el input parece numérico)
+      if (/^\d+$/.test(input)) { 
+        console.log(`[Tool:equipos] Interpretando input como código: ${input}`);
+        filteredProducts = allProducts.filter(product => 
+          product.codigo_producto === input
+        );
+        if (filteredProducts.length > 0) {
+          console.log(`[Tool:equipos] Encontrado ${filteredProducts.length} producto(s) por código.`);
+          return JSON.stringify(filteredProducts);
+        }
+      }
+
+      // 2. Si no se encontró por código, intentar filtrar por Modelo (usando includes)
+      console.log(`[Tool:equipos] Intentando filtrar por modelo que incluya: ${lowerInput}`);
+      filteredProducts = allProducts.filter(product => 
+        product.Modelo?.toLowerCase().includes(lowerInput)
+      );
+      if (filteredProducts.length > 0) {
+         console.log(`[Tool:equipos] Encontrado ${filteredProducts.length} producto(s) por modelo.`);
+         return JSON.stringify(filteredProducts);
+      }
+      
+      // 3. Si no, filtrar por Categoría (usando includes)
+      console.log(`[Tool:equipos] Intentando filtrar por categoría que incluya: ${lowerInput}`);
+      filteredProducts = allProducts.filter(product => 
+        product.Categoria?.toLowerCase().includes(lowerInput)
+      );
+      
+      console.log(`[Tool:equipos] Encontrados ${filteredProducts.length} equipos filtrando por categoría.`);
+      // Si se encontraron productos, devolver marcador + JSON
+      if (filteredProducts.length > 0) {
+        return "PRODUCTS_TABLE::" + JSON.stringify(filteredProducts);
+      } else {
+        // Si no, devolver mensaje de texto
+        return "No se encontraron productos que coincidan con la búsqueda.";
+      }
+
     } catch (error) {
       console.error(`[Tool:equipos] Error: ${error.message}`);
-      return `Error al buscar equipos para la categoría ${categoria}: ${error.message}`;
+      return `Error al buscar equipos con input ${input}: ${error.message}`;
     }
   },
 });
