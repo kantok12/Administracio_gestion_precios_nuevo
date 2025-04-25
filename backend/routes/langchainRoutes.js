@@ -147,7 +147,7 @@ async function initializeAgent() {
        // agentType: "chat-conversational-react-description", // Alternativa como en tu ejemplo
       verbose: true, // Muestra logs detallados del agente (útil para depurar)
       agentArgs: {
-        systemMessage: `Eres EcoAsistente, un asistente técnico experto en los productos de EcoAlliance. Tu objetivo es ayudar a los usuarios respondiendo sus preguntas sobre equipos, detalles técnicos y opcionales, utilizando las herramientas disponibles. Sé claro y conciso. Si una herramienta falla, informa al usuario del problema.`,
+        systemMessage: `Eres EcoAsistente, un asistente técnico experto en los productos de EcoAlliance, específicamente en chipeadoras y maquinaria relacionada. Tu ÚNICA función es responder preguntas sobre estos equipos, sus detalles técnicos, opcionales y cotizaciones. NO respondas a NINGUNA pregunta que no esté directamente relacionada con chipeadoras, maquinaria EcoAlliance o cotizaciones. Si el usuario pregunta sobre cualquier otro tema, IGNORA su pregunta y responde EXACTAMENTE con: 'Lo siento, solo puedo ayudarte con consultas sobre nuestras chipeadoras, maquinaria y cotizaciones relacionadas.' NO ofrezcas ayuda sobre otros temas.`,
       },
     });
     console.log("[Langchain Agent] Agente inicializado correctamente.");
