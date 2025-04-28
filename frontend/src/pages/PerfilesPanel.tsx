@@ -84,11 +84,11 @@ export default function PerfilesPanel() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // --- Función API Divisas (Traída y adaptada de CostosAdminPanel) ---
-  // Esta función AÚN obtiene AMBOS valores (Dólar y Euro) y los actualiza en la BD
-  const fetchAndSetCurrencies = async (updateTimestamp?: Date) => {
-    console.log("[PerfilesPanel] Fetching currencies from webhook...");
+  // Modificada para aceptar un parámetro opcional para actualizar la BD
+  const fetchAndSetCurrencies = async (updateTimestamp?: Date, updateInDB: boolean = false) => {
+    console.log(`[PerfilesPanel] Fetching currencies... (updateInDB: ${updateInDB})`); // Log si actualiza BD
     setIsUpdatingCurrencies(true);
-    setInitialCurrencyLoading(true); // Set loading true when fetching starts
+    setInitialCurrencyLoading(true); 
     setCurrencyUpdateError(null);
     let dolarValue: number | null = null;
     let euroValue: number | null = null;
@@ -129,18 +129,21 @@ export default function PerfilesPanel() {
       const displayTime = updateTimestamp || new Date();
       setFechaActualizacionDivisas(displayTime.toLocaleString('es-CL'));
 
-      // Actualizar en BD si tenemos ambos valores válidos
-      if (dolarValue !== null && euroValue !== null) {
+      // --- Actualizar en BD SOLO si updateInDB es true y tenemos valores válidos ---
+      if (updateInDB && dolarValue !== null && euroValue !== null) { 
         console.log(`[PerfilesPanel] Currency values obtained (D: ${dolarValue}, E: ${euroValue}). Attempting to update in DB...`);
         try {
           await api.updateCurrenciesInDB({ dolar_observado_actual: dolarValue, euro_observado_actual: euroValue });
           console.log('[PerfilesPanel] Currencies successfully updated in DB.');
         } catch (backendError) {
           console.error('[PerfilesPanel] Error updating currencies in backend:', backendError);
-          // Opcional: Mostrar error al usuario
+          // Propagar o manejar el error de actualización de BD
+          throw backendError; // Re-lanzar para que el handler del botón lo muestre
         }
+      } else if (updateInDB) {
+           console.warn('[PerfilesPanel] No se actualizaron las divisas en la BD porque faltaba uno o ambos valores, aunque se solicitó.');
       } else {
-        console.warn('[PerfilesPanel] No se actualizaron las divisas en la BD porque faltaba uno o ambos valores.');
+           console.log('[PerfilesPanel] Se obtuvieron divisas pero no se solicitó actualización en BD.');
       }
 
       return true;
@@ -154,7 +157,7 @@ export default function PerfilesPanel() {
       return false;
     } finally {
         setIsUpdatingCurrencies(false);
-        setInitialCurrencyLoading(false); // Set loading false when fetching ends
+        setInitialCurrencyLoading(false); 
     }
   };
 
@@ -218,16 +221,8 @@ export default function PerfilesPanel() {
       setInitialCurrencyLoading(true);
       setCurrencyUpdateError(null);
       try {
-          // Aquí podríamos tener una función api.fetchCachedCurrencies() o 
-          // llamar a fetchCurrencies pero sin el updateDB posterior.
-          // Por ahora, mantenemos la llamada original a fetchAndSetCurrencies 
-          // pero su lógica interna ya NO actualiza la BD automáticamente si no es necesario.
-          // Alternativa: crear una función api.getCurrentCurrenciesFromDB() si existe
-          
-          console.log('[PerfilesPanel] Fetching initial currency values...');
-          // Reutilizamos fetchAndSetCurrencies, asumiendo que queremos mostrar los valores actuales
-          // pero la función ahora es más segura y no actualiza si no hay cambios o error.
-          // Si NO quieres ver los valores de divisa al inicio, comenta/elimina esta llamada.
+          console.log('[PerfilesPanel] Fetching initial currency values (no DB update)...');
+          // Llamar SIN el segundo argumento (o explícitamente false)
           await fetchAndSetCurrencies(); 
       } catch (err) {
           // El error ya se maneja dentro de fetchAndSetCurrencies
@@ -392,7 +387,29 @@ export default function PerfilesPanel() {
       }
     }
   };
-  const handleActualizarDivisas = () => { fetchAndSetCurrencies(new Date()); };
+  const handleActualizarDivisas = async () => { 
+      // Mostrar feedback de carga inmediatamente
+      setIsUpdatingCurrencies(true);
+      setCurrencyUpdateError(null);
+      try {
+          // Llamar con updateInDB = true
+          const success = await fetchAndSetCurrencies(new Date(), true); 
+          if (!success) {
+              // Si fetchAndSetCurrencies devuelve false (por error de fetch), establecer un error genérico si no hay uno específico
+              if (!currencyUpdateError) {
+                  setCurrencyUpdateError('Error al actualizar divisas desde el webhook.');
+              }
+          }
+      } catch (error) {
+          // Capturar errores lanzados desde fetchAndSetCurrencies (ej: error de actualización de BD)
+          console.error('[PerfilesPanel] Error en handleActualizarDivisas:', error);
+          const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
+           setCurrencyUpdateError(errorMsg.includes('fetch') ? 'Error de conexión.' : errorMsg);
+      } finally {
+          // Asegurarse que el estado de carga se desactive incluso si hay error
+          setIsUpdatingCurrencies(false); 
+      }
+  };
 
   return (
     <div style={panelStyle}>
