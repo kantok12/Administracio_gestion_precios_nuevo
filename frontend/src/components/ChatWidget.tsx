@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Send, MessageSquare, X, Minus } from 'lucide-react';
 import './ChatWidget.css'; // Crearemos este archivo para los estilos
 
@@ -62,7 +62,21 @@ interface Message {
   products?: Product[]; // Opcional si es texto
 }
 
-const ChatWidget: React.FC = () => {
+// --- Interfaces para Props y Handle --- 
+interface ChatWidgetProps {
+  onBubbleClick: () => void; // Función a ejecutar al hacer clic en la burbuja
+}
+
+export interface ChatWidgetHandle {
+  openChat: () => void;
+}
+
+// --- Modificar definición del componente --- 
+const ChatWidget = forwardRef<ChatWidgetHandle, ChatWidgetProps>((props, ref) => {
+  // Acceder a onBubbleClick desde props
+  const { onBubbleClick } = props;
+
+  // --- Estados internos (permanecen aquí) ---
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState<string>('');
@@ -70,9 +84,24 @@ const ChatWidget: React.FC = () => {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const backendUrl = 'http://localhost:5001/api/langchain/chat';
 
-  const backendUrl = 'http://localhost:5001/api/langchain/chat'; // Asegúrate que el puerto es correcto
+  // --- Exponer método openChat usando useImperativeHandle ---
+  useImperativeHandle(ref, () => ({
+    openChat: () => {
+      console.log('[ChatWidget] Abriendo chat via ref...');
+      setIsOpen(true);
+      if (messages.length === 0) {
+         // Mensaje inicial del bot si se abre por primera vez via ref
+         setMessages([{ sender: 'bot', text: '¡Hola! Soy EcoAsistente. ¿En qué puedo ayudarte hoy?', type: 'text' }]);
+      }
+      // Enfocar input al abrir
+      // Usar setTimeout para asegurar que el input esté renderizado
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }));
 
+  // --- Funciones internas --- 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -81,18 +110,11 @@ const ChatWidget: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus();
-    }
-  }, [isOpen]);
-
-  const toggleChat = () => {
-    setIsOpen(!isOpen);
-    if (!isOpen && messages.length === 0) {
-      // Mensaje inicial del bot al abrir por primera vez
-      setMessages([{ sender: 'bot', text: '¡Hola! Soy EcoAsistente. ¿En qué puedo ayudarte hoy?', type: 'text' }]);
-    }
+  // Función para MINIMIZAR/CERRAR desde el header del chat
+  const handleToggleWindow = () => {
+     setIsOpen(!isOpen);
+     // Podríamos añadir lógica de reset aquí si quisiéramos que cerrar siempre resetee
+     // handleCloseAndReset(); // Descomentar si cerrar desde el header debe resetear
   };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,12 +206,12 @@ const ChatWidget: React.FC = () => {
       inputRef.current?.focus(); 
     }
   }, [inputValue, backendUrl, conversationId]);
-
-  // Función para cerrar y resetear el chat
+  
+  // Función para cerrar Y RESETEAR (desde el botón X)
   const handleCloseAndReset = () => {
     setIsOpen(false);
-    setMessages([]); // Limpiar mensajes
-    setConversationId(null); // Resetear ID de conversación
+    setMessages([]); 
+    setConversationId(null); 
     console.log('[ChatWidget] Chat cerrado y reseteado.');
   };
 
@@ -199,6 +221,7 @@ const ChatWidget: React.FC = () => {
     }
   };
 
+  // --- Renderizado --- 
   return (
     <div className="chat-widget-container">
       {isOpen ? (
@@ -206,9 +229,11 @@ const ChatWidget: React.FC = () => {
           <div className="chat-header">
             <span>EcoAsistente</span>
             <div className="chat-header-buttons">
-              <button onClick={toggleChat} className="header-button minimize-button" title="Minimizar">
+              {/* Botón Minimizar llama a handleToggleWindow */}
+              <button onClick={handleToggleWindow} className="header-button minimize-button" title="Minimizar">
                 <Minus size={18} />
               </button>
+              {/* Botón Cerrar y Resetear llama a handleCloseAndReset */}
               <button onClick={handleCloseAndReset} className="header-button close-button" title="Cerrar y Reiniciar">
                 <X size={18} />
               </button>
@@ -247,12 +272,13 @@ const ChatWidget: React.FC = () => {
           </div>
         </div>
       ) : (
-        <button onClick={toggleChat} className="chat-bubble">
-          <MessageSquare size={30} />
+        // --- Botón burbuja ahora usa onBubbleClick de las props --- 
+        <button onClick={onBubbleClick} className="chat-bubble">
+          <MessageSquare color="white" /> 
         </button>
       )}
     </div>
   );
-};
+}); // <-- Cierre del forwardRef
 
-export default ChatWidget; 
+export default ChatWidget; // <-- Exportar el componente envuelto 

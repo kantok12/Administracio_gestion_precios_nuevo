@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Filter, X, ArrowLeft, ArrowRight, Check, Settings, Eye, List, Loader2, LayoutDashboard, FileCog, Users, Menu, Bell, User, SlidersHorizontal, ChevronDown, ChevronUp, UploadCloud } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import ecoAllianceLogo from './assets/Logotipo_EAX-EA.png';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { theme } from './theme'; // <-- Importación nombrada
-import ChatWidget from './components/ChatWidget'; // <-- Importar el ChatWidget
+import ChatWidget, { ChatWidgetHandle } from './components/ChatWidget'; // <-- Importar ChatWidgetHandle
 import PerfilesPanel from './pages/PerfilesPanel'; // <-- A PerfilesPanel (default import)
 
 // --- Constants ---
@@ -163,7 +163,9 @@ const Header: React.FC<HeaderProps> = ({ logoPath, sidebarWidth, headerHeight })
 
 // Versión funcional con diseño simplificado
 export default function App() {
-  const location = useLocation(); // Hook para obtener la ruta actual
+  const location = useLocation();
+  const navigate = useNavigate(); // Hook para navegación
+  const chatWidgetRef = useRef<ChatWidgetHandle>(null); // Ref para el ChatWidget
   
   // State for Admin Submenu
   const [isAdminOpen, setIsAdminOpen] = useState(location.pathname.startsWith('/admin'));
@@ -487,6 +489,12 @@ export default function App() {
     setDetalleProducto(null);
   };
 
+  // --- Función para abrir el chat (siempre usada por el flotante) ---
+  const handleOpenChatClick = () => {
+    console.log('[App] Botón flotante clickeado -> Abrir Chat');
+    chatWidgetRef.current?.openChat();
+  };
+
   // Estilos de la aplicación
   const sidebarStyle: React.CSSProperties = {
     width: `${SIDEBAR_WIDTH}px`, // Usa la constante de ancho
@@ -648,7 +656,8 @@ export default function App() {
           </div>
         </div>
       </div>
-      <ChatWidget />
+      {/* Renderizar ChatWidget pasando SOLO handleOpenChatClick */}
+      <ChatWidget ref={chatWidgetRef} onBubbleClick={handleOpenChatClick} />
     </ThemeProvider>
   );
 }

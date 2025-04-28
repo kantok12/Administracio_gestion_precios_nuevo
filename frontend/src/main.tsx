@@ -10,7 +10,6 @@ import PerfilesPanel from './pages/PerfilesPanel'
 import PerfilEditForm from './pages/PerfilEditForm'
 import CargaEquiposPanel from './pages/CargaEquiposPanel'
 import DashboardPanel from './pages/DashboardPanel'
-import PlaceholderPanel from './pages/PlaceholderPanel'
 import DetallesEnvioPanel from './pages/DetallesEnvioPanel'
 
 // Forzar modo claro
@@ -46,7 +45,6 @@ if (rootElement) {
               </Route>
               <Route path="/perfiles/:id/editar" element={<PerfilEditForm />} />
               <Route path="dashboard" element={<DashboardPanel />} />
-              <Route path="placeholder" element={<PlaceholderPanel />} />
             </Route>
           </Routes>
         </BrowserRouter>
@@ -83,7 +81,6 @@ if (rootElement) {
               </Route>
               <Route path="/perfiles/:id/editar" element={<PerfilEditForm />} />
               <Route path="dashboard" element={<DashboardPanel />} />
-              <Route path="placeholder" element={<PlaceholderPanel />} />
             </Route>
           </Routes>
         </BrowserRouter>
@@ -116,7 +113,6 @@ if (rootElement) {
             </Route>
             <Route path="/perfiles/:id/editar" element={<PerfilEditForm />} />
             <Route path="dashboard" element={<DashboardPanel />} />
-            <Route path="placeholder" element={<PlaceholderPanel />} />
           </Route>
         </Routes>
       </BrowserRouter>

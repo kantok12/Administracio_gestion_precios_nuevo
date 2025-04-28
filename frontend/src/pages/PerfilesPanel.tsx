@@ -64,7 +64,7 @@ export default function PerfilesPanel() {
   const [profiles, setProfiles] = useState<CostProfile[]>([]); 
   const [loading, setLoading] = useState<boolean>(true); // Loading general
   const [error, setError] = useState<string | null>(null); // Error al cargar la lista de perfiles
-  const navigate = useNavigate(); 
+  const navigate = useNavigate(); // <-- Añadir hook de navegación
 
   // --- Estados Divisas (Traído de CostosAdminPanel) ---
   const [dolarActualCLP, setDolarActualCLP] = useState<string | null>(null);
@@ -313,16 +313,16 @@ export default function PerfilesPanel() {
   const secondaryTextColor = '#64748b';
   const borderColor = '#e5e7eb';
 
-  // --- Placeholder Handlers --- 
-  const handleCreateNewProfile = () => {
-    console.log('Crear Nuevo Perfil clickeado');
-    // --- Guardar estado en sessionStorage ANTES de navegar --- 
+  // --- MODIFICAR Función para manejar el clic en "Crear Nuevo Perfil" ---
+  const handleNavigateToCostosForNewProfile = () => {
+    console.log('[PerfilesPanel] Botón "Crear Nuevo Perfil" clickeado -> Navegando a Costos...');
     try {
+      // Establecer la bandera en sessionStorage para indicar el flujo
       sessionStorage.setItem('showCostosLink', 'true');
-      console.log('sessionStorage showCostosLink establecido a true');
+      console.log('[PerfilesPanel] sessionStorage showCostosLink establecido a true');
     } catch (storageError) {
-      console.error('Error al escribir en sessionStorage:', storageError);
-      // Considerar mostrar un error al usuario si el almacenamiento es crítico
+      console.error('[PerfilesPanel] Error al escribir en sessionStorage:', storageError);
+      // Considerar notificar al usuario si esto es crítico
     }
     // Navegar a la página de costos
     navigate('/admin/costos'); 
@@ -358,7 +358,8 @@ export default function PerfilesPanel() {
   
   const handleEditProfile = (id: string) => {
     console.log(`Navegando a la edición del perfil: ${id}`);
-    navigate(`/perfiles/${id}/editar`); // <-- Navegar a la ruta de edición
+    // const navigate = useNavigate(); // Eliminar si ya no se necesita aquí
+    // navigate(`/perfiles/${id}/editar`); // <-- Navegar a la ruta de edición
   };
   const handleDeleteProfile = async (profileId: string) => {
     // Usar el nombre del perfil para la confirmación si está disponible
@@ -477,8 +478,14 @@ export default function PerfilesPanel() {
 
       <div style={headerStyle}>
         <h1 style={titleStyle}>Perfiles</h1>
-        <button onClick={handleCreateNewProfile} style={primaryButtonStyle} title="Crear nuevo perfil basado en costos actuales">
-          <PlusCircle size={16} />
+        {/* --- Botón "Crear Nuevo Perfil" ahora navega a Costos --- */}
+        <button 
+          onClick={handleNavigateToCostosForNewProfile} // <-- Llama a la función de navegación
+          style={primaryButtonStyle} 
+          title="Ir a Costos para definir un nuevo perfil"
+          // disabled={...} // Quitar disabled si no hay estado de carga
+        >
+          <PlusCircle size={16} style={{ marginRight: '6px' }}/>
           Crear Nuevo Perfil
         </button>
       </div>

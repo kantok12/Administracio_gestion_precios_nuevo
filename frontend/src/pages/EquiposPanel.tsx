@@ -440,13 +440,6 @@ export default function EquiposPanel() {
     );
   };
 
-  // Función para manejar el clic en el botón de chat
-  const handleChatClick = () => {
-    // Por ahora solo mostramos un mensaje en consola
-    console.log('Chat IA - Funcionalidad futura');
-    // Aquí irá la lógica para abrir el chat con IA
-  };
-
   // JSX (movido de App.tsx, corresponde al <main>...</main>)
   if (pasoCotizacion === 1) {
     // Renderizar el panel de Detalles de la Carga
@@ -692,17 +685,6 @@ export default function EquiposPanel() {
             </div>
           </div>
         )}
-
-        {/* Botón flotante de chat */}
-        <button 
-          onClick={handleChatClick}
-          onMouseEnter={() => setIsHoveringChat(true)}
-          onMouseLeave={() => setIsHoveringChat(false)}
-          style={chatButtonStyle}
-          title="Asistente IA (Próximamente)"
-        >
-          <MessageCircle size={24} />
-        </button>
       </div>
     </PageLayout>
   );
