@@ -1,0 +1,43 @@
+// Interface for the 'costos' sub-document
+export interface CostosData {
+  tipo_cambio_eur_usd?: number;
+  buffer_eur_usd?: number;
+  dolar_observado_actual?: number;
+  buffer_usd_clp?: number;
+  tasa_seguro?: number;
+  margen_adicional_total?: number;
+  costo_fabrica_original_eur?: number;
+  descuento_fabricante?: number;
+  factor_actualizacion_anual?: number;
+  transporte_local_eur?: number;
+  gasto_importacion_eur?: number;
+  flete_maritimo_usd?: number;
+  recargos_destino_usd?: number;
+  honorarios_agente_aduana_usd?: number;
+  gastos_portuarios_otros_usd?: number;
+  transporte_nacional_clp?: number;
+  derecho_ad_valorem?: number;
+  iva?: number;
+  buffer_transporte?: number; // Added field
+  fecha_ultima_actualizacion_transporte_local?: string | Date | null; // Added field (use string for ISO date format)
+}
+
+// Interface for the main PricingOverride document
+export interface PricingOverrideData {
+  _id: string; // Perfil ID (e.g., 'global', 'cat_123', 'prod_456')
+  nivel: 'global' | 'categoria' | 'producto';
+  costos: CostosData;
+  metadata: {
+    ultima_actualizacion: string | Date; // ISO date string or Date object
+    actualizado_por: string;
+  };
+  categoryId?: string; // Optional, only for nivel 'categoria'
+  productId?: string; // Optional, only for nivel 'producto'
+  createdAt?: string | Date; // Added by timestamps: true
+  updatedAt?: string | Date; // Added by timestamps: true
+
+  // Add any other fields that might be present but not strictly defined in the schema if necessary
+  // Example: nombre_perfil?: string; // If you add a display name later
+}
+
+// You can add other type definitions for your application below 

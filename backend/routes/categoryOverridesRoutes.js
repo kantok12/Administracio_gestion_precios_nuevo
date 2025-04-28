@@ -1,34 +1,28 @@
 const express = require('express');
 const router = express.Router();
-const { 
-  getCategoryOverride, 
-  upsertCategoryOverride, 
-  initializeCategoryOverride,
-  initializeChipeadoraOverride,
-  initializeChipeadoraMotorOverride,
-  initializeChipeadoraPTOOverride,
-  initializeAllChipeadoraCategories
-} = require('../controllers/categoryOverridesController');
 
-// GET /api/category-overrides/:categoryId - Obtener parámetros específicos de una categoría
-router.get('/:categoryId', getCategoryOverride);
+// Importar el controlador con el nuevo nombre
+const {
+  getGlobalOverride,
+  updateGlobalOverride,
+  getCategoryOverride,
+  updateCategoryOverride,
+  deleteCategoryOverride,
+  getAllOverrides // Asegúrate que esta función exista si la necesitas
+} = require('../controllers/perfilesController.js'); // <--- Cambio aquí
 
-// PUT /api/category-overrides/:categoryId - Actualizar parámetros de una categoría
-router.put('/:categoryId', upsertCategoryOverride);
+// Ruta para obtener todos los overrides (si existe)
+router.get('/', getAllOverrides);
 
-// POST /api/category-overrides/initialize - Inicializar un nuevo documento de categoría basado en global
-router.post('/initialize', initializeCategoryOverride);
+// Rutas para el override global
+router.route('/global')
+  .get(getGlobalOverride)
+  .put(updateGlobalOverride);
 
-// POST /api/category-overrides/initialize-chipeadora - Inicializar específicamente "categoria_chipeadora"
-router.post('/initialize-chipeadora', initializeChipeadoraOverride);
-
-// POST /api/category-overrides/initialize-chipeadora-motor - Inicializar específicamente "chipeadora_motor"
-router.post('/initialize-chipeadora-motor', initializeChipeadoraMotorOverride);
-
-// POST /api/category-overrides/initialize-chipeadora-pto - Inicializar específicamente "chipeadora_pto"
-router.post('/initialize-chipeadora-pto', initializeChipeadoraPTOOverride);
-
-// POST /api/category-overrides/initialize-all-chipeadoras - Inicializar todas las categorías de chipeadoras
-router.post('/initialize-all-chipeadoras', initializeAllChipeadoraCategories);
+// Rutas para overrides específicos por ID de categoría/perfil
+router.route('/:categoryId') // Mantenemos el parámetro como categoryId por ahora
+  .get(getCategoryOverride)
+  .put(updateCategoryOverride)
+  .delete(deleteCategoryOverride);
 
 module.exports = router; 

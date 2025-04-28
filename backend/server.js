@@ -6,13 +6,21 @@ const userRoutes = require('./routes/userRoutes');
 const productRoutes = require('./routes/productRoutes');
 // const pricingOverridesRoutes = require('./routes/pricingOverridesRoutes');
 const costosRoutes = require('./routes/costosRoutes');
-const overridesRoutes = require('./routes/overridesRoutes');
-const categoryOverridesRoutes = require('./routes/categoryOverridesRoutes');
+// Importar la ruta correcta para perfiles
+const perfilesRoutes = require('./routes/perfilesRoutes.js');
+// Eliminar imports de rutas obsoletas
+// const overridesRoutes = require('./routes/overridesRoutes');
+// const categoryOverridesRoutes = require('./routes/categoryOverridesRoutes');
+// const perfilRoutes = require('./routes/perfilRoutes'); 
+// const pricingOverridesRoutes = require('./routes/pricingOverridesRoutes'); // Ya estaba comentado
 // Importar las nuevas rutas de Langchain
 const langchainRoutes = require('./routes/langchainRoutes');
+// Importar webhookRoutes si se usa
+// const webhookRoutes = require('./routes/webhookRoutes'); // <-- Comentar ya que no existe
 const { fetchCurrencyValuesController, fetchProducts } = require('./controllers/productController');
 const { port } = require('./config/env');
 const PricingOverride = require('./models/PricingOverride');
+const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 
 dotenv.config();
 
@@ -28,7 +36,7 @@ const initializeServer = async () => {
     // Conectar a la base de datos
     await connectDB();
     
-    // Inicializar modelos
+    // Inicializar modelos llamando al método estático en el MODELO
     console.log('[Server] Initializing data models...');
     await PricingOverride.initializeDefaults();
     console.log('[Server] Models initialization complete.');
@@ -41,11 +49,15 @@ const initializeServer = async () => {
     // Configuración de rutas
     app.use('/api/users', userRoutes);
     app.use('/api/products', productRoutes);
-    app.use('/api/overrides', overridesRoutes);
-    app.use('/api/category-overrides', categoryOverridesRoutes);
+    // Usar la ruta correcta para perfiles
+    app.use('/api/perfiles', perfilesRoutes);
+    // Eliminar uso de rutas obsoletas
+    // app.use('/api/overrides', overridesRoutes);
+    // app.use('/api/category-overrides', categoryOverridesRoutes);
     app.use('/api', costosRoutes);
     // Registrar las nuevas rutas de Langchain
     app.use('/api/langchain', langchainRoutes);
+    // app.use('/api/webhook', webhookRoutes); // <-- Comentar ya que no existe
     
     // Inicializar caché
     console.log('[Server] Initializing cache...');
@@ -53,10 +65,14 @@ const initializeServer = async () => {
     console.log('[Server] Cache initialization complete.');
     
     // Iniciar el servidor
-    app.listen(port, () => {
-      console.log(`\n---- Server running on port ${port} ----`);
-      console.log(`Backend API accessible at: http://localhost:${port}/api`);
+    const PORT = port || process.env.PORT || 5001;
+    app.listen(PORT, () => {
+      console.log(`\n---- Server running on port ${PORT} ----`);
+      console.log(`Backend API accessible at: http://localhost:${PORT}/api`);
       console.log(`Admin panel accessible at: http://localhost:5173/admin\n`);
+    }).on('error', (err) => {
+      console.error("[Server] Server startup error:", err);
+      process.exit(1);
     });
   } catch (error) {
     console.error('[Server] Error during initialization:', error);

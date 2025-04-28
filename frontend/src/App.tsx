@@ -7,6 +7,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { theme } from './theme'; // <-- Importación nombrada
 import ChatWidget from './components/ChatWidget'; // <-- Importar el ChatWidget
+import PerfilesPanel from './pages/PerfilesPanel'; // <-- A PerfilesPanel (default import)
 
 // --- Constants ---
 // const sidebarWidth = 220; // Define sidebar width here - Reemplazada por SIDEBAR_WIDTH
@@ -167,10 +168,38 @@ export default function App() {
   // State for Admin Submenu
   const [isAdminOpen, setIsAdminOpen] = useState(location.pathname.startsWith('/admin'));
 
+  // Estado para mostrar el link de Costos, inicializado leyendo sessionStorage
+  const [showCostosLink, setShowCostosLink] = useState(() => {
+    try {
+      return sessionStorage.getItem('showCostosLink') === 'true';
+    } catch (e) {
+      console.error('Error leyendo sessionStorage al inicializar:', e);
+      return false;
+    }
+  });
+
   // Effect to open admin menu if navigating directly to a sub-route
   useEffect(() => {
     setIsAdminOpen(location.pathname.startsWith('/admin'));
   }, [location.pathname]);
+
+  // --- Nuevo useEffect para sincronizar con sessionStorage --- 
+  useEffect(() => {
+    console.log('App location changed or mounted, checking sessionStorage for showCostosLink...');
+    try {
+      const storedValue = sessionStorage.getItem('showCostosLink');
+      console.log(`Valor encontrado en sessionStorage: ${storedValue}`);
+      const shouldShow = storedValue === 'true';
+      if (showCostosLink !== shouldShow) { // Actualizar solo si es diferente
+        setShowCostosLink(shouldShow);
+        console.log(`Estado showCostosLink actualizado a: ${shouldShow}`);
+      }
+    } catch (e) {
+      console.error('Error leyendo sessionStorage en useEffect:', e);
+      // Opcional: establecer a false si hay error de lectura?
+      // if (showCostosLink) setShowCostosLink(false);
+    }
+  }, [location.pathname]); // Ejecutar cada vez que cambia la ruta
 
   // Toggle function for Admin menu
   const toggleAdminMenu = (e: React.MouseEvent) => {
@@ -565,7 +594,7 @@ export default function App() {
                  </div>
               </Link>
               <Link 
-                to="/admin/costos" 
+                to="/admin/perfiles"
                 style={getLinkStyle('/admin')} 
                 onClick={toggleAdminMenu}
               >
@@ -578,15 +607,19 @@ export default function App() {
               
               {isAdminOpen && (
                 <>
-                  <Link 
-                    to="/admin/costos" 
-                    style={getLinkStyle('/admin/costos', true)} 
-                  >
-                     <div style={navLinkTextStyle}> 
-                        <SlidersHorizontal size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
-                        Costos
-                     </div>
-                  </Link>
+                  {/* --- Enlace Costos Condicional (Comentado para ocultarlo permanentemente por ahora) --- */} 
+                  {/* {showCostosLink && (
+                      <Link 
+                        to="/admin/costos" 
+                        style={getLinkStyle('/admin/costos', true)} 
+                      >
+                         <div style={navLinkTextStyle}> 
+                            <SlidersHorizontal size={16} style={{...navIconStyle, marginRight: '8px'}} /> 
+                            Costos
+                         </div>
+                      </Link>
+                  )} */}
+                  {/* Enlace Perfiles (se mantiene igual) */} 
                   <Link 
                     to="/admin/perfiles" 
                     style={getLinkStyle('/admin/perfiles', true)} 
@@ -596,6 +629,7 @@ export default function App() {
                         Perfiles
                      </div>
                   </Link>
+                  {/* Enlace Cargar Equipos (se mantiene igual) */} 
                   <Link 
                     to="/admin/carga-equipos" 
                     style={getLinkStyle('/admin/carga-equipos', true)} 

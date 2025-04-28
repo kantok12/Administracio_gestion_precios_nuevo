@@ -7,6 +7,7 @@ import EquiposPanel from './pages/EquiposPanel'
 import AdminPanel from './pages/AdminPanel'
 import CostosAdminPanel from './pages/CostosAdminPanel'
 import PerfilesPanel from './pages/PerfilesPanel'
+import PerfilEditForm from './pages/PerfilEditForm'
 import CargaEquiposPanel from './pages/CargaEquiposPanel'
 import DashboardPanel from './pages/DashboardPanel'
 import PlaceholderPanel from './pages/PlaceholderPanel'
@@ -38,11 +39,12 @@ if (rootElement) {
               <Route index element={<EquiposPanel />} />
               <Route path="equipos" element={<EquiposPanel />} />
               <Route path="admin" element={<AdminPanel />}>
-                <Route index element={<CostosAdminPanel />} />
+                <Route index element={<PerfilesPanel />} />
                 <Route path="costos" element={<CostosAdminPanel />} />
                 <Route path="perfiles" element={<PerfilesPanel />} />
                 <Route path="carga-equipos" element={<CargaEquiposPanel />} />
               </Route>
+              <Route path="/perfiles/:id/editar" element={<PerfilEditForm />} />
               <Route path="dashboard" element={<DashboardPanel />} />
               <Route path="placeholder" element={<PlaceholderPanel />} />
             </Route>
@@ -63,6 +65,30 @@ if (rootElement) {
         <button onclick="window.location.reload()">Recargar</button>
       </div>
     `;
+    
+    // Código de renderizado duplicado en el catch (asegúrate que también incluya la nueva ruta si es relevante para el fallback)
+    const root = ReactDOM.createRoot(rootElement); 
+    root.render(
+      <React.StrictMode>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<App />}>
+              <Route index element={<EquiposPanel />} />
+              <Route path="equipos" element={<EquiposPanel />} />
+              <Route path="admin" element={<AdminPanel />}>
+                <Route index element={<PerfilesPanel />} />
+                <Route path="costos" element={<CostosAdminPanel />} />
+                <Route path="perfiles" element={<PerfilesPanel />} />
+                <Route path="carga-equipos" element={<CargaEquiposPanel />} />
+              </Route>
+              <Route path="/perfiles/:id/editar" element={<PerfilEditForm />} />
+              <Route path="dashboard" element={<DashboardPanel />} />
+              <Route path="placeholder" element={<PlaceholderPanel />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </React.StrictMode>
+    );
   }
 } else {
   console.error('No se encontró el elemento root');
@@ -83,11 +109,12 @@ if (rootElement) {
             <Route index element={<EquiposPanel />} />
             <Route path="equipos" element={<EquiposPanel />} />
             <Route path="admin" element={<AdminPanel />}>
-              <Route index element={<CostosAdminPanel />} />
+              <Route index element={<PerfilesPanel />} />
               <Route path="costos" element={<CostosAdminPanel />} />
               <Route path="perfiles" element={<PerfilesPanel />} />
               <Route path="carga-equipos" element={<CargaEquiposPanel />} />
             </Route>
+            <Route path="/perfiles/:id/editar" element={<PerfilEditForm />} />
             <Route path="dashboard" element={<DashboardPanel />} />
             <Route path="placeholder" element={<PlaceholderPanel />} />
           </Route>

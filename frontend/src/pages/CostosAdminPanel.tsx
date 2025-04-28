@@ -1,21 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { SlidersHorizontal, DollarSign, Euro, RefreshCw, Info, Save, Calendar, Filter, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { api } from '../services/api';
-import { CostParams, CurrencyWebhookResponse, CostParamsWebhookResponse } from '../types/costParams';
+import { CostParams, CostParamsWebhookResponse } from '../types/costParams';
 
 // --- Componente CostosAdminPanel (Lógica movida desde AdminPanel original) ---
 export default function CostosAdminPanel() { 
-  // Función de mapeo de categorías
-  const getCategoryId = (categoria: string) => {
-    switch (categoria) {
-      case 'Chipeadoras': return 'categoria_chipeadora';
-      case 'Chipeadoras Motor': return 'chipeadora_motor';
-      case 'Chipeadoras PTO': return 'chipeadora_pto';
-      case 'Global': return 'global';
-      default: return categoria.toLowerCase().replace(/ /g, '_');
-    }
-  };
-
   // --- Estados para parámetros ---
   const [tipoCambio, setTipoCambio] = useState<string>('1.12');
   const [bufferDolar, setBufferDolar] = useState<string>('1.8');
@@ -36,17 +25,7 @@ export default function CostosAdminPanel() {
   const [derechoAdValorem, setDerechoAdValorem] = useState<string>('6');
   const [iva, setIva] = useState<string>('19');
   const [bufferEurUsd, setBufferEurUsd] = useState<string>('2');
-
-  // --- Estados Divisas ---
-  const [dolarActualCLP, setDolarActualCLP] = useState<string | null>(null);
-  const [euroActualCLP, setEuroActualCLP] = useState<string | null>(null);
-  const [fechaActualizacionDivisas, setFechaActualizacionDivisas] = useState<string | null>(null);
-
-  // --- Estados Filtros y Categorías ---
-  const [categoriasDisponibles, setCategoriasDisponibles] = useState<string[]>([
-    'Global', 'Chipeadoras', 'Chipeadoras Motor', 'Chipeadoras PTO'
-  ]);
-  const [categoriaSeleccionadaParaAplicar, setCategoriaSeleccionadaParaAplicar] = useState<string>('Global');
+  const [nombrePerfil, setNombrePerfil] = useState<string>('');
 
   // --- Estilos ---
   const primaryTextColor = '#0ea5e9';
@@ -62,8 +41,6 @@ export default function CostosAdminPanel() {
   const labelStyle: React.CSSProperties = { display:'block', marginBottom: '4px', fontSize: '12px', color: secondaryTextColor, fontWeight: 500 };
   const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 12px', border: `1px solid ${borderColor}`, borderRadius: '6px', fontSize: '13px', boxSizing: 'border-box' };
   const inputDescriptionStyle: React.CSSProperties = { fontSize: '11px', color: '#94a3b8', marginTop: '4px' };
-  const currencyDisplayStyle: React.CSSProperties = { backgroundColor: 'white', border: `1px solid ${borderColor}`, borderRadius: '8px', padding: '16px', textAlign: 'center' };
-  const currencyValueStyle: React.CSSProperties = { fontSize: '24px', fontWeight: 600, color: '#1e293b', marginBottom: '4px' };
   const buttonBaseStyle: React.CSSProperties = { padding: '8px 16px', borderRadius: '6px', border: '1px solid', cursor: 'pointer', fontSize: '13px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px' };
   const primaryButtonStyle: React.CSSProperties = { ...buttonBaseStyle, backgroundColor: primaryTextColor, color: 'white', borderColor: primaryTextColor };
   const secondaryButtonStyle: React.CSSProperties = { ...buttonBaseStyle, backgroundColor: 'white', color: '#334155', borderColor: borderColor };
@@ -83,56 +60,13 @@ export default function CostosAdminPanel() {
   };
 
   // --- Estados Carga/Error ---
-  const [isUpdatingCurrencies, setIsUpdatingCurrencies] = useState(false);
-  const [currencyUpdateError, setCurrencyUpdateError] = useState<string | null>(null);
-  const [initialCurrencyLoading, setInitialCurrencyLoading] = useState(true);
-  const [initialCurrencyError, setInitialCurrencyError] = useState<string | null>(null);
   const [initialCostParamsLoading, setInitialCostParamsLoading] = useState(true);
   const [initialCostParamsError, setInitialCostParamsError] = useState<string | null>(null);
-  const [isLoadingCategoryParams, setIsLoadingCategoryParams] = useState(false);
-  const [loadCategoryParamsError, setLoadCategoryParamsError] = useState<string | null>(null);
   const [isSavingGlobalParams, setIsSavingGlobalParams] = useState(false);
   const [saveGlobalParamsError, setSaveGlobalParamsError] = useState<string | null>(null);
   const [saveGlobalParamsSuccess, setSaveGlobalParamsSuccess] = useState<string | null>(null);
 
   // --- Funciones API ---
-  const fetchAndSetCurrencies = async (updateTimestamp?: Date) => {
-    console.log("[CostosAdminPanel] Fetching currencies from webhook...");
-    setIsUpdatingCurrencies(true);
-    setCurrencyUpdateError(null);
-    try {
-      const data: CurrencyWebhookResponse = await api.fetchCurrencies();
-      if (data && data.Valor_Dolar !== undefined && data.Valor_Euro !== undefined) {
-        const roundedDolar = Math.round(parseFloat(data.Valor_Dolar));
-        const roundedEuro = Math.round(parseFloat(data.Valor_Euro));
-        let dolarSuccessfullySet = false;
-        let euroSuccessfullySet = false;
-        if (!isNaN(roundedDolar)) { setDolarActualCLP(String(roundedDolar)); dolarSuccessfullySet = true; } else { console.warn('Valor_Dolar no válido:', data.Valor_Dolar); setDolarActualCLP(null); }
-        if (!isNaN(roundedEuro)) { setEuroActualCLP(String(roundedEuro)); euroSuccessfullySet = true; } else { console.warn('Valor_Euro no válido:', data.Valor_Euro); setEuroActualCLP(null); }
-        const displayTime = updateTimestamp || new Date();
-        setFechaActualizacionDivisas(displayTime.toLocaleString('es-CL'));
-        if (dolarSuccessfullySet && euroSuccessfullySet) {
-          console.log(`[CostosAdminPanel] Currency values updated (D: ${roundedDolar}, E: ${roundedEuro}). Attempting to update in DB...`);
-          try {
-            await api.updateCurrenciesInDB({ dolar_observado_actual: roundedDolar, euro_observado_actual: roundedEuro });
-          } catch (backendError) {
-            console.error('[CostosAdminPanel] Error updating currencies in backend:', backendError);
-          }
-        }
-        return true;
-      } else {
-        throw new Error('Respuesta del webhook de divisas incompleta.');
-      }
-    } catch (error) {
-      console.error('[CostosAdminPanel] Error fetching/setting currencies:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
-      setCurrencyUpdateError(errorMsg.includes('fetch') ? 'Error de conexión con webhook.' : errorMsg);
-      throw error;
-    } finally {
-        setIsUpdatingCurrencies(false);
-    }
-  };
-
   const fetchInitialGlobalParams = async () => {
     setInitialCostParamsLoading(true);
     setInitialCostParamsError(null);
@@ -176,48 +110,7 @@ export default function CostosAdminPanel() {
       setFechaUltimaActualizacion(costos.fecha_ultima_actualizacion_transporte_local ?? fechaUltimaActualizacion);
   };
 
-  const fetchAndApplyCategoryParams = async (categoria: string) => {
-     if (categoria === 'Global') {
-      console.log('[CostosAdminPanel] Selected Global. Reloading global params...');
-      await fetchInitialGlobalParams();
-      return;
-    }
-    setIsLoadingCategoryParams(true);
-    setLoadCategoryParamsError(null);
-    console.log(`[CostosAdminPanel] Fetching parameters for category: ${categoria}`);
-    try {
-      const categoryId = getCategoryId(categoria);
-      await fetchInitialGlobalParams();
-      const data = await api.fetchCategoryParams(categoryId);
-      if (!data || !data.costos) {
-        console.log(`[CostosAdminPanel] No override found for ${categoria}. Using global values.`);
-      } else {
-        console.log(`[CostosAdminPanel] Override found for ${categoria}. Applying specific values...`);
-        applyCostDataToState(data.costos);
-      }
-    } catch (error) {
-      console.error('[CostosAdminPanel] Error fetching category parameters:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
-      setLoadCategoryParamsError(errorMsg);
-      if(initialCostParamsLoading) await fetchInitialGlobalParams();
-    } finally {
-      setIsLoadingCategoryParams(false);
-    }
-  };
-
   // --- useEffects ---
-  useEffect(() => {
-     const loadInitialCurrencies = async () => {
-        setInitialCurrencyLoading(true);
-        setInitialCurrencyError(null);
-        try {
-            await fetchAndSetCurrencies(new Date());
-        } catch (error) { setInitialCurrencyError('Error al cargar divisas iniciales.'); }
-        finally { setInitialCurrencyLoading(false); }
-     };
-     loadInitialCurrencies();
-  }, []);
-
   useEffect(() => {
     console.log('[CostosAdminPanel] Component mounted, fetching initial global parameters...');
     fetchInitialGlobalParams();
@@ -230,21 +123,12 @@ export default function CostosAdminPanel() {
      setter(event.target.value);
   };
 
-  const handleActualizarDivisas = () => { fetchAndSetCurrencies(new Date()); };
-
-  const handleCategoriaChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-     const nuevaCategoria = event.target.value;
-     setCategoriaSeleccionadaParaAplicar(nuevaCategoria);
-     fetchAndApplyCategoryParams(nuevaCategoria);
-  };
-
   const handleSaveAll = async () => {
     console.log('[CostosAdminPanel] Starting save operation...');
     setIsSavingGlobalParams(true);
     setSaveGlobalParamsError(null);
     setSaveGlobalParamsSuccess(null);
     try {
-      const categoryId = getCategoryId(categoriaSeleccionadaParaAplicar);
       const buildParam = (value: string, defaultValue = 0): number => { const p = parseFloat(value); return isNaN(p) ? defaultValue : p; };
       const buildPercentage = (value: string, defaultValue = 0): number => { const p = parseFloat(value); return isNaN(p) ? defaultValue : p / 100; };
       const params: CostParams = {
@@ -267,8 +151,6 @@ export default function CostosAdminPanel() {
           derecho_ad_valorem: buildPercentage(derechoAdValorem),
           iva: buildPercentage(iva, 0.19),
           fecha_ultima_actualizacion_transporte_local: fechaUltimaActualizacion || new Date().toISOString().split('T')[0],
-          ...(dolarActualCLP && !isNaN(parseFloat(dolarActualCLP)) && { dolar_observado_actual: parseFloat(dolarActualCLP) }),
-          ...(euroActualCLP && !isNaN(parseFloat(euroActualCLP)) && { euro_observado_actual: parseFloat(euroActualCLP) }),
       };
       for (const [key, value] of Object.entries(params)) {
           if (key !== 'fecha_ultima_actualizacion_transporte_local' && typeof value !== 'number' && value !== undefined) {
@@ -277,12 +159,9 @@ export default function CostosAdminPanel() {
       }
       const apiPayload = { costos: params };
       let result;
-      if (categoriaSeleccionadaParaAplicar === 'Global') {
-        result = await api.updateGlobalParams(apiPayload);
-      } else {
-        result = await api.updateCategoryParams(categoryId, apiPayload);
-      }
-      setSaveGlobalParamsSuccess(`Parámetros guardados para ${categoriaSeleccionadaParaAplicar}.`);
+      console.log('Guardando parámetros como Global (ignora nombre de perfil por ahora)');
+      result = await api.updateGlobalParams(apiPayload);
+      setSaveGlobalParamsSuccess(`Parámetros guardados.`);
       setTimeout(() => setSaveGlobalParamsSuccess(null), 5000);
     } catch (error) {
       console.error('[CostosAdminPanel] Error saving parameters:', error);
@@ -298,86 +177,37 @@ export default function CostosAdminPanel() {
   return (
     <div style={panelContainerStyle}>
       
-      {/* --- Título Principal --- */}
-      <h1 style={{ fontSize: '22px', fontWeight: 600, color: '#1e293b', marginBottom: '24px' }}>
-        Costos
-      </h1>
-
-      {/* --- Fila de Cabecera: Configuración y Actualización --- */}
+      {/* --- Fila de Cabecera: Configuración --- */}
       <div style={headerRowStyle}>
-        {/* Sección de Configuración (izquierda) */}
+        {/* Sección de Configuración (izquierda) - Reemplazar dropdown con input */} 
         <div style={configSectionStyle}>
+          {/* --- REMOVER Select de categoría --- */}
+          {/* 
           <label htmlFor="category-select" style={{ ...labelStyle, marginBottom: 0, fontSize: '13px' }}>Configurar Parámetros Para:</label>
-          <select
-            id="category-select"
-            value={categoriaSeleccionadaParaAplicar}
-            onChange={handleCategoriaChange}
-            style={{ ...selectStyle, minWidth: '180px' }} // Applied selectStyle
-            disabled={isLoadingCategoryParams}
-          >
-            {categoriasDisponibles.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
+          <select id="category-select" ...>
+             ...
           </select>
-          {isLoadingCategoryParams && <Loader2 size={16} className="animate-spin" style={{ color: secondaryTextColor }} />} 
-          {loadCategoryParamsError && <span style={{ color: 'red', fontSize: '12px' }}>{loadCategoryParamsError}</span>}
+          {isLoadingCategoryParams && <Loader2 .../>}
+          {loadCategoryParamsError && <span ...>...</span>} 
+          */}
+          
+          {/* --- AÑADIR Input Nombre de perfil --- */} 
+          <label htmlFor="profile-name" style={{ ...labelStyle, marginBottom: 0, fontSize: '13px', marginRight: '8px' }}>Nombre de perfil:</label>
+          <input 
+             id="profile-name"
+             type="text"
+             style={{ ...inputStyle, minWidth: '250px' }} 
+             value={nombrePerfil}
+             onChange={handleInputChange(setNombrePerfil)}
+             placeholder="Ej: Perfil Chipeadoras Estándar"
+          />
+
         </div>
 
-        {/* Botón Actualizar Divisas (derecha) */}
-        <button
-          onClick={handleActualizarDivisas}
-          style={secondaryButtonStyle}
-          disabled={isUpdatingCurrencies}
-        >
-          {isUpdatingCurrencies ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <RefreshCw size={16} />
-          )}
-          Actualizar Divisas
-        </button>
+        {/* Sección derecha vacía por ahora */} 
+        <div></div> 
       </div>
 
-      {/* --- Sección Valores Divisas --- */}
-      {/* (El título "Valores Actuales de Divisas" puede ser redundante ahora, se podría quitar) */}
-      {/* <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', marginBottom: '16px' }}>Valores Actuales de Divisas</h2> */}
-      
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '16px' }}>
-        <div style={currencyDisplayStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '4px' }}>
-             <DollarSign size={20} style={{ color: primaryTextColor }} />
-             <div style={currencyValueStyle}>{initialCurrencyLoading ? '...' : dolarActualCLP ?? '-'}</div>
-          </div>
-          <div style={{ fontSize: '13px', color: '#334155', marginBottom: '4px' }}>Dólar Observado Actual (CLP)</div>
-        </div>
-        <div style={currencyDisplayStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '4px' }}>
-             <Euro size={20} style={{ color: primaryTextColor }} />
-             <div style={currencyValueStyle}>{initialCurrencyLoading ? '...' : euroActualCLP ?? '-'}</div>
-          </div>
-          <div style={{ fontSize: '13px', color: '#334155', marginBottom: '4px' }}>Euro Observado Actual (CLP)</div>
-        </div>
-      </div>
-      
-      <div style={{ textAlign: 'center', fontSize: '12px', color: secondaryTextColor, marginBottom: '24px' }}>
-        {initialCurrencyLoading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 size={14} className="animate-spin" style={{ marginRight: '8px' }} /> Cargando valores...</div>
-        ) : fechaActualizacionDivisas ? (
-          <><Info size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Última actualización: {fechaActualizacionDivisas}</>
-        ) : initialCurrencyError ? (
-          <span style={{ color: 'red' }}>Error: {initialCurrencyError}</span>
-        ) : (
-          <span>No hay datos de divisas disponibles.</span>
-        )}
-      </div>
-      {currencyUpdateError && <div style={{ color: 'red', fontSize: '12px', textAlign: 'center', marginBottom: '12px' }}>Error al actualizar: {currencyUpdateError}</div>}
-
-      {/* --- Sección Configuración Parámetros --- */}
-      {/* (Select ya está movido a la cabecera) */}
-      {/* <div style={{ marginBottom: '20px' }}>
-          ... Select estaba aquí ...
-      </div> */}
-      
       {initialCostParamsLoading && <div style={{ textAlign: 'center', padding: '20px' }}><Loader2 size={24} className="animate-spin" /> Cargando parámetros...</div>}
       {initialCostParamsError && <div style={{ color: 'red', fontSize: '14px', textAlign: 'center', padding: '20px' }}>Error al cargar parámetros: {initialCostParamsError}</div>}
       
@@ -408,7 +238,7 @@ export default function CostosAdminPanel() {
           disabled={isSavingGlobalParams}
         >
           {isSavingGlobalParams ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          Guardar Cambios ({categoriaSeleccionadaParaAplicar})
+          Guardar Cambios
         </button>
       </div>
 
