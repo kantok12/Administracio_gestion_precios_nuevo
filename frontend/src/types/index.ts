@@ -53,22 +53,28 @@ export interface CostoPerfilData {
   descripcion?: string;
   activo?: boolean;
 
-  // Parámetros del perfil
-  descuento_fabrica_pct: number;
-  factor_actualizacion_anual: number;
-  costo_origen_transporte_eur: number;
-  costo_origen_gastos_export_eur: number;
+  // --- Logistica y seguro ---
+  costo_logistica_origen_eur: number;
   flete_maritimo_usd: number;
   recargos_destino_usd: number;
+  prima_seguro_usd: number;
   tasa_seguro_pct: number;
-  honorarios_agente_aduana_usd: number;
+  transporte_nacional_clp: number;
+
+  // --- Costos de Importación ---
+  costo_agente_aduana_usd: number;
   gastos_portuarios_otros_usd: number;
   derecho_advalorem_pct: number;
-  transporte_nacional_clp: number;
-  buffer_eur_usd_pct: number;
+
+  // --- Conversón a CLP y Margen ---
+  margen_adicional_pct: number;
   buffer_usd_clp_pct: number;
-  margen_total_pct: number;
+  buffer_eur_usd_pct: number;
   iva_pct: number;
+
+  // --- Precios para Cliente ---
+  descuento_fabrica_pct: number;
+  descuento_cliente_pct: number;
 
   // Timestamps
   createdAt?: string; 

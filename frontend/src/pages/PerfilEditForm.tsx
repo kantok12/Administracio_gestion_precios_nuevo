@@ -18,11 +18,15 @@ import {
   OutlinedInput,
   Switch,
   FormControlLabel,
-  Snackbar // Importar Snackbar
+  Snackbar,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'; // Mantener por si se usa como página
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { CostoPerfilData } from '../types';
 import { api } from '../services/api';
 
@@ -232,64 +236,106 @@ const PerfilEditForm: React.FC<PerfilEditFormProps> = ({ profileId, onSaveSucces
 
   const formContent = (
        <form onSubmit={handleSubmit}>
-         <Grid container spacing={2}>
-          {/* Campos Generales */}
-          <Grid item xs={12} md={6}>
-            {renderTextField('nombre', 'Nombre del Perfil', 'text', true)}
-          </Grid>
-          <Grid item xs={12} md={6}>
-            {renderTextField('descripcion', 'Descripción', 'text')}
-          </Grid>
-          <Grid item xs={12}>
-             <FormControlLabel
-                control={<Switch checked={!!perfilData?.activo} onChange={handleInputChange} name="activo" disabled={isSaving || loading} />}
-                label="Perfil Activo"
-             />
-          </Grid>
+          {/* --- Acordeón Datos Generales (expandido por defecto) --- */}
+          <Accordion defaultExpanded sx={{ boxShadow: 'none', '&::before': { display: 'none' } }}>
+             <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="general-content" id="general-header">
+                 <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>Datos Generales</Typography>
+             </AccordionSummary>
+             <AccordionDetails sx={{ pt: 0, pb: 1 }}>
+                 <Grid container spacing={2}>
+                     <Grid item xs={12} md={6}>{renderTextField('nombre', 'Nombre del Perfil', 'text', true)}</Grid>
+                     <Grid item xs={12} md={6}>{renderTextField('descripcion', 'Descripción', 'text')}</Grid>
+                     <Grid item xs={12}>
+                        <FormControlLabel
+                           control={<Switch checked={!!perfilData?.activo} onChange={handleInputChange} name="activo" disabled={isSaving || loading} />}
+                           label="Perfil Activo"
+                           sx={{ pl: 1 }} // Añadir padding para alinear
+                        />
+                     </Grid>
+                 </Grid>
+             </AccordionDetails>
+          </Accordion>
+          
+          {/* --- Acordeón Logistica y seguro --- */}
+          <Accordion sx={{ boxShadow: 'none', '&::before': { display: 'none' } }}>
+             <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="logistica-content" id="logistica-header">
+                 <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>Logistica y seguro</Typography>
+             </AccordionSummary>
+             <AccordionDetails sx={{ pt: 0, pb: 1 }}>
+                 <Grid container spacing={2}>
+                     <Grid item xs={6} sm={4} md={3}>{renderTextField('costo_logistica_origen_eur', 'Costo Origen', 'number', false, 'EUR')}</Grid>
+                     <Grid item xs={6} sm={4} md={3}>{renderTextField('flete_maritimo_usd', 'Flete Marítimo P.', 'number', false, 'USD')}</Grid>
+                     <Grid item xs={6} sm={4} md={3}>{renderTextField('recargos_destino_usd', 'Recargos Destino', 'number', false, 'USD')}</Grid>
+                     <Grid item xs={6} sm={4} md={3}>{renderTextField('prima_seguro_usd', 'Prima Seguro', 'number', false, 'USD')}</Grid>
+                     <Grid item xs={6} sm={4} md={3}>{renderTextField('tasa_seguro_pct', 'Tasa Seguro', 'number', false, '%')}</Grid>
+                     <Grid item xs={6} sm={4} md={3}>{renderTextField('transporte_nacional_clp', 'Transp. Nacional', 'number', false, 'CLP')}</Grid>
+                 </Grid>
+            </AccordionDetails>
+          </Accordion>
 
-          <Grid item xs={12}><Divider sx={{ my: 1 }}>Parámetros (%)</Divider></Grid>
-          {/* Campos Porcentaje */}
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('descuento_fabrica_pct', 'Desc. Fábrica', 'number', false, '%')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('factor_actualizacion_anual', 'Fact. Actualiz.', 'number', false, '%')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('margen_total_pct', 'Margen Total', 'number', false, '%')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('tasa_seguro_pct', 'Tasa Seguro', 'number', false, '%')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('derecho_advalorem_pct', 'AdValorem', 'number', false, '%')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('iva_pct', 'IVA', 'number', false, '%')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('buffer_eur_usd_pct', 'Buffer EUR/USD', 'number', false, '%')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('buffer_usd_clp_pct', 'Buffer USD/CLP', 'number', false, '%')}</Grid>
+           {/* --- Acordeón Costos de Importación --- */}
+           <Accordion sx={{ boxShadow: 'none', '&::before': { display: 'none' } }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="importacion-content" id="importacion-header">
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>Costos de Importación</Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0, pb: 1 }}>
+                  <Grid container spacing={2}>
+                      <Grid item xs={6} sm={4} md={3}>{renderTextField('costo_agente_aduana_usd', 'Costo Ag. Aduana', 'number', false, 'USD')}</Grid>
+                      <Grid item xs={6} sm={4} md={3}>{renderTextField('gastos_portuarios_otros_usd', 'Gastos Puerto/Otros', 'number', false, 'USD')}</Grid>
+                      <Grid item xs={6} sm={4} md={3}>{renderTextField('derecho_advalorem_pct', 'Derecho AdValorem', 'number', false, '%')}</Grid>
+                  </Grid>
+             </AccordionDetails>
+           </Accordion>
 
-          <Grid item xs={12}><Divider sx={{ my: 1 }}>Costos Logísticos</Divider></Grid>
-          {/* Costos Logísticos */}
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('costo_origen_transporte_eur', 'Transp. Origen', 'number', false, 'EUR')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('costo_origen_gastos_export_eur', 'Gastos Exp. Origen', 'number', false, 'EUR')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('flete_maritimo_usd', 'Flete Marítimo', 'number', false, 'USD')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('recargos_destino_usd', 'Recargos Destino', 'number', false, 'USD')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('honorarios_agente_aduana_usd', 'Honorarios Aduana', 'number', false, 'USD')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('gastos_portuarios_otros_usd', 'Gastos Puerto/Otros', 'number', false, 'USD')}</Grid>
-          <Grid item xs={6} sm={4} md={3}>{renderTextField('transporte_nacional_clp', 'Transp. Nacional', 'number', false, 'CLP')}</Grid>
+           {/* --- Acordeón Conversión a CLP y Margen --- */}
+           <Accordion sx={{ boxShadow: 'none', '&::before': { display: 'none' } }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="conversion-content" id="conversion-header">
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>Conversión a CLP y Margen</Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0, pb: 1 }}>
+                  <Grid container spacing={2}>
+                      <Grid item xs={6} sm={4} md={3}>{renderTextField('margen_adicional_pct', '% Adicional Total', 'number', false, '%')}</Grid>
+                      <Grid item xs={6} sm={4} md={3}>{renderTextField('buffer_usd_clp_pct', 'Buffer USD/CLP', 'number', false, '%')}</Grid>
+                      <Grid item xs={6} sm={4} md={3}>{renderTextField('buffer_eur_usd_pct', 'Buffer EUR/USD', 'number', false, '%')}</Grid>
+                      <Grid item xs={6} sm={4} md={3}>{renderTextField('iva_pct', 'IVA', 'number', false, '%')}</Grid>
+                  </Grid>
+              </AccordionDetails>
+            </Accordion>
+            
+            {/* --- Acordeón Precios para Cliente --- */}
+            <Accordion sx={{ boxShadow: 'none', '&::before': { display: 'none' } }}>
+               <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="cliente-content" id="cliente-header">
+                   <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>Precios para Cliente</Typography>
+               </AccordionSummary>
+               <AccordionDetails sx={{ pt: 0, pb: 1 }}>
+                   <Grid container spacing={2}>
+                       <Grid item xs={6} sm={4} md={3}>{renderTextField('descuento_fabrica_pct', 'Desc. Fábrica', 'number', false, '%')}</Grid>
+                       <Grid item xs={6} sm={4} md={3}>{renderTextField('descuento_cliente_pct', 'Desc. Cliente', 'number', false, '%')}</Grid>
+                   </Grid>
+               </AccordionDetails>
+             </Accordion>
 
-          {/* Botones de Acción */}
-          <Grid item xs={12} sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-            <Button
-              variant="outlined"
-              startIcon={<CancelIcon />}
-              onClick={handleCancel} // Usar handleCancel unificado
-              disabled={isSaving}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              color="primary"
-              startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-              disabled={isSaving || loading}
-            >
-              {isSaving ? 'Guardando...' : 'Guardar Cambios'}
-            </Button>
-          </Grid>
-        </Grid>
-      </form>
+           {/* --- Botones de Acción (fuera de los acordeones) --- */}
+           <Grid container sx={{ mt: 3, px: 2 }} justifyContent="space-between">
+             <Button
+               variant="outlined"
+               startIcon={<CancelIcon />}
+               onClick={handleCancel} 
+               disabled={isSaving}
+             >
+               Cancelar
+             </Button>
+             <Button
+               type="submit"
+               variant="contained"
+               color="primary"
+               startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+               disabled={isSaving || loading}
+             >
+               {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+             </Button>
+           </Grid>
+       </form>
   );
 
   return (

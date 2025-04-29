@@ -215,26 +215,30 @@ export default function PerfilesPanel() {
       try {
           console.log(`[PerfilesPanel] Creando nuevo perfil con nombre: ${newProfileName}`);
           
-          // Usar el nombre ingresado
+          // Actualizar defaultProfileData con la nueva estructura
           const defaultProfileData = {
               nombre: newProfileName.trim(), 
               descripcion: '',
               activo: true, 
-              descuento_fabrica_pct: 0,
-              factor_actualizacion_anual: 1, 
-              costo_origen_transporte_eur: 0,
-              costo_origen_gastos_export_eur: 0,
+              // Logistica y seguro
+              costo_logistica_origen_eur: 0,
               flete_maritimo_usd: 0,
               recargos_destino_usd: 0,
+              prima_seguro_usd: 0,
               tasa_seguro_pct: 0,
-              honorarios_agente_aduana_usd: 0,
-              gastos_portuarios_otros_usd: 0,
-              derecho_advalorem_pct: 0.06, 
               transporte_nacional_clp: 0,
-              buffer_eur_usd_pct: 0,
+              // Costos de Importación
+              costo_agente_aduana_usd: 0,
+              gastos_portuarios_otros_usd: 0,
+              derecho_advalorem_pct: 0.06, // Mantener default del backend
+              // Conversión a CLP y Margen
+              margen_adicional_pct: 0,
               buffer_usd_clp_pct: 0,
-              margen_total_pct: 0,
-              iva_pct: 0.19, 
+              buffer_eur_usd_pct: 0,
+              iva_pct: 0.19, // Mantener default del backend
+              // Precios para Cliente
+              descuento_fabrica_pct: 0,
+              descuento_cliente_pct: 0,
           };
 
           const newProfile = await api.createProfile(defaultProfileData);
@@ -490,7 +494,7 @@ const ViewProfileModal: React.FC<ViewProfileModalProps> = ({ isOpen, onClose, pr
   if (!isOpen) return null;
 
   return (
-    <Dialog open={isOpen} onClose={onClose} aria-labelledby="view-profile-dialog-title" maxWidth="sm" fullWidth>
+    <Dialog open={isOpen} onClose={onClose} aria-labelledby="view-profile-dialog-title" maxWidth="md" fullWidth>
       <DialogTitle id="view-profile-dialog-title">
         Detalles del Perfil
         <Button onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }}><XCircle size={20} /></Button>
@@ -501,23 +505,68 @@ const ViewProfileModal: React.FC<ViewProfileModalProps> = ({ isOpen, onClose, pr
         
         {profileData && (
             <Box>
-                <Typography variant="body1" gutterBottom><strong>ID:</strong> {profileData._id}</Typography>
-                <Typography variant="body1" gutterBottom><strong>Nombre:</strong> {profileData.nombre}</Typography>
-                <Typography variant="body1" gutterBottom><strong>Descripción:</strong> {profileData.descripcion || 'N/A'}</Typography>
-                <Typography variant="body1" gutterBottom><strong>Activo:</strong> {profileData.activo ? 'Sí' : 'No'}</Typography>
-                <Divider sx={{ my: 1.5 }}/>
-                <Typography variant="subtitle1" gutterBottom>Parámetros:</Typography>
-                <Grid container spacing={1}>
-                    <Grid item xs={6}><Typography variant="body2">Descuento Fábrica:</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2" align="right">{formatPercent(profileData.descuento_fabrica_pct)}</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2">Margen Total:</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2" align="right">{formatPercent(profileData.margen_total_pct)}</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2">IVA:</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2" align="right">{formatPercent(profileData.iva_pct)}</Typography></Grid>
+                <Typography variant="h6" gutterBottom>Datos Generales</Typography>
+                <Grid container spacing={1} sx={{ mb: 2 }}>
+                    <Grid item xs={12} sm={8}><Typography><strong>Nombre:</strong> {profileData.nombre}</Typography></Grid>
+                    <Grid item xs={12} sm={4}><Typography><strong>Activo:</strong> {profileData.activo ? 'Sí' : 'No'}</Typography></Grid>
+                    <Grid item xs={12}><Typography><strong>Descripción:</strong> {profileData.descripcion || 'N/A'}</Typography></Grid>
                 </Grid>
-                <Divider sx={{ my: 1.5 }}/>
-                <Typography variant="caption" display="block">Creado: {profileData.createdAt ? new Date(profileData.createdAt).toLocaleString('es-CL') : 'N/A'}</Typography>
-                <Typography variant="caption" display="block">Actualizado: {profileData.updatedAt ? new Date(profileData.updatedAt).toLocaleString('es-CL') : 'N/A'}</Typography>
+                <Divider />
+
+                <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Logistica y seguro</Typography>
+                <Grid container spacing={1} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={4}><Typography>Costo Origen (EUR):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatCurrency(profileData.costo_logistica_origen_eur, 'EUR')}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Flete Marítimo (USD):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatCurrency(profileData.flete_maritimo_usd, 'USD')}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Recargos Destino (USD):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatCurrency(profileData.recargos_destino_usd, 'USD')}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Prima Seguro (USD):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatCurrency(profileData.prima_seguro_usd, 'USD')}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Tasa Seguro (%):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatPercent(profileData.tasa_seguro_pct)}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Transporte Nac. (CLP):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatCLP(profileData.transporte_nacional_clp)}</Typography></Grid>
+                </Grid>
+                 <Divider />
+
+                <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Costos de Importación</Typography>
+                 <Grid container spacing={1} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={4}><Typography>Costo Ag. Aduana (USD):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatCurrency(profileData.costo_agente_aduana_usd, 'USD')}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Gastos Puerto/Otros (USD):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatCurrency(profileData.gastos_portuarios_otros_usd, 'USD')}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Derecho AdValorem (%):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatPercent(profileData.derecho_advalorem_pct)}</Typography></Grid>
+                 </Grid>
+                 <Divider />
+
+                 <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Conversión a CLP y Margen</Typography>
+                 <Grid container spacing={1} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={4}><Typography>% Adicional Total:</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatPercent(profileData.margen_adicional_pct)}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Buffer USD/CLP (%):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatPercent(profileData.buffer_usd_clp_pct)}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Buffer EUR/USD (%):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatPercent(profileData.buffer_eur_usd_pct)}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>IVA (%):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatPercent(profileData.iva_pct)}</Typography></Grid>
+                 </Grid>
+                 <Divider />
+
+                 <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Precios para Cliente</Typography>
+                 <Grid container spacing={1} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={4}><Typography>Desc. Fábrica (%):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatPercent(profileData.descuento_fabrica_pct)}</Typography></Grid>
+                    <Grid item xs={6} sm={4}><Typography>Desc. Cliente (%):</Typography></Grid>
+                    <Grid item xs={6} sm={8}><Typography align="right">{formatPercent(profileData.descuento_cliente_pct)}</Typography></Grid>
+                 </Grid>
+                 <Divider />
+
+                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between' }}>
+                     <Typography variant="caption" display="block">Creado: {profileData.createdAt ? new Date(profileData.createdAt).toLocaleString('es-CL') : 'N/A'}</Typography>
+                     <Typography variant="caption" display="block">Actualizado: {profileData.updatedAt ? new Date(profileData.updatedAt).toLocaleString('es-CL') : 'N/A'}</Typography>
+                </Box>
             </Box>
         )}
       </DialogContent>
@@ -532,4 +581,17 @@ const ViewProfileModal: React.FC<ViewProfileModalProps> = ({ isOpen, onClose, pr
 const formatPercent = (value: number | null | undefined): string => {
    if (value === null || value === undefined) return '--';
    return `${(value * 100).toFixed(1)}%`;
+};
+
+// Helper para formatear otras monedas (necesario para ViewProfileModal)
+const formatCurrency = (value: number | null | undefined, currency: 'USD' | 'EUR'): string => {
+  if (value === null || value === undefined) return '--';
+  // Especificar el tipo explícito para las opciones
+  const options: Intl.NumberFormatOptions = {
+      style: 'currency', // Tipo específico
+      currency: currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+  };
+  return value.toLocaleString('es-CL', options); // Usar localización chilena pero con código de moneda
 }; 
