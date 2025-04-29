@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { Producto } from "../types/product";
 import type { CurrencyData } from "../types/currency";
-import { PricingOverrideData } from '../types';
+import { CostoPerfilData, ProductoData } from '../types';
 
 // Establecer URL base según entorno
 const API_URL = 'http://localhost:3000/api';
@@ -151,156 +151,86 @@ export const getEuroValue = async () => {
 
 const API_BASE_URL = 'http://localhost:5001/api';
 
+// --- Funciones relacionadas con Perfiles de Costo ---
+
+const fetchAllProfiles = async (): Promise<CostoPerfilData[]> => {
+  try {
+    const response = await axios.get<CostoPerfilData[]>(`${API_BASE_URL}/perfiles`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching all cost profiles:', error);
+    throw error; // Re-lanzar para manejo en el componente
+  }
+};
+
+const fetchProfileData = async (profileId: string): Promise<CostoPerfilData | null> => {
+  if (!profileId) return null;
+  try {
+    const response = await axios.get<CostoPerfilData>(`${API_BASE_URL}/perfiles/${profileId}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching profile data for ID ${profileId}:`, error);
+    // Devolver null o lanzar error según preferencia de manejo
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return null; // No encontrado
+    }
+    throw error;
+  }
+};
+
+const updateProfile = async (profileId: string, data: Partial<CostoPerfilData>): Promise<CostoPerfilData> => {
+  try {
+    const response = await axios.put<CostoPerfilData>(`${API_BASE_URL}/perfiles/${profileId}`, data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error updating profile ${profileId}:`, error);
+    throw error;
+  }
+};
+
+const createProfile = async (data: Omit<CostoPerfilData, '_id' | 'createdAt' | 'updatedAt'>): Promise<CostoPerfilData> => {
+  try {
+    // Asumiendo que tienes una ruta POST en /api/costo-perfiles o /api/perfiles
+    // Ajusta la URL si es necesario (usaré /costo-perfiles como ejemplo)
+    const response = await axios.post<CostoPerfilData>(`${API_BASE_URL}/costo-perfiles`, data);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating profile:', error);
+    throw error;
+  }
+};
+
+const deleteProfile = async (profileId: string): Promise<{ message: string }> => {
+  try {
+    const response = await axios.delete<{ message: string }>(`${API_BASE_URL}/perfiles/${profileId}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error deleting profile ${profileId}:`, error);
+    throw error;
+  }
+};
+
+// --- Funciones relacionadas con Productos (Ejemplo) ---
+const fetchAllProducts = async (): Promise<ProductoData[]> => {
+  try {
+    // Ajusta la ruta si es diferente
+    const response = await axios.get<ProductoData[]>(`${API_BASE_URL}/products`); 
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    throw error;
+  }
+};
+
+// Exportar las funciones
 export const api = {
-  // Divisas
-  fetchCurrencies: async () => {
-    const webhookUrl = 'https://n8n-807184488368.southamerica-west1.run.app/webhook/8012d60e-8a29-4910-b385-6514edc3d912';
-    console.log(`[API Service] Fetching currencies from: ${webhookUrl}`)
-    const response = await fetch(webhookUrl);
-    console.log(`[API Service] Currency webhook response status: ${response.status}`);
-
-    if (!response.ok) {
-        const errorBody = await response.text().catch(() => 'Could not read error body');
-        console.error(`[API Service] Currency webhook fetch failed: ${response.status}`, errorBody);
-        throw new Error(`Error al obtener divisas: ${response.status} ${response.statusText}`);
-    }
-
-    const responseText = await response.text();
-    console.log(`[API Service] Currency webhook response text: ${responseText}`);
-
-    if (!responseText) {
-        console.error('[API Service] Currency webhook response body is empty.');
-        throw new Error('La respuesta del servicio de divisas está vacía.');
-    }
-
-    try {
-        const jsonData = JSON.parse(responseText);
-        // Validar estructura básica esperada
-        if (typeof jsonData?.Valor_Dolar === 'undefined' || typeof jsonData?.Valor_Euro === 'undefined') {
-             console.warn('[API Service] Currency webhook response structure is unexpected:', jsonData);
-             // Podríamos lanzar error o intentar continuar si uno de los valores existe
-             // throw new Error('La estructura de la respuesta del servicio de divisas no es la esperada.');
-        }
-        return jsonData;
-    } catch (e) {
-        console.error('[API Service] Failed to parse currency webhook response as JSON:', e);
-        console.error('[API Service] Original response text:', responseText);
-        throw new Error('Error al procesar la respuesta del servicio de divisas. No es JSON válido.');
-    }
-  },
-
-  // Parámetros Globales
-  fetchGlobalParams: async (): Promise<PricingOverrideData | null> => {
-    const response = await fetch(`${API_BASE_URL}/perfiles/global`);
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return response.json();
-  },
-
-  updateGlobalParams: async (params: { costos: any }): Promise<PricingOverrideData> => {
-    const response = await fetch(`${API_BASE_URL}/perfiles/global`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
-    });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return response.json();
-  },
-
-  // Parámetros por Categoría
-  fetchCategoryParams: async (categoryId: string): Promise<PricingOverrideData | null> => {
-    const profileId = `cat_${categoryId}`;
-    const response = await fetch(`${API_BASE_URL}/perfiles/${profileId}`);
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return response.json();
-  },
-
-  updateCategoryParams: async (categoryId: string, params: { costos: any }): Promise<PricingOverrideData> => {
-    const profileId = `cat_${categoryId}`;
-    const response = await fetch(`${API_BASE_URL}/perfiles/${profileId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
-    });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return response.json();
-  },
-
-  // Actualizar Divisas en el Perfil Global
-  updateCurrenciesInDB: async (params: { dolar_observado_actual: number, euro_observado_actual?: number }): Promise<PricingOverrideData> => {
-    console.log('[API Service] Updating currencies in DB (Global Profile) with params:', params);
-    const response = await fetch(`${API_BASE_URL}/perfiles/global`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-          costos: params
-      })
-    });
-    console.log(`[API Service] Update currencies response status: ${response.status}`);
-    if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`[API Service] Update currencies failed: ${response.status}`, errorBody);
-        throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const result = await response.json();
-    console.log('[API Service] Update currencies success response:', result);
-    return result;
-  },
-
-  // Obtener datos de un perfil específico por ID
-  fetchProfileData: async (profileId: string): Promise<PricingOverrideData | null> => {
-    console.log(`[API Service] Fetching profile data for ID: ${profileId}`);
-    const response = await fetch(`${API_BASE_URL}/perfiles/${profileId}`);
-    if (response.status === 404) {
-        console.log(`[API Service] Profile ${profileId} not found (404).`);
-        return null;
-    }
-    if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`[API Service] Fetch profile data failed: ${response.status}`, errorBody);
-        throw new Error(`HTTP error fetching profile ${profileId}! status: ${response.status}`);
-    }
-    const result = await response.json();
-    console.log(`[API Service] Profile data fetched successfully for ${profileId}:`, result);
-    return result;
-  },
-
-  // Obtener TODOS los perfiles
-  fetchAllProfiles: async (): Promise<PricingOverrideData[]> => {
-     console.log(`[API Service] Fetching all profiles`);
-     const response = await fetch(`${API_BASE_URL}/perfiles`);
-     if (!response.ok) {
-         const errorBody = await response.text();
-         console.error(`[API Service] Fetch all profiles failed: ${response.status}`, errorBody);
-         throw new Error(`HTTP error fetching all profiles! status: ${response.status}`);
-     }
-     const result = await response.json();
-     console.log(`[API Service] All profiles fetched successfully:`, result.length);
-     return result;
-   },
-
-  // Eliminar un perfil por ID
-  deleteProfile: async (profileId: string): Promise<{ message: string }> => {
-      console.log(`[API Service] Deleting profile: ${profileId}`);
-      const response = await fetch(`${API_BASE_URL}/perfiles/${profileId}`, {
-          method: 'DELETE'
-      });
-      if (!response.ok) {
-          const errorBody = await response.json().catch(() => ({ message: 'Error desconocido al eliminar' }));
-          console.error(`[API Service] Delete profile failed: ${response.status}`, errorBody);
-          throw new Error(errorBody.message || `HTTP error deleting profile ${profileId}! status: ${response.status}`);
-      }
-      // Si el status es 200 o 204 (No Content), considerar éxito
-      if (response.status === 204) {
-           console.log(`[API Service] Profile ${profileId} deleted successfully (204 No Content).`);
-           return { message: 'Perfil eliminado correctamente.' };
-       }
-      const result = await response.json();
-      console.log(`[API Service] Profile ${profileId} deleted successfully:`, result);
-      return result;
-  },
-
-  // ... Aquí podrían ir otras funciones como getProducts, getDollarValue, etc., si todavía se usan.
-  // getCachedProducts y getCurrencies parecen usar una URL base diferente (localhost:3000) y podrían necesitar revisión/eliminación.
+  // Perfiles
+  fetchAllProfiles,
+  fetchProfileData,
+  updateProfile,
+  createProfile,
+  deleteProfile,
+  // Productos (ejemplo)
+  fetchAllProducts,
+  // ... otras funciones API necesarias
 };

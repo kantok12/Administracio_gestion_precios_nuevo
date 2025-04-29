@@ -12,7 +12,6 @@ const {
   getProductDetail,
   getOptionalProducts,
   resetCache,
-  getPricingOverrides,
   createIndividualEquipment
 } = require('../controllers/productController');
 const path = require('path');
@@ -33,9 +32,6 @@ router.delete('/cache', clearCache);                   // Limpiar todo el caché
 router.get('/currency/fetch', fetchCurrencyValuesController);  // Obtener valores de divisas frescos
 router.get('/currency/dollar', getCachedDollarValue);         // Obtener valor del dólar en caché
 router.get('/currency/euro', getCachedEuroValue);            // Obtener valor del euro en caché
-
-// Endpoint para obtener todos los datos de la colección pricingOverrides
-router.get('/pricingOverrides', getPricingOverrides);
 
 // Route to download the equipment template
 router.get('/download-template', (req, res) => {

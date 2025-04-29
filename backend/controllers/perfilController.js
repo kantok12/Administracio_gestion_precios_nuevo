@@ -1,6 +1,8 @@
-const Perfil = require('../models/Perfil');
+// const Perfil = require('../models/Perfil');
 const PricingOverride = require('../models/PricingOverride');
 const asyncHandler = require('express-async-handler');
+const CostoPerfil = require('../models/CostoPerfil');
+const mongoose = require('mongoose');
 
 // @desc    Create a new perfil
 // @route   POST /api/perfiles
@@ -13,123 +15,114 @@ const createPerfil = asyncHandler(async (req, res) => {
 // @desc    Get all perfiles
 // @route   GET /api/perfiles
 // @access  Public (or Private)
-const getPerfiles = asyncHandler(async (req, res) => {
-    console.log('[perfilController] GET /api/perfiles - Obteniendo todos los perfiles...');
-    const perfiles = await PricingOverride.find({});
-    console.log(`[perfilController] GET /api/perfiles - Se encontraron ${perfiles.length} perfiles.`);
+const getPerfiles = async (req, res) => {
+  try {
+    console.log('[PerfilCtrl] Fetching all CostoPerfil documents...');
+    const perfiles = await CostoPerfil.find({}); // Usar CostoPerfil
+    console.log(`[PerfilCtrl] Found ${perfiles.length} profiles.`);
     res.status(200).json(perfiles);
-});
+  } catch (error) {
+    console.error('[PerfilCtrl] Error fetching profiles:', error);
+    res.status(500).json({ message: 'Error interno del servidor al obtener perfiles' });
+  }
+};
 
 // @desc    Get a single perfil by ID
 // @route   GET /api/perfiles/:id
 // @access  Public (or Private)
-const getPerfilById = asyncHandler(async (req, res) => {
-    const profileId = req.params.id;
-    console.log(`[perfilController] GET /api/perfiles/:id - Obteniendo perfil con ID: ${profileId}`);
-    try {
-        const perfil = await PricingOverride.findOne({ _id: profileId });
-        
-        if (perfil) {
-            console.log(`[perfilController] GET /api/perfiles/:id - Perfil encontrado: ${profileId}`);
-            res.status(200).json(perfil);
-        } else {
-            console.log(`[perfilController] GET /api/perfiles/:id - Perfil ${profileId} no encontrado.`);
-            res.status(404);
-            throw new Error('Perfil no encontrado');
-        }
-    } catch (error) {
-        console.error(`[perfilController] GET /api/perfiles/:id - Error obteniendo perfil ${profileId}:`, error);
-        if (res.statusCode < 400 || res.statusCode === 404 && error.message !== 'Perfil no encontrado') {
-            res.status(500); 
-        } 
-        throw error;
+const getPerfilById = async (req, res) => {
+  const profileId = req.params.id;
+  console.log(`[PerfilCtrl] Fetching profile with ID: ${profileId}`);
+  try {
+    const perfil = await CostoPerfil.findById(profileId); // Usar CostoPerfil
+    if (!perfil) {
+      console.log(`[PerfilCtrl] Profile not found for ID: ${profileId}`);
+      return res.status(404).json({ message: 'Perfil no encontrado' });
     }
-});
+    console.log(`[PerfilCtrl] Profile found: ${perfil.nombre}`);
+    res.status(200).json(perfil);
+  } catch (error) {
+    console.error(`[PerfilCtrl] Error fetching profile by ID ${profileId}:`, error);
+    if (error.kind === 'ObjectId') {
+        return res.status(400).json({ message: 'ID de perfil inválido' });
+    }
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
 
 // @desc    Update an existing perfil by ID
 // @route   PUT /api/perfiles/:id
 // @access  Private
-const updatePerfil = asyncHandler(async (req, res) => {
-    const profileId = req.params.id;
-    console.log(`[perfilController] PUT /api/perfiles/:id - Actualizando perfil con ID: ${profileId}`);
-
-    try {
-        // Find the profile by ID
-        const perfil = await PricingOverride.findById(profileId);
-
-        if (perfil) {
-            // Update the profile fields with data from req.body
-            // Make sure to list all fields that should be updatable
-            // Example: perfil.nombre = req.body.nombre || perfil.nombre; 
-            // Add all the fields from your PricingOverride schema here...
-            
-            // For demonstration, let's assume the entire body contains the profile data
-            // In a real scenario, you might want to validate and selectively update fields
-            const updatedPerfil = await PricingOverride.findByIdAndUpdate(profileId, req.body, {
-                new: true, // Return the updated document
-                runValidators: true // Run schema validators on update
-            });
-
-            console.log(`[perfilController] PUT /api/perfiles/:id - Perfil ${profileId} actualizado exitosamente.`);
-            res.status(200).json(updatedPerfil);
-        } else {
-            console.log(`[perfilController] PUT /api/perfiles/:id - Perfil ${profileId} no encontrado para actualizar.`);
-            res.status(404);
-            throw new Error('Perfil no encontrado');
-        }
-    } catch (error) {
-        console.error(`[perfilController] PUT /api/perfiles/:id - Error actualizando perfil ${profileId}:`, error);
-        if (error.name === 'CastError' && error.kind === 'ObjectId') {
-            res.status(400);
-            throw new Error('ID de perfil inválido');
-        }
-        if (error.name === 'ValidationError') {
-             res.status(400);
-             // Construct a more detailed validation error message if needed
-             throw new Error(`Error de validación: ${error.message}`);
-        }
-        res.status(res.statusCode < 400 ? 500 : res.statusCode); // Keep 4xx status if already set
-        throw error;
+const updatePerfil = async (req, res) => {
+  const profileId = req.params.id;
+  console.log(`[PerfilCtrl] Attempting to update profile ID: ${profileId}`);
+  try {
+    // Validar que el ID es válido antes de intentar actualizar
+    if (!mongoose.Types.ObjectId.isValid(profileId)) {
+       return res.status(400).json({ message: 'ID de perfil inválido' });
     }
-});
+    
+    // Buscar primero para asegurar que existe
+    let perfil = await CostoPerfil.findById(profileId); // Usar CostoPerfil
+    if (!perfil) {
+      console.log(`[PerfilCtrl] Update failed: Profile not found for ID: ${profileId}`);
+      return res.status(404).json({ message: 'Perfil no encontrado para actualizar' });
+    }
+
+    // Actualizar el perfil
+    // Add all the fields from your CostoPerfil schema here that can be updated
+    // Example: perfil.nombre = req.body.nombre || perfil.nombre; ...etc
+    // O usar findByIdAndUpdate como antes si prefieres
+    const updatedPerfil = await CostoPerfil.findByIdAndUpdate(profileId, req.body, { // Usar CostoPerfil
+      new: true, // Devuelve el documento modificado
+      runValidators: true // Asegura que las actualizaciones cumplan el esquema
+    });
+
+    console.log(`[PerfilCtrl] Profile updated successfully: ${updatedPerfil.nombre}`);
+    res.status(200).json(updatedPerfil);
+
+  } catch (error) {
+    console.error(`[PerfilCtrl] Error updating profile ID ${profileId}:`, error);
+     // Manejar error de validación de Mongoose
+    if (error.name === 'ValidationError') {
+        return res.status(400).json({ message: 'Error de validación', errors: error.errors });
+    } 
+    // Manejar error de ID duplicado si aplica (ej. si actualizas 'nombre' a uno existente)
+    if (error.code === 11000) { 
+        return res.status(400).json({ message: 'Error: El nombre del perfil ya existe.' });
+    }
+    res.status(500).json({ message: 'Error interno del servidor al actualizar el perfil' });
+  }
+};
 
 // @desc    Delete a perfil by ID
 // @route   DELETE /api/perfiles/:id
 // @access  Private (Añade middleware de autenticación si es necesario)
-const deletePerfil = asyncHandler(async (req, res) => {
-    const profileId = req.params.id;
-    console.log(`[perfilController] DELETE /api/perfiles/:id - Intentando eliminar perfil con ID: ${profileId}`);
-    
-    try {
-        // Intentar encontrar y eliminar el documento por su ID
-        const perfil = await PricingOverride.findByIdAndDelete(profileId);
-        
-        if (!perfil) {
-            // Si no se encontró el documento con ese ID
-            console.log(`[perfilController] DELETE /api/perfiles/:id - Perfil ${profileId} no encontrado.`);
-            res.status(404);
-            throw new Error('Perfil no encontrado');
-        }
-        
-        // Si se eliminó correctamente
-        console.log(`[perfilController] DELETE /api/perfiles/:id - Perfil ${profileId} eliminado exitosamente.`);
-        res.status(200).json({ message: 'Perfil eliminado correctamente.' }); // Enviar respuesta OK
-
-    } catch (error) {
-        console.error(`[perfilController] DELETE /api/perfiles/:id - Error eliminando perfil ${profileId}:`, error);
-        // Manejar error si el ID no es un ObjectId válido
-        if (error.name === 'CastError' && error.kind === 'ObjectId') {
-            res.status(400);
-            throw new Error('ID de perfil inválido');
-        }
-        // Re-lanzar otros errores para que el middleware los maneje
-        // Asegúrate de no enviar el status 501 de "No implementado"
-        if (!res.headersSent) { // Evitar error si ya se envió un 404 o 400
-           res.status(500); 
-        }
-        throw error; 
+const deletePerfil = async (req, res) => {
+  const profileId = req.params.id;
+  console.log(`[PerfilCtrl] Attempting to delete profile ID: ${profileId}`);
+  try {
+    // Validar ID
+     if (!mongoose.Types.ObjectId.isValid(profileId)) {
+       return res.status(400).json({ message: 'ID de perfil inválido' });
     }
-});
+
+    const perfil = await CostoPerfil.findByIdAndDelete(profileId); // Usar CostoPerfil
+
+    if (!perfil) {
+      console.log(`[PerfilCtrl] Delete failed: Profile not found for ID: ${profileId}`);
+      return res.status(404).json({ message: 'Perfil no encontrado para eliminar' });
+    }
+
+    console.log(`[PerfilCtrl] Profile deleted successfully: ${perfil.nombre}`);
+    // Aquí podrías añadir lógica para reasignar productos que usaban este perfil si es necesario
+    res.status(200).json({ message: 'Perfil eliminado correctamente' });
+
+  } catch (error) {
+    console.error(`[PerfilCtrl] Error deleting profile ID ${profileId}:`, error);
+    res.status(500).json({ message: 'Error interno del servidor al eliminar el perfil' });
+  }
+};
 
 // Placeholders para rutas /global si se mantienen (aunque comentadas en rutas)
 const getGlobalOverride = asyncHandler(async (req, res) => {

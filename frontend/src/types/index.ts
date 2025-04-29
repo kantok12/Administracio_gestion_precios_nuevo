@@ -41,3 +41,61 @@ export interface PricingOverrideData {
 }
 
 // You can add other type definitions for your application below 
+
+// --- Nueva Interfaz para CostoPerfil --- 
+export interface CostoPerfilData {
+  _id: string; // ID de Mongoose
+  nombre: string;
+  descripcion?: string;
+  activo?: boolean;
+
+  // Parámetros del perfil
+  descuento_fabrica_pct: number;
+  factor_actualizacion_anual: number;
+  costo_origen_transporte_eur: number;
+  costo_origen_gastos_export_eur: number;
+  flete_maritimo_usd: number;
+  recargos_destino_usd: number;
+  tasa_seguro_pct: number;
+  honorarios_agente_aduana_usd: number;
+  gastos_portuarios_otros_usd: number;
+  derecho_advalorem_pct: number;
+  transporte_nacional_clp: number;
+  buffer_eur_usd_pct: number;
+  buffer_usd_clp_pct: number;
+  margen_total_pct: number;
+  iva_pct: number;
+
+  // Timestamps
+  createdAt?: string; 
+  updatedAt?: string; 
+}
+
+
+// --- Mantener otras interfaces si son necesarias ---
+// Por ejemplo, si tienes una interfaz para Productos:
+export interface ProductoData { 
+  _id: string;
+  Codigo_Producto: string;
+  nombre_del_producto: string;
+  modelo: string;
+  categoria: string;
+  // ... otros campos del producto
+  costo_lista_original_eur?: number; // Dato específico del producto
+  fecha_costo_original?: string; // Necesario para calcular antigüedad
+  costoPerfilId?: string; // ID del perfil asignado (opcional)
+}
+
+// Interfaz para los datos de la conversación del chatbot
+export interface ChatMessage {
+  userInput: string;
+  agentResponse: string;
+  timestamp?: string; // O Date si lo manejas como objeto Date
+}
+
+export interface ConversationData {
+  _id: string;
+  messages: ChatMessage[];
+  createdAt?: string;
+  updatedAt?: string;
+} 

@@ -1,6 +1,6 @@
 // controllers/costosController.js
 const Producto = require('../models/Producto'); // << MODELO AHORA EXISTE
-const PricingOverride = require('../models/PricingOverride'); // Usando el modelo principal
+const CostoPerfil = require('../models/CostoPerfil'); // Usar el nuevo modelo
 
 // Controlador para obtener costos fusionados de un producto
 exports.getCostos = async (req, res) => {
@@ -26,13 +26,13 @@ exports.getCostos = async (req, res) => {
     console.log(`[Backend] Searching for override documents with keys: ${overrideKeys.join(', ')}`);
 
     // 3. Buscar todos los documentos de override relevantes de una vez
-    const overrides = await PricingOverride.find({ _id: { $in: overrideKeys } });
-    console.log(`[Backend] Found ${overrides.length} override documents.`);
+    const perfiles = await CostoPerfil.find({ _id: { $in: overrideKeys } });
+    console.log(`[Backend] Found ${perfiles.length} override documents.`);
 
     // 4. Fusionar los costos con la prioridad correcta: global < categoria < producto
-    const globalCosts = overrides.find(o => o._id === 'global')?.costos || {};
-    const categoryCosts = overrides.find(o => o._id === `cat_${producto.categoria}`)?.costos || {};
-    const productCosts = overrides.find(o => o._id === `prod_${codigoProducto}`)?.costos || {};
+    const globalCosts = perfiles.find(o => o._id === 'global')?.costos || {};
+    const categoryCosts = perfiles.find(o => o._id === `cat_${producto.categoria}`)?.costos || {};
+    const productCosts = perfiles.find(o => o._id === `prod_${codigoProducto}`)?.costos || {};
 
     const costosFusionados = {
         ...globalCosts,

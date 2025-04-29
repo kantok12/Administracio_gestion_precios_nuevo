@@ -8,6 +8,8 @@ const productRoutes = require('./routes/productRoutes');
 const costosRoutes = require('./routes/costosRoutes');
 // Importar la ruta correcta para perfiles
 const perfilesRoutes = require('./routes/perfilesRoutes.js');
+// Importar la nueva ruta para perfiles de costo
+const costoPerfilRoutes = require('./routes/costoPerfilRoutes');
 // Eliminar imports de rutas obsoletas
 // const overridesRoutes = require('./routes/overridesRoutes');
 // const categoryOverridesRoutes = require('./routes/categoryOverridesRoutes');
@@ -51,6 +53,8 @@ const initializeServer = async () => {
     app.use('/api/products', productRoutes);
     // Usar la ruta correcta para perfiles
     app.use('/api/perfiles', perfilesRoutes);
+    // Registrar la nueva ruta para perfiles de costo
+    app.use('/api/costo-perfiles', costoPerfilRoutes);
     // Eliminar uso de rutas obsoletas
     // app.use('/api/overrides', overridesRoutes);
     // app.use('/api/category-overrides', categoryOverridesRoutes);

@@ -463,20 +463,6 @@ const getOptionalProducts = async (req, res) => {
   }
 };
 
-// Modelo para la colección pricingOverrides
-const PricingOverride = mongoose.model('PricingOverride', new mongoose.Schema({}, { strict: false }));
-
-// Controlador para obtener todos los datos de la colección pricingOverrides
-const getPricingOverrides = async (req, res) => {
-  try {
-    const data = await PricingOverride.find();
-    res.status(200).json(data);
-  } catch (error) {
-    console.error('Error fetching pricingOverrides:', error);
-    res.status(500).json({ message: 'Error fetching pricingOverrides', error: error.message });
-  }
-};
-
 const createIndividualEquipment = async (req, res) => {
   try {
     const equipmentData = req.body;
@@ -548,6 +534,5 @@ module.exports = {
   clearCache,
   getProductDetail,
   getOptionalProducts,
-  getPricingOverrides,
   createIndividualEquipment
 };
