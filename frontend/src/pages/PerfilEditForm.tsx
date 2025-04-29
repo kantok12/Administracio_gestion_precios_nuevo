@@ -15,32 +15,26 @@ import {
   FormControl,
   InputLabel,
   OutlinedInput,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { PricingOverrideData } from '../types'; // Types from the types folder
-import { getPerfilById, updatePerfil } from '../services/perfilService.ts'; // Service functions - trying with .ts extension
+import { CostoPerfilData } from '../types'; // Usar el tipo correcto
+import { api } from '../services/api'; // Usar el servicio unificado
 
-// Helper function to format date for display (optional)
-const formatDateForInput = (date: string | Date | null | undefined): string => {
-  if (!date) return '';
-  try {
-    const d = new Date(date);
-    // Format as YYYY-MM-DD for date input
-    const year = d.getFullYear();
-    const month = (d.getMonth() + 1).toString().padStart(2, '0');
-    const day = d.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  } catch (e) {
-    return ''; // Return empty if date is invalid
-  }
+// Helper para formatear números (opcional, si se necesita mostrar diferente a como se almacena)
+const formatNumberForInput = (value: number | string | boolean | undefined | null): string => {
+  if (value === null || value === undefined) return '';
+  return String(value); // Simplemente convertir a string para el input
 };
 
 
 const PerfilEditForm: React.FC = () => {
   const { id } = useParams<{ id: string }>(); // Get profile ID from URL
   const navigate = useNavigate();
-  const [perfilData, setPerfilData] = useState<PricingOverrideData | null>(null);
+  // Cambiar tipo de estado a CostoPerfilData
+  const [perfilData, setPerfilData] = useState<Partial<CostoPerfilData>>({}); // Usar Partial para el estado inicial
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -56,11 +50,14 @@ const PerfilEditForm: React.FC = () => {
       setError(null);
       try {
         console.log(`[PerfilEditForm] Fetching profile with ID: ${id}`);
-        // Replace with your actual API call function
-        const data = await getPerfilById(id); 
-        console.log(`[PerfilEditForm] Profile data received:`, data);
-        // Initialize costos if it's missing or empty
-        setPerfilData({ ...data, costos: data.costos || {} });
+        // Usar la función correcta del servicio api
+        const data = await api.fetchProfileData(id);
+        if (data) {
+          console.log(`[PerfilEditForm] Profile data received:`, data);
+          setPerfilData(data);
+        } else {
+          setError(`No se encontró un perfil con ID: ${id}`);
+        }
       } catch (err: any) {
         console.error('[PerfilEditForm] Error fetching profile:', err);
         setError(err.message || 'Error al cargar los datos del perfil.');
@@ -73,55 +70,25 @@ const PerfilEditForm: React.FC = () => {
   }, [id]);
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = event.target;
-    
-    // Determine the correct value type (number or string)
-    const parsedValue = type === 'number' ? parseFloat(value) || 0 : value;
+    const { name, value, type, checked } = event.target as HTMLInputElement; // Asegurar tipo para checked
 
-    if (perfilData) {
-      // Handle nested 'costos' fields
-      if (name.startsWith('costos.')) {
-        const costField = name.split('.')[1];
-        setPerfilData({
-          ...perfilData,
-          costos: {
-            ...perfilData.costos,
-            [costField]: parsedValue,
-          },
-        });
-      } else if (name === 'fecha_ultima_actualizacion_transporte_local') {
-          // Special handling for date - ensure it goes into costos
-           setPerfilData({
-             ...perfilData,
-             costos: {
-               ...perfilData.costos,
-               fecha_ultima_actualizacion_transporte_local: value || null, // Store as string or null
-             },
-           });
-      } else {
-         // Handle top-level fields (like _id, nivel - though usually not editable)
-         // This example prevents editing _id and nivel
-         if (name !== '_id' && name !== 'nivel') {
-             // setPerfilData({ ...perfilData, [name]: parsedValue }); 
-             // ^-- If other top-level fields were editable
-         }
+    // Determinar el valor correcto (número, booleano o string)
+    let parsedValue: string | number | boolean = value;
+    if (type === 'number') {
+      parsedValue = parseFloat(value) || 0;
+      // Si es un campo de porcentaje, dividir por 100 antes de guardar (si se muestran como 0-100)
+      // Asegúrate que los nombres coincidan con tus campos de porcentaje
+      if (name.endsWith('_pct')) {
+        parsedValue = (parseFloat(value) || 0) / 100;
       }
+    } else if (type === 'checkbox') {
+      parsedValue = checked;
     }
-  };
-  
-  // Specific handler for date changes
-  const handleDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-     const { name, value } = event.target;
-     if (perfilData && name === 'costos.fecha_ultima_actualizacion_transporte_local') {
-         setPerfilData({
-           ...perfilData,
-           costos: {
-             ...perfilData.costos,
-             // Store date as string YYYY-MM-DD or null if cleared
-             fecha_ultima_actualizacion_transporte_local: value ? value : null, 
-           },
-         });
-     }
+
+    setPerfilData(prevData => ({
+      ...prevData,
+      [name]: parsedValue,
+    }));
   };
 
 
@@ -137,19 +104,14 @@ const PerfilEditForm: React.FC = () => {
 
     try {
       console.log('[PerfilEditForm] Attempting to update profile:', id, perfilData);
-      // Prepare data payload, potentially cleaning or validating
-      const payload: Partial<PricingOverrideData> = {
-        costos: perfilData.costos,
-        // Include other fields if they are meant to be updatable
-        // metadata might be updated automatically on backend
-      };
-      
-      // Replace with your actual API update function
-      await updatePerfil(id, payload); 
+      // Preparar payload eliminando campos no actualizables si es necesario
+      const { _id, createdAt, updatedAt, ...updatePayload } = perfilData;
+
+      // Usar la función correcta del servicio api
+      await api.updateProfile(id, updatePayload);
       console.log('[PerfilEditForm] Profile updated successfully');
-      // Optionally show a success message before navigating
-      alert('Perfil actualizado exitosamente!'); // Replace with snackbar/toast if preferred
-      navigate('/admin/perfiles'); // Navigate back to the profiles list or wherever appropriate
+      alert('Perfil actualizado exitosamente!');
+      navigate('/admin/perfiles'); // Volver a la lista de perfiles
     } catch (err: any) {
       console.error('[PerfilEditForm] Error updating profile:', err);
       setError(err.response?.data?.message || err.message || 'Error al guardar el perfil.');
@@ -157,22 +119,17 @@ const PerfilEditForm: React.FC = () => {
       setIsSaving(false);
     }
   };
-  
-  const renderTextField = (name: string, label: string, type: string = 'number', required: boolean = false, adornment?: string) => {
-      const fieldName = name.startsWith('costos.') ? name.split('.')[1] : name;
-      const value = name.startsWith('costos.') 
-          ? perfilData?.costos?.[fieldName as keyof typeof perfilData.costos] ?? '' 
-          : perfilData?.[fieldName as keyof PricingOverrideData] ?? '';
 
-      // Format percentage fields (assuming they are stored as decimals 0-1)
-      const displayValue = (type === 'number' && typeof value === 'number' && (name.includes('buffer_') || name.includes('tasa_') || name.includes('descuento_') || name.includes('factor_') || name.includes('derecho_') || name.includes('iva'))) 
-        ? value * 100 
-        : value;
-        
-      // Adjust step for percentage inputs
-      const step = (type === 'number' && (name.includes('buffer_') || name.includes('tasa_') || name.includes('descuento_') || name.includes('factor_') || name.includes('derecho_') || name.includes('iva'))) 
-        ? '0.1' 
-        : 'any'; // Default step for other numbers
+  // Función renderizadora simplificada para CostoPerfilData
+  const renderTextField = (fieldName: keyof Omit<CostoPerfilData, '_id' | 'createdAt' | 'updatedAt'>, label: string, type: string = 'text', required: boolean = false, adornment?: string) => {
+      let value: string | number = formatNumberForInput(perfilData?.[fieldName]);
+      let inputType = type;
+
+      // Manejo especial para porcentajes (mostrar como 0-100)
+      if (fieldName.endsWith('_pct') && typeof perfilData?.[fieldName] === 'number') {
+          value = ( (perfilData[fieldName] as number) * 100 ).toString();
+          inputType = 'number'; // Los porcentajes son números
+      }
 
       return (
           <TextField
@@ -180,171 +137,146 @@ const PerfilEditForm: React.FC = () => {
               variant="outlined"
               margin="normal"
               label={label}
-              name={name}
-              type={type === 'percentage' ? 'number' : type} // Use number type for percentages
-              value={displayValue}
+              name={fieldName}
+              type={inputType}
+              value={value}
               onChange={handleInputChange}
               required={required}
               InputProps={adornment ? {
                    endAdornment: <InputAdornment position="end">{adornment}</InputAdornment>,
               } : undefined}
               InputLabelProps={{
-                   shrink: true, // Keep label floated for pre-filled values
+                   shrink: true,
               }}
-               inputProps={{
-                 step: step // Allow decimals for number inputs
+              inputProps={{
+                 step: inputType === 'number' ? (fieldName.endsWith('_pct') ? '0.1' : 'any') : undefined
                }}
+              disabled={isSaving || loading}
           />
       );
   };
-  
 
   if (loading) {
-    return (
-      <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-        <CircularProgress />
-      </Container>
-    );
+    return <Container><Box sx={{ display: 'flex', justifyContent: 'center', mt: 5 }}><CircularProgress /></Box></Container>;
   }
 
-  if (error && !perfilData) { // Show error only if data couldn't be loaded at all
+  if (error) {
     return (
       <Container>
-        <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
+        <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>
         <Button
-            variant="outlined"
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate(-1)} // Go back
-            sx={{ mt: 2 }}
+          variant="outlined"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/admin/perfiles')} // Volver atrás
+          sx={{ mt: 2 }}
         >
-            Volver
+          Volver
         </Button>
       </Container>
     );
   }
-  
-  if (!perfilData) {
-       // This case might happen if loading finished but data is still null without an error (unlikely with current logic)
-       return <Container><Typography>No se encontraron datos para este perfil.</Typography></Container>;
-   }
-
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-       <Typography variant="h4" gutterBottom>
-         Editar Perfil: {perfilData._id === 'global' ? 'Global' : perfilData._id}
-       </Typography>
-       <Paper elevation={3} sx={{ p: 3 }}>
-        <form onSubmit={handleSubmit}>
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+    <Container component={Paper} sx={{ p: 4, mt: 4 }}>
+      <Typography variant="h4" gutterBottom>Editar Perfil de Costo</Typography>
+      <Typography variant="subtitle1" gutterBottom color="textSecondary">ID: {id}</Typography>
+      <Divider sx={{ my: 2 }} />
 
-          {/* Display Non-Editable Info */}
-           <Box sx={{ mb: 3 }}>
-               <Typography variant="h6">Información del Perfil</Typography>
-               <TextField label="ID Perfil" value={perfilData._id} margin="normal" fullWidth disabled InputLabelProps={{ shrink: true }} />
-               <TextField label="Nivel" value={perfilData.nivel} margin="normal" fullWidth disabled InputLabelProps={{ shrink: true }}/>
-               {perfilData.nivel === 'categoria' && perfilData.categoryId &&
-                   <TextField label="ID Categoría" value={perfilData.categoryId} margin="normal" fullWidth disabled InputLabelProps={{ shrink: true }}/>
-               }
-               {perfilData.nivel === 'producto' && perfilData.productId &&
-                   <TextField label="ID Producto" value={perfilData.productId} margin="normal" fullWidth disabled InputLabelProps={{ shrink: true }}/>
-               }
-           </Box>
-
-           <Divider sx={{ my: 3 }} />
-
-          {/* Costos Section */}
-          <Typography variant="h6" gutterBottom>Parámetros de Costos</Typography>
-
-          <Grid container spacing={2}>
-             {/* Tipo de Cambio y Buffers */}
-             <Grid item xs={12} sm={6} md={4}>
-                 <Typography variant="subtitle1" gutterBottom>Tipo de Cambio y Buffers</Typography>
-                 {renderTextField("costos.tipo_cambio_eur_usd", "Tipo de Cambio EUR/USD")}
-                 {renderTextField("costos.buffer_eur_usd", "Buffer EUR/USD (%)", 'number', false, '%')}
-                 {renderTextField("costos.dolar_observado_actual", "Dólar Observado Actual (CLP)")}
-                 {renderTextField("costos.buffer_usd_clp", "Buffer USD/CLP (%)", 'number', false, '%')}
-             </Grid>
-
-             {/* Parámetros de Margen y Seguro */}
-             <Grid item xs={12} sm={6} md={4}>
-                  <Typography variant="subtitle1" gutterBottom>Parámetros de Margen y Seguro</Typography>
-                  {renderTextField("costos.margen_adicional_total", "Margen Total (%)", 'number', false, '%')}
-                  {renderTextField("costos.tasa_seguro", "Tasa de Seguro (%)", 'number', false, '%')}
-                  {renderTextField("costos.descuento_fabricante", "Descuento Fabricante (%)", 'number', false, '%')}
-                  {renderTextField("costos.factor_actualizacion_anual", "Factor Actualización Anual (%)", 'number', false, '%')}
-             </Grid>
-             
-             {/* Parámetros de Transporte */}
-            <Grid item xs={12} sm={6} md={4}>
-                 <Typography variant="subtitle1" gutterBottom>Parámetros de Transporte</Typography>
-                 {renderTextField("costos.buffer_transporte", "Buffer Transporte (%)", 'number', false, '%')}
-                 {renderTextField("costos.transporte_local_eur", "Transporte Local (EUR)", 'number', false, 'EUR')}
-                 {renderTextField("costos.transporte_nacional_clp", "Transporte Nacional (CLP)", 'number', false, 'CLP')}
-                  <TextField
-                       fullWidth
-                       variant="outlined"
-                       margin="normal"
-                       label="Fecha Última Actualización Tarifas Transporte"
-                       name="costos.fecha_ultima_actualizacion_transporte_local"
-                       type="date"
-                       value={formatDateForInput(perfilData.costos?.fecha_ultima_actualizacion_transporte_local)}
-                       onChange={handleDateChange} // Use specific handler for date
-                       InputLabelProps={{
-                           shrink: true,
-                       }}
-                   />
-             </Grid>
-             
-             <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid> {/* Separator */}
-
-             {/* Costos Adicionales (EUR) */}
-            <Grid item xs={12} sm={6} md={4}>
-                  <Typography variant="subtitle1" gutterBottom>Costos Adicionales (EUR)</Typography>
-                 {renderTextField("costos.costo_fabrica_original_eur", "Costo Fábrica Referencial (EUR)", 'number', false, 'EUR')}
-                 {renderTextField("costos.gasto_importacion_eur", "Gasto Importación (EUR)", 'number', false, 'EUR')}
-             </Grid>
-
-             {/* Costos Adicionales (USD) */}
-             <Grid item xs={12} sm={6} md={4}>
-                  <Typography variant="subtitle1" gutterBottom>Costos Adicionales (USD)</Typography>
-                  {renderTextField("costos.flete_maritimo_usd", "Flete Marítimo (USD)", 'number', false, 'USD')}
-                  {renderTextField("costos.recargos_destino_usd", "Recargos Destino (USD)", 'number', false, 'USD')}
-                  {renderTextField("costos.honorarios_agente_aduana_usd", "Honorarios Agente Aduana (USD)", 'number', false, 'USD')}
-                  {renderTextField("costos.gastos_portuarios_otros_usd", "Gastos Portuarios/Otros (USD)", 'number', false, 'USD')}
-             </Grid>
-
-             {/* Impuestos */}
-             <Grid item xs={12} sm={6} md={4}>
-                 <Typography variant="subtitle1" gutterBottom>Impuestos</Typography>
-                 {renderTextField("costos.derecho_ad_valorem", "Derecho Ad Valorem (%)", 'number', false, '%')}
-                 {renderTextField("costos.iva", "IVA (%)", 'number', false, '%')}
-             </Grid>
+      <form onSubmit={handleSubmit}>
+        <Grid container spacing={2}>
+          {/* Campos Generales */}
+          <Grid item xs={12} md={6}>
+            {renderTextField('nombre', 'Nombre del Perfil', 'text', true)}
+          </Grid>
+          <Grid item xs={12} md={6}>
+            {renderTextField('descripcion', 'Descripción', 'text')}
+          </Grid>
+          <Grid item xs={12}>
+             <FormControlLabel
+                control={<Switch checked={!!perfilData?.activo} onChange={handleInputChange} name="activo" disabled={isSaving || loading} />}
+                label="Perfil Activo"
+             />
           </Grid>
 
-          <Divider sx={{ my: 3 }} />
+          <Grid item xs={12}><Divider sx={{ my: 2 }}>Parámetros de Costo</Divider></Grid>
 
-          {/* Action Buttons */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
-             <Button
-               variant="outlined"
-               startIcon={<ArrowBackIcon />}
-               onClick={() => navigate(-1)} // Go back to previous page
-             >
-               Cancelar
-             </Button>
+          {/* Campos Numéricos - Agrupados o individuales según preferencia */}
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('descuento_fabrica_pct', 'Descuento Fábrica', 'number', false, '%')}
+          </Grid>
+           <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('factor_actualizacion_anual', 'Factor Actualización Anual', 'number', false, '%')}
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('margen_total_pct', 'Margen Total', 'number', false, '%')}
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('tasa_seguro_pct', 'Tasa Seguro', 'number', false, '%')}
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('derecho_advalorem_pct', 'Derecho AdValorem', 'number', false, '%')}
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('iva_pct', 'IVA', 'number', false, '%')}
+          </Grid>
+
+          <Grid item xs={12}><Divider sx={{ my: 2 }}>Buffers de Cambio</Divider></Grid>
+          <Grid item xs={12} sm={6}>
+             {renderTextField('buffer_eur_usd_pct', 'Buffer EUR/USD', 'number', false, '%')}
+          </Grid>
+          <Grid item xs={12} sm={6}>
+             {renderTextField('buffer_usd_clp_pct', 'Buffer USD/CLP', 'number', false, '%')}
+          </Grid>
+
+          <Grid item xs={12}><Divider sx={{ my: 2 }}>Costos Logísticos</Divider></Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('costo_origen_transporte_eur', 'Transporte Origen', 'number', false, 'EUR')}
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('costo_origen_gastos_export_eur', 'Gastos Export Origen', 'number', false, 'EUR')}
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('flete_maritimo_usd', 'Flete Marítimo', 'number', false, 'USD')}
+          </Grid>
+           <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('recargos_destino_usd', 'Recargos Destino', 'number', false, 'USD')}
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('honorarios_agente_aduana_usd', 'Honorarios Agente Aduana', 'number', false, 'USD')}
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('gastos_portuarios_otros_usd', 'Gastos Portuarios/Otros', 'number', false, 'USD')}
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+             {renderTextField('transporte_nacional_clp', 'Transporte Nacional', 'number', false, 'CLP')}
+          </Grid>
+
+          {/* Botones de Acción */}
+          <Grid item xs={12} sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBackIcon />}
+              onClick={() => navigate('/admin/perfiles')} // Volver atrás
+              disabled={isSaving}
+            >
+              Cancelar
+            </Button>
             <Button
               type="submit"
               variant="contained"
               color="primary"
+              startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
               disabled={isSaving || loading}
-              startIcon={isSaving ? <CircularProgress size={20} /> : <SaveIcon />}
             >
               {isSaving ? 'Guardando...' : 'Guardar Cambios'}
             </Button>
-          </Box>
-        </form>
-       </Paper>
+          </Grid>
+        </Grid>
+      </form>
+
+      {/* Mostrar error general del formulario si existe */}
+      {error && <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>}
+
     </Container>
   );
 };

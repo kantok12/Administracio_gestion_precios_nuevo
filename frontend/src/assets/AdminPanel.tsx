@@ -1,78 +1,93 @@
+/*
+  Componente AdminPanel comentado/deshabilitado temporalmente 
+  debido a que dependía de la estructura y rutas antiguas (PricingOverride).
+  Necesita refactorización para usar CostoPerfil y /api/costo-perfiles si su funcionalidad
+  sigue siendo necesaria.
+*/
+
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+// Importar tipos y api service
+import { CostoPerfilData } from '../types'; 
+import { api } from '../services/api';
+// Eliminar axios si ya no se usa directamente
+// import axios from 'axios'; 
 
-// --- Interfaz para los datos de pricingOverrides ---
+// --- Remove this old Interface ---
+/*
 interface PricingOverride {
-  category: string;
-  exchange_rate_eur_usd: number;
-  buffer_transport: number;
-  insurance_rate: number;
-  observed_usd: number;
-  buffer_usd: number;
-  additional_margin: number;
-  original_factory_cost_eur: number;
-  manufacturer_discount: number;
-  last_update: string;
+  _id: string;
+  nivel: 'global' | 'categoria' | 'producto';
+  costos: any; // Simplified for this example
+  categoryId?: string;
+  productId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
+*/
 
-export default function AdminPanel() {
-  const [pricingOverrides, setPricingOverrides] = useState<PricingOverride[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+const AdminPanel: React.FC = () => {
+  // Usar el tipo correcto para el estado
+  const [costoPerfiles, setCostoPerfiles] = useState<CostoPerfilData[]>([]); 
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch data from the backend
-  const fetchPricingOverrides = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get('http://localhost:5001/api/pricingOverrides');
-      setPricingOverrides(response.data);
-    } catch (err: any) {
-      setError(err.message || 'Error fetching data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchPricingOverrides();
+    // Renombrar función fetch para claridad
+    const fetchCostoPerfiles = async () => { 
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Usar la función del servicio api
+        const data = await api.fetchAllProfiles(); 
+        setCostoPerfiles(data);
+      } catch (err) {
+        console.error("Error fetching cost profiles:", err);
+        // Extraer mensaje de error si es posible
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load cost profiles.';
+        setError(errorMsg);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCostoPerfiles(); // Llamar a la función renombrada
   }, []);
 
+  if (isLoading) return <div>Loading pricing data...</div>;
+  if (error) return <div style={{ color: 'red' }}>Error: {error}</div>;
+
+  // Table structure will be updated
   return (
-    <div style={{ padding: '24px' }}>
-      <h1>Admin Panel - Pricing Overrides</h1>
-
-      {loading && <p>Loading...</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-
-      {!loading && !error && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+    <div>
+      <h2>Admin Panel - Cost Profiles</h2> 
+      {/* Conditionally render table or loading/error states */}
+      {isLoading && <div>Loading cost profiles...</div>}
+      {error && <div style={{ color: 'red' }}>Error: {error}</div>}
+      {!isLoading && !error && (
+        <table>
           <thead>
             <tr>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Category</th>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Exchange Rate (EUR/USD)</th>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Buffer Transport</th>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Insurance Rate</th>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Observed USD</th>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Buffer USD</th>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Additional Margin</th>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Original Factory Cost (EUR)</th>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Manufacturer Discount</th>
-              <th style={{ border: '1px solid black', padding: '8px' }}>Last Update</th>
+              <th>ID</th>
+              <th>Nombre</th> 
+              <th>Descripción</th>
+              <th>Activo</th> 
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {pricingOverrides.map((override) => (
-              <tr key={override.category}>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{override.category}</td>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{override.exchange_rate_eur_usd}</td>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{override.buffer_transport}</td>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{override.insurance_rate}</td>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{override.observed_usd}</td>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{override.buffer_usd}</td>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{override.additional_margin}</td>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{override.original_factory_cost_eur}</td>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{override.manufacturer_discount}</td>
-                <td style={{ border: '1px solid black', padding: '8px' }}>{new Date(override.last_update).toLocaleString()}</td>
+            {/* Mapear sobre costoPerfiles y usar los campos correctos */} 
+            {costoPerfiles.map((perfil) => (
+              <tr key={perfil._id}>
+                <td>{perfil._id}</td>
+                {/* Acceder a perfil.nombre, etc. */}
+                <td>{perfil.nombre}</td> 
+                <td>{perfil.descripcion || '-'}</td> 
+                <td>{perfil.activo ? 'Sí' : 'No'}</td> 
+                <td>
+                  {/* Placeholder buttons - Add onClick handlers later */}
+                  <button>Edit</button> 
+                  <button>Delete</button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -80,4 +95,6 @@ export default function AdminPanel() {
       )}
     </div>
   );
-}
+};
+
+export default AdminPanel;

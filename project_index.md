@@ -1,0 +1,118 @@
+# Índice del Proyecto: Administración y Gestión de Precios
+
+Este archivo sirve como índice para entender la estructura y funcionalidad del proyecto.
+
+## Descripción General
+
+El proyecto consiste en una aplicación web para la administración y gestión de precios, compuesta por un backend Node.js/Express y un frontend React/Vite/TypeScript.
+
+## Estructura de Directorios Raíz
+
+```
+.
+├── backend/        # Código del servidor backend (Node.js/Express)
+├── frontend/       # Código de la aplicación frontend (React/Vite)
+├── node_modules/   # Dependencias de Node.js (nivel raíz, posiblemente para scripts)
+├── .git/           # Repositorio Git
+├── .gitignore      # Archivos ignorados por Git
+├── .gitattributes  # Atributos de Git
+├── package.json    # Dependencias y scripts (nivel raíz)
+└── package-lock.json # Versiones exactas de dependencias (nivel raíz)
+└── AI_PROJECT_GUIDE.md # Guía del proyecto AI
+```
+
+## Backend (`./backend/`)
+
+Aplicación Node.js con Express.
+
+### Estructura del Backend
+
+```
+backend/
+├── config/         # Archivos de configuración (e.g., db.js, env.js)
+├── controllers/    # Lógica de negocio (e.g., costoPerfilController.js, productController.js)
+├── data/           # Posiblemente datos estáticos o iniciales
+├── middleware/     # Middlewares de Express (e.g., errorMiddleware.js, authMiddleware.js)
+├── models/         # Modelos de datos (probablemente Mongoose) (e.g., CostoPerfil.js)
+├── node_modules/   # Dependencias del backend
+├── routes/         # Definición de rutas API (e.g., costoPerfilRoutes.js, productRoutes.js)
+├── utils/          # Funciones de utilidad
+├── server.js       # Punto de entrada principal del servidor
+├── package.json    # Dependencias y scripts del backend
+└── package-lock.json # Versiones exactas de dependencias del backend
+└── Plantilla_Carga_Equipos.xlsx # Plantilla Excel
+```
+
+### Puntos Clave del Backend
+
+*   **Punto de entrada:** `server.js` inicializa Express, conecta a la BD, configura middlewares y monta las rutas.
+*   **Rutas API Principales:**
+    *   `/api/users`: Autenticación y gestión de usuarios (`routes/userRoutes.js`).
+    *   `/api/products`: Gestión y obtención de productos y divisas (`routes/productRoutes.js`).
+    *   `/api/costo-perfiles`: CRUD para perfiles de costo (`routes/costoPerfilRoutes.js`). Controlado por `controllers/costoPerfilController.js`.
+    *   `/api/langchain`: Rutas relacionadas con Langchain (`routes/langchainRoutes.js`).
+*   **Base de Datos:** Probablemente MongoDB, configurado en `config/db.js`.
+*   **Modelos:** Definidos en la carpeta `models/`. `CostoPerfil.js` es relevante para los perfiles.
+*   **Controladores:** Lógica para cada ruta en `controllers/`. `costoPerfilController.js` contiene la lógica para crear, leer, actualizar y eliminar perfiles de costo.
+
+## Frontend (`./frontend/`)
+
+Aplicación React con Vite y TypeScript.
+
+### Estructura del Frontend
+
+```
+frontend/
+├── node_modules/   # Dependencias del frontend
+├── public/         # Archivos estáticos públicos
+├── src/            # Código fuente del frontend
+│   ├── assets/     # Imágenes, fuentes, etc.
+│   ├── components/ # Componentes reutilizables (e.g., ChatWidget.tsx)
+│   ├── pages/      # Componentes de página (vistas principales) (e.g., PerfilesPanel.tsx, PerfilEditForm.tsx)
+│   ├── services/   # Lógica para interactuar con la API backend
+│   ├── types/      # Definiciones de tipos TypeScript
+│   ├── App.css     # Estilos generales de App
+│   ├── App.tsx     # Componente raíz de la aplicación (layout principal)
+│   ├── index.css   # Estilos globales
+│   ├── main.tsx    # Punto de entrada del frontend (renderiza App y configura rutas)
+│   ├── theme.ts    # Configuración del tema (probablemente Material UI)
+│   └── ...         # Otros archivos de configuración y tipos (tsconfig, vite-env, etc.)
+├── .gitignore      # Archivos ignorados por Git
+├── index.html      # Archivo HTML principal
+├── package.json    # Dependencias y scripts del frontend
+├── package-lock.json # Versiones exactas de dependencias del frontend
+├── vite.config.ts  # Configuración de Vite
+├── tsconfig.json   # Configuración de TypeScript
+└── ...             # Otros archivos de configuración (eslint, etc.)
+```
+
+### Puntos Clave del Frontend
+
+*   **Punto de entrada:** `main.tsx` configura `react-router-dom` y renderiza el componente `App`.
+*   **Enrutamiento:** Definido en `main.tsx` usando `BrowserRouter` y `Routes`.
+    *   Layout principal: `App.tsx`.
+    *   Rutas principales: `/equipos`, `/admin`, `/perfiles/:id/editar`, `/dashboard`.
+    *   Rutas de administración (`/admin`): Renderizadas dentro de `AdminPanel`.
+        *   `/admin/perfiles`: `PerfilesPanel.tsx` (Objetivo actual).
+        *   `/admin/costos`: `CostosAdminPanel.tsx`.
+        *   `/admin/carga-equipos`: `CargaEquiposPanel.tsx`.
+    *   Edición de perfil: `/perfiles/:id/editar` renderiza `PerfilEditForm.tsx`.
+*   **Componente Principal:** `App.tsx` define el layout general (cabecera, barra lateral) y puede contener lógica global o estado compartido.
+*   **Páginas:** Los componentes principales para cada ruta están en `pages/`. `PerfilesPanel.tsx` es la página para `/admin/perfiles`.
+*   **Llamadas API:** Probablemente realizadas desde los componentes en `pages/` o a través de funciones definidas en `services/`.
+*   **Estilos:** Combinación de CSS (`index.css`, `App.css`) y posiblemente una librería UI como Material UI (`theme.ts`).
+
+## Flujo de Trabajo para "Crear Perfil" (Objetivo Actual)
+
+1.  **Usuario:** Hace clic en el botón "Crear Perfil" en la página `/admin/perfiles` (componente `PerfilesPanel.tsx`).
+2.  **Frontend:**
+    *   El evento `onClick` del botón debe disparar una función.
+    *   Esta función probablemente realizará una llamada `POST` a la API backend: `POST /api/costo-perfiles`.
+    *   Tras una respuesta exitosa del backend (que podría incluir el ID del nuevo perfil creado), el frontend debería redirigir al usuario a una nueva página/vista para configurar los detalles de ese perfil. Esta página podría ser una ruta como `/admin/perfiles/nuevo` o `/admin/perfiles/:id/configurar` (a definir).
+3.  **Backend:**
+    *   La ruta `POST /api/costo-perfiles` (definida en `routes/costoPerfilRoutes.js`) recibe la solicitud.
+    *   Invoca la función `createCostoPerfil` del `costoPerfilController.js`.
+    *   El controlador interactúa con el modelo `models/CostoPerfil.js` para crear un nuevo documento en la base de datos.
+    *   Responde al frontend, usualmente con los datos del perfil recién creado o un mensaje de éxito.
+
+Este índice debería facilitar la navegación y modificación del código. Lo usaré como referencia en nuestras próximas interacciones. 

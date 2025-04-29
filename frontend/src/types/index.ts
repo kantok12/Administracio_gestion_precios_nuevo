@@ -1,4 +1,5 @@
 // Interface for the 'costos' sub-document
+/*
 export interface CostosData {
   tipo_cambio_eur_usd?: number;
   buffer_eur_usd?: number;
@@ -21,8 +22,10 @@ export interface CostosData {
   buffer_transporte?: number; // Added field
   fecha_ultima_actualizacion_transporte_local?: string | Date | null; // Added field (use string for ISO date format)
 }
+*/
 
 // Interface for the main PricingOverride document
+/*
 export interface PricingOverrideData {
   _id: string; // Perfil ID (e.g., 'global', 'cat_123', 'prod_456')
   nivel: 'global' | 'categoria' | 'producto';
@@ -39,6 +42,7 @@ export interface PricingOverrideData {
   // Add any other fields that might be present but not strictly defined in the schema if necessary
   // Example: nombre_perfil?: string; // If you add a display name later
 }
+*/
 
 // You can add other type definitions for your application below 
 

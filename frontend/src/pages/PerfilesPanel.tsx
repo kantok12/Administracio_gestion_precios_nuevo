@@ -24,6 +24,10 @@ export default function PerfilesPanel() {
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // --- Nuevos estados para la creación ---
+  const [isCreatingProfile, setIsCreatingProfile] = useState<boolean>(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
   // --- Función para cargar perfiles ---
   const loadPerfiles = useCallback(async () => {
     setIsLoading(true);
@@ -101,8 +105,54 @@ export default function PerfilesPanel() {
       }
   };
   
-  const handleCreateProfile = () => {
-      navigate('/perfiles/nuevo'); 
+  const handleCreateProfile = async () => {
+      setIsCreatingProfile(true);
+      setCreateError(null);
+      try {
+          console.log('[PerfilesPanel] Creando nuevo perfil...');
+
+          // Objeto con todos los campos requeridos y valores por defecto del backend
+          const defaultProfileData = {
+              nombre: 'Nuevo Perfil (Editar)',
+              descripcion: '', // Valor por defecto para campo opcional
+              activo: true, // Coincide con el default del backend
+              descuento_fabrica_pct: 0,
+              factor_actualizacion_anual: 1, // Coincide con el default del backend
+              costo_origen_transporte_eur: 0,
+              costo_origen_gastos_export_eur: 0,
+              flete_maritimo_usd: 0,
+              recargos_destino_usd: 0,
+              tasa_seguro_pct: 0,
+              honorarios_agente_aduana_usd: 0,
+              gastos_portuarios_otros_usd: 0,
+              derecho_advalorem_pct: 0.06, // Coincide con el default del backend
+              transporte_nacional_clp: 0,
+              buffer_eur_usd_pct: 0,
+              buffer_usd_clp_pct: 0,
+              margen_total_pct: 0,
+              iva_pct: 0.19, // Coincide con el default del backend
+          };
+
+          // Llamada a la API para crear un perfil con datos por defecto
+          const newProfile = await api.createProfile(defaultProfileData);
+
+          console.log('[PerfilesPanel] Nuevo perfil creado:', newProfile);
+
+          if (newProfile && newProfile._id) {
+              // Navegar a la página de edición del nuevo perfil
+              navigate(`/perfiles/${newProfile._id}/editar`);
+          } else {
+              console.error('[PerfilesPanel] La respuesta de creación no contiene un ID:', newProfile);
+              setCreateError('Error: No se recibió el ID del nuevo perfil.');
+          }
+      } catch (err: any) {
+          console.error('[PerfilesPanel] Error creando perfil:', err);
+          // Intentar mostrar un mensaje más detallado del error 400 si está disponible
+          const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Error al crear el perfil. Intente de nuevo.';
+          setCreateError(`Error al crear el perfil: ${errorMessage}`);
+      } finally {
+          setIsCreatingProfile(false);
+      }
   };
 
   // --- Styles (definiciones de estilo omitidas por brevedad) ---
@@ -121,10 +171,27 @@ export default function PerfilesPanel() {
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
            <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Gestión de Perfiles de Costos</h1>
-           <button onClick={handleCreateProfile} style={{...iconButtonStyle, padding: '8px 12px', background: '#10B981', color: 'white', borderRadius: '4px' }}>
-               <PlusCircle size={18} style={{ marginRight: '5px' }} /> Crear Perfil
+           <button
+               onClick={handleCreateProfile}
+               style={{...iconButtonStyle, padding: '8px 12px', background: isCreatingProfile ? '#9CA3AF' : '#10B981', color: 'white', borderRadius: '4px', cursor: isCreatingProfile ? 'not-allowed' : 'pointer' }}
+               disabled={isCreatingProfile}
+           >
+               {isCreatingProfile ? (
+                   <Loader2 size={18} className="animate-spin" style={{ marginRight: '5px' }} />
+               ) : (
+                   <PlusCircle size={18} style={{ marginRight: '5px' }} />
+               )}
+               {isCreatingProfile ? 'Creando...' : 'Crear Perfil'}
            </button>
        </div>
+
+       {/* Mensaje de error durante la creación */}
+       {createError && (
+           <div style={{ backgroundColor: '#FEE2E2', color: '#DC2626', padding: '10px', borderRadius: '4px', marginBottom: '15px', display: 'flex', alignItems: 'center' }}>
+               <AlertTriangle size={18} style={{ marginRight: '8px' }} />
+               {createError}
+           </div>
+       )}
 
       {isLoading && !error && (
           <div style={loadingErrorStyle}>

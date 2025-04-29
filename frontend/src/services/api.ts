@@ -155,7 +155,8 @@ const API_BASE_URL = 'http://localhost:5001/api';
 
 const fetchAllProfiles = async (): Promise<CostoPerfilData[]> => {
   try {
-    const response = await axios.get<CostoPerfilData[]>(`${API_BASE_URL}/perfiles`);
+    // Usar endpoint correcto: /costo-perfiles
+    const response = await axios.get<CostoPerfilData[]>(`${API_BASE_URL}/costo-perfiles`);
     return response.data;
   } catch (error) {
     console.error('Error fetching all cost profiles:', error);
@@ -166,7 +167,8 @@ const fetchAllProfiles = async (): Promise<CostoPerfilData[]> => {
 const fetchProfileData = async (profileId: string): Promise<CostoPerfilData | null> => {
   if (!profileId) return null;
   try {
-    const response = await axios.get<CostoPerfilData>(`${API_BASE_URL}/perfiles/${profileId}`);
+    // Usar endpoint correcto: /costo-perfiles/:id
+    const response = await axios.get<CostoPerfilData>(`${API_BASE_URL}/costo-perfiles/${profileId}`);
     return response.data;
   } catch (error) {
     console.error(`Error fetching profile data for ID ${profileId}:`, error);
@@ -180,7 +182,8 @@ const fetchProfileData = async (profileId: string): Promise<CostoPerfilData | nu
 
 const updateProfile = async (profileId: string, data: Partial<CostoPerfilData>): Promise<CostoPerfilData> => {
   try {
-    const response = await axios.put<CostoPerfilData>(`${API_BASE_URL}/perfiles/${profileId}`, data);
+    // Usar endpoint correcto: /costo-perfiles/:id
+    const response = await axios.put<CostoPerfilData>(`${API_BASE_URL}/costo-perfiles/${profileId}`, data);
     return response.data;
   } catch (error) {
     console.error(`Error updating profile ${profileId}:`, error);
