@@ -140,12 +140,12 @@ export const getProducts = async (): Promise<Producto[]> => {
 };
 
 export const getDollarValue = async () => {
-  const response = await axios.get(`${API_URL}/products/currency/dollar`);
+  const response = await axios.get(`${API_BASE_URL}/products/currency/dollar`);
   return response.data;
 };
 
 export const getEuroValue = async () => {
-  const response = await axios.get(`${API_URL}/products/currency/euro`);
+  const response = await axios.get(`${API_BASE_URL}/products/currency/euro`);
   return response.data;
 };
 
@@ -205,7 +205,8 @@ const createProfile = async (data: Omit<CostoPerfilData, '_id' | 'createdAt' | '
 
 const deleteProfile = async (profileId: string): Promise<{ message: string }> => {
   try {
-    const response = await axios.delete<{ message: string }>(`${API_BASE_URL}/perfiles/${profileId}`);
+    // Usar endpoint correcto: /costo-perfiles/:id
+    const response = await axios.delete<{ message: string }>(`${API_BASE_URL}/costo-perfiles/${profileId}`);
     return response.data;
   } catch (error) {
     console.error(`Error deleting profile ${profileId}:`, error);
@@ -235,5 +236,8 @@ export const api = {
   deleteProfile,
   // Productos (ejemplo)
   fetchAllProducts,
+  // Añadir funciones de divisas
+  getDollarValue, 
+  getEuroValue,
   // ... otras funciones API necesarias
 };

@@ -53,18 +53,22 @@ if (fs.existsSync(CACHE_FILE)) {
 // Función para actualizar automáticamente los valores de las divisas
 const updateCurrencyValues = async () => {
   try {
-    const currencyValues = await fetchCurrencyValues();
-    if (currencyValues && Array.isArray(currencyValues) && currencyValues.length > 0) {
-      const data = currencyValues[0];
-      
-      currencyCache.dollar.value = data.Valor_Dolar;
-      currencyCache.euro.value = data.Valor_Euro;
-      currencyCache.dollar.fecha = data.Fecha;
-      currencyCache.euro.fecha = data.Fecha;
+    // fetchCurrencyValues devuelve un objeto
+    const currencyData = await fetchCurrencyValues();
+    
+    // Verificar que el objeto y las propiedades existan
+    if (currencyData && currencyData.Valor_Dolar !== undefined && currencyData.Valor_Euro !== undefined && currencyData.Fecha !== undefined) {
+      // Acceder directamente a las propiedades del objeto
+      currencyCache.dollar.value = currencyData.Valor_Dolar;
+      currencyCache.euro.value = currencyData.Valor_Euro;
+      currencyCache.dollar.fecha = currencyData.Fecha;
+      currencyCache.euro.fecha = currencyData.Fecha;
       currencyCache.dollar.last_update = new Date().toISOString();
       currencyCache.euro.last_update = new Date().toISOString();
       
-      console.log('Currency values updated automatically at:', new Date().toISOString());
+      console.log('Internal currency cache updated automatically at:', new Date().toISOString());
+    } else {
+       console.error('Invalid currency data received during automatic update:', currencyData);
     }
   } catch (error) {
     console.error('Error in automatic currency update:', error.message);
@@ -131,14 +135,16 @@ const fetchFilteredProductsController = async (req, res) => {
 // @access  Public
 const fetchCurrencyValuesController = async (req, res) => {
   try {
-    const currencyValues = await fetchCurrencyValues();
-    if (currencyValues && Array.isArray(currencyValues) && currencyValues.length > 0) {
-      const data = currencyValues[0];
-      
-      currencyCache.dollar.value = data.Valor_Dolar;
-      currencyCache.euro.value = data.Valor_Euro;
-      currencyCache.dollar.fecha = data.Fecha;
-      currencyCache.euro.fecha = data.Fecha;
+    // fetchCurrencyValues ahora devuelve un objeto directamente
+    const currencyData = await fetchCurrencyValues(); 
+    
+    // Verificar que el objeto y las propiedades existan
+    if (currencyData && currencyData.Valor_Dolar !== undefined && currencyData.Valor_Euro !== undefined && currencyData.Fecha !== undefined) {
+      // Acceder directamente a las propiedades del objeto
+      currencyCache.dollar.value = currencyData.Valor_Dolar;
+      currencyCache.euro.value = currencyData.Valor_Euro;
+      currencyCache.dollar.fecha = currencyData.Fecha;
+      currencyCache.euro.fecha = currencyData.Fecha;
       currencyCache.dollar.last_update = new Date().toISOString();
       currencyCache.euro.last_update = new Date().toISOString();
 
@@ -147,7 +153,9 @@ const fetchCurrencyValuesController = async (req, res) => {
         currencies: currencyCache 
       });
     } else {
-      res.status(404).json({ message: 'No currency values found in response' });
+      // Si el objeto o las propiedades faltan
+      console.error('Invalid currency data received from fetchCurrencyValues:', currencyData);
+      res.status(404).json({ message: 'Invalid or incomplete currency data received' });
     }
   } catch (error) {
     console.error('Error fetching currency values:', error);
