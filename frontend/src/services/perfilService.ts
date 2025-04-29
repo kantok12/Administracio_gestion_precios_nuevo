@@ -1,12 +1,10 @@
 import axios from 'axios';
 import { CostoPerfilData } from '../types';
 
-// Base URL for your backend API
-// Make sure this matches how your backend server is running
-// For development, it might be something like http://localhost:5000/api
-// Adjust if your backend is on a different port or path
-const API_URL = '/api/perfiles'; // Using relative path, assumes frontend/backend on same origin or proxy configured
-const API_BASE_URL = '/api'; // Assuming this is the base URL for the backend
+// Base URL for the backend API
+// const API_URL = '/api/perfiles'; // REMOVE this old constant
+const API_BASE_URL = '/api'; // Use this for constructing the full path
+const PROFILES_ENDPOINT = `${API_BASE_URL}/costo-perfiles`; // Define the correct endpoint path
 
 /**
  * Fetches a single profile by its ID.
@@ -16,26 +14,27 @@ const API_BASE_URL = '/api'; // Assuming this is the base URL for the backend
 export const getPerfilById = async (id: string): Promise<CostoPerfilData> => {
   console.log(`[PerfilService] Fetching profile by ID: ${id}`);
   try {
-    const response = await axios.get<CostoPerfilData>(`${API_URL}/${id}`);
+    // Use the correct endpoint
+    const response = await axios.get<CostoPerfilData>(`${PROFILES_ENDPOINT}/${id}`);
     console.log(`[PerfilService] Profile ${id} fetched successfully.`);
     return response.data;
   } catch (error) {
     console.error(`[PerfilService] Error fetching profile ${id}:`, error);
-    // Aquí podrías manejar el error específicamente (ej. lanzar un error más específico)
-    throw error; // Re-lanzar para que el componente lo maneje
+    throw error; 
   }
 };
 
 /**
  * Updates an existing profile by its ID.
  * @param id The ID of the profile to update.
- * @param data The partial data containing fields to update (likely just 'costos').
+ * @param data The partial data containing fields to update.
  * @returns Promise resolving to the updated profile data.
  */
 export const updatePerfil = async (id: string, data: Partial<CostoPerfilData>): Promise<CostoPerfilData> => {
   console.log(`[PerfilService] Updating profile ID: ${id}`);
   try {
-    const response = await axios.put<CostoPerfilData>(`${API_URL}/${id}`, data);
+    // Use the correct endpoint
+    const response = await axios.put<CostoPerfilData>(`${PROFILES_ENDPOINT}/${id}`, data);
     console.log(`[PerfilService] Profile ${id} updated successfully.`);
     return response.data;
   } catch (error) {
@@ -44,11 +43,12 @@ export const updatePerfil = async (id: string, data: Partial<CostoPerfilData>): 
   }
 };
 
-// Optional: Add function to get all profiles if needed elsewhere
+// Function to get all profiles
 export const getPerfiles = async (): Promise<CostoPerfilData[]> => {
   console.log('[PerfilService] Fetching all profiles...');
   try {
-    const response = await axios.get<CostoPerfilData[]>(API_URL);
+    // Use the correct endpoint
+    const response = await axios.get<CostoPerfilData[]>(PROFILES_ENDPOINT);
     console.log(`[PerfilService] Fetched ${response.data.length} profiles.`);
     return response.data;
   } catch (error) {
@@ -57,12 +57,12 @@ export const getPerfiles = async (): Promise<CostoPerfilData[]> => {
   }
 };
 
-// Asegúrate que el endpoint exista y soporte POST para crear
+// Function to create a new profile
 export const createPerfil = async (data: Omit<CostoPerfilData, '_id' | 'createdAt' | 'updatedAt'>): Promise<CostoPerfilData> => {
   console.log('[PerfilService] Creating new profile...');
   try {
-    // Usar la ruta del backend para crear perfiles (/api/costo-perfiles)
-    const response = await axios.post<CostoPerfilData>(`${API_BASE_URL}/costo-perfiles`, data); // Usar API_BASE_URL y ruta correcta
+    // Use the correct endpoint
+    const response = await axios.post<CostoPerfilData>(PROFILES_ENDPOINT, data); 
     console.log(`[PerfilService] Profile created successfully with ID: ${response.data._id}`);
     return response.data;
   } catch (error) {
@@ -71,10 +71,12 @@ export const createPerfil = async (data: Omit<CostoPerfilData, '_id' | 'createdA
   }
 };
 
+// Function to delete a profile
 export const deletePerfil = async (id: string): Promise<{ message: string }> => {
   console.log(`[PerfilService] Deleting profile ID: ${id}`);
   try {
-    const response = await axios.delete<{ message: string }>(`${API_URL}/${id}`);
+    // Use the correct endpoint
+    const response = await axios.delete<{ message: string }>(`${PROFILES_ENDPOINT}/${id}`);
     console.log(`[PerfilService] Profile ${id} deleted successfully.`);
     return response.data;
   } catch (error) {

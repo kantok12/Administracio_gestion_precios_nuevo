@@ -5,9 +5,8 @@ const connectDB = require('./config/db');
 const userRoutes = require('./routes/userRoutes');
 const productRoutes = require('./routes/productRoutes');
 // const pricingOverridesRoutes = require('./routes/pricingOverridesRoutes');
-const costosRoutes = require('./routes/costosRoutes');
 // Importar la ruta correcta para perfiles
-const perfilesRoutes = require('./routes/perfilesRoutes.js');
+// const perfilesRoutes = require('./routes/perfilesRoutes.js');
 // Importar la nueva ruta para perfiles de costo
 const costoPerfilRoutes = require('./routes/costoPerfilRoutes');
 // Eliminar imports de rutas obsoletas
@@ -21,7 +20,7 @@ const langchainRoutes = require('./routes/langchainRoutes');
 // const webhookRoutes = require('./routes/webhookRoutes'); // <-- Comentar ya que no existe
 const { fetchCurrencyValuesController, fetchProducts } = require('./controllers/productController');
 const { port } = require('./config/env');
-const PricingOverride = require('./models/PricingOverride');
+// const PricingOverride = require('./models/PricingOverride'); // REMOVE THIS LINE
 const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 
 dotenv.config();
@@ -40,7 +39,7 @@ const initializeServer = async () => {
     
     // Inicializar modelos llamando al método estático en el MODELO
     console.log('[Server] Initializing data models...');
-    await PricingOverride.initializeDefaults();
+    // await PricingOverride.initializeDefaults(); // REMOVE THIS LINE
     console.log('[Server] Models initialization complete.');
     
     // Configuración de Express
@@ -52,13 +51,13 @@ const initializeServer = async () => {
     app.use('/api/users', userRoutes);
     app.use('/api/products', productRoutes);
     // Usar la ruta correcta para perfiles
-    app.use('/api/perfiles', perfilesRoutes);
+    // app.use('/api/perfiles', perfilesRoutes);
     // Registrar la nueva ruta para perfiles de costo
     app.use('/api/costo-perfiles', costoPerfilRoutes);
     // Eliminar uso de rutas obsoletas
     // app.use('/api/overrides', overridesRoutes);
     // app.use('/api/category-overrides', categoryOverridesRoutes);
-    app.use('/api', costosRoutes);
+    // app.use('/api', costosRoutes); // REMOVE THIS LINE
     // Registrar las nuevas rutas de Langchain
     app.use('/api/langchain', langchainRoutes);
     // app.use('/api/webhook', webhookRoutes); // <-- Comentar ya que no existe
