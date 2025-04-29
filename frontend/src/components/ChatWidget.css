@@ -8,30 +8,52 @@
 
 /* Burbuja flotante */
 .chat-bubble {
-  background-color: #007bff; /* Azul primario */
-  color: white;
-  border: none;
+  /* background-color: #007bff; /* Azul primario */
+  /* background-color: #fff; */ /* Fondo blanco */
+  background-color: #E0F2FE; /* Celeste muy claro (Sky 100 Tailwind) */
+  /* color: white; */
+  /* border: none; */
+  /* border: 2px solid #000000; */ /* Borde negro */
+  border: 2px solid #0EA5E9; /* Celeste principal (Sky 500 Tailwind) */
   border-radius: 50%;
-  width: 60px;
-  height: 60px;
-  font-size: 28px;
+  /* width: 60px; */
+  /* height: 60px; */
+  width: 56px; /* Tamaño ligeramente más grande */
+  height: 56px; /* Tamaño ligeramente más grande */
+  /* font-size: 28px; */
   cursor: pointer;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  /* box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15); /* Sombra más sutil */
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.3s ease;
+  /* transition: background-color 0.3s ease; */
+  transition: all 0.3s ease; /* Transición para todos los cambios */
 }
 
 .chat-bubble:hover {
-  background-color: #0056b3; /* Azul más oscuro */
+  /* background-color: #0056b3; /* Azul más oscuro */
+  /* background-color: #fff5e6; */ /* Naranja muy claro al pasar el mouse */
+  /* background-color: #f0f0f0; */ /* Gris muy claro al pasar el mouse */
+  background-color: #BAE6FD; /* Celeste un poco más oscuro (Sky 200 Tailwind) */
+  /* border-color: #F57C00; */ /* Naranja más oscuro al pasar el mouse (material orange 700) */
+  /* border-color: #333333; */ /* Gris oscuro al pasar el mouse */
+  border-color: #0284C7; /* Celeste más oscuro (Sky 600 Tailwind) */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); /* Sombra ligeramente más grande */
 }
 
 /* Ajuste para icono dentro de la burbuja */
 .chat-bubble svg {
-  color: white;
-  width: 30px;
-  height: 30px;
+  /* color: white; */
+  /* color: #FF9800; */ /* Color naranja del icono */
+  /* color: #000000; */ /* Color negro del icono */
+  color: #0EA5E9; /* Celeste principal (Sky 500 Tailwind) */
+  /* width: 30px; */
+  /* height: 30px; */
+  /* width: 24px; */ /* Icono más pequeño acorde al botón */
+  /* height: 24px; */ /* Icono más pequeño acorde al botón */
+  width: 28px; /* Icono ajustado al nuevo tamaño */
+  height: 28px; /* Icono ajustado al nuevo tamaño */
 }
 
 /* Ventana del chat */

@@ -274,7 +274,7 @@ const ChatWidget = forwardRef<ChatWidgetHandle, ChatWidgetProps>((props, ref) =>
       ) : (
         // --- Botón burbuja ahora usa onBubbleClick de las props --- 
         <button onClick={onBubbleClick} className="chat-bubble">
-          <MessageSquare color="white" /> 
+          <MessageSquare />
         </button>
       )}
     </div>
