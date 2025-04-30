@@ -5,7 +5,8 @@ const {
   getAllCostoPerfiles,
   getCostoPerfilById,
   updateCostoPerfil,
-  deleteCostoPerfil
+  deleteCostoPerfil,
+  calculatePruebaCosto
 } = require('../controllers/costoPerfilController');
 
 // Middleware de autenticación/autorización (ejemplo - descomentar y ajustar si se usa)
@@ -23,5 +24,8 @@ router.route('/:id')
   .get(/* protect, */ getCostoPerfilById)         // Usuarios autenticados pueden ver uno (ejemplo)
   .put(/* protect, admin, */ updateCostoPerfil)    // Solo admin puede actualizar (ejemplo)
   .delete(/* protect, admin, */ deleteCostoPerfil); // Solo admin puede eliminar (ejemplo)
+
+// --- Nueva Ruta para Calcular Prueba ---
+router.post('/calcular-prueba', calculatePruebaCosto); // Accesible públicamente por ahora
 
 module.exports = router; 
