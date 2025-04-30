@@ -82,30 +82,49 @@ interface PruebaInputs {
     transporte_nacional_clp: number | string;
     buffer_usd_clp_pct: number | string; // Input as % (e.g., 3)
     margen_adicional_pct: number | string; // Input as % (e.g., 20)
+    derecho_advalorem_pct: number | string;
+    iva_pct: number | string;
+    descuento_cliente_pct: number | string; // Añadido
 }
 
-interface PruebaResults {
-    factor_actualizacion?: number;
-    costo_fabrica_actualizado_eur_exw?: number;
-    costo_fabrica_actualizado_eur?: number;
-    tipo_cambio_eur_usd_aplicado?: number;
-    costo_final_fabrica_usd_exw?: number;
-    costos_origen_usd?: number;
-    costo_total_flete_manejos_usd?: number;
-    base_para_seguro_usd?: number;
-    prima_seguro_usd?: number;
-    total_transporte_seguro_exw_usd?: number;
-    valor_cif_usd?: number;
-    derecho_advalorem_usd?: number;
-    base_iva_usd?: number;
-    iva_usd?: number;
-    total_costos_importacion_duty_fees_usd?: number;
-    transporte_nacional_usd?: number;
-    precio_neto_compra_base_usd_landed?: number;
-    tipo_cambio_usd_clp_aplicado?: number;
-    precio_neto_compra_base_clp?: number;
-    margen_clp?: number;
-    precio_venta_neto_clp?: number;
+// Interfaz para agrupar resultados (refleja la respuesta del backend)
+interface GroupedPruebaResults {
+    costo_producto: {
+        factor_actualizacion?: number;
+        costo_fabrica_actualizado_eur_exw?: number;
+        costo_fabrica_actualizado_eur?: number;
+        tipo_cambio_eur_usd_aplicado?: number;
+        costo_final_fabrica_usd_exw?: number;
+    };
+    logistica_seguro: {
+        costos_origen_usd?: number;
+        costo_total_flete_manejos_usd?: number;
+        base_para_seguro_usd?: number;
+        prima_seguro_usd?: number;
+        total_transporte_seguro_exw_usd?: number;
+    };
+    importacion: {
+        valor_cif_usd?: number;
+        derecho_advalorem_usd?: number;
+        base_iva_usd?: number;
+        iva_usd?: number; // IVA Importación
+        total_costos_importacion_duty_fees_usd?: number;
+    };
+    landed_cost: {
+        transporte_nacional_usd?: number;
+        precio_neto_compra_base_usd_landed?: number;
+    };
+    conversion_margen: {
+        tipo_cambio_usd_clp_aplicado?: number;
+        precio_neto_compra_base_clp?: number;
+        margen_clp?: number;
+        precio_venta_neto_clp?: number;
+    };
+    precios_cliente: {
+        precio_neto_venta_final_clp?: number;
+        iva_venta_clp?: number; // IVA Venta
+        precio_venta_total_cliente_clp?: number;
+    };
 }
 
 interface PruebaApiValues {
@@ -147,27 +166,30 @@ export default function PerfilesPanel() {
 
   // --- Estados para Calculadora de Prueba ---
   const defaultPruebaInputs: PruebaInputs = {
-      ano_cotizacion: new Date().getFullYear(), // Default a año actual
-      ano_en_curso: new Date().getFullYear(),   // Default a año actual
-      costo_fabrica_original_eur: '', // Iniciar vacío
-      descuento_pct: 0,
-      buffer_eur_usd_pct: 0,
-      costos_origen_eur: 0,
-      flete_maritimo_usd: 0,
-      recargos_destino_usd: 0,
-      tasa_seguro_pct: 0,
-      honorarios_agente_aduana_usd: 0,
-      gastos_portuarios_otros_usd: 0,
-      transporte_nacional_clp: 0,
-      buffer_usd_clp_pct: 0,
-      margen_adicional_pct: 0,
+      ano_cotizacion: new Date().getFullYear(),
+      ano_en_curso: new Date().getFullYear(),
+      costo_fabrica_original_eur: '',
+      descuento_pct: '0',
+      buffer_eur_usd_pct: '0',
+      costos_origen_eur: '0',
+      flete_maritimo_usd: '0',
+      recargos_destino_usd: '0',
+      tasa_seguro_pct: '0',
+      honorarios_agente_aduana_usd: '0',
+      gastos_portuarios_otros_usd: '0',
+      transporte_nacional_clp: '0',
+      buffer_usd_clp_pct: '0',
+      margen_adicional_pct: '0',
+      derecho_advalorem_pct: '6',
+      iva_pct: '19',
+      descuento_cliente_pct: '0', // Default para nuevo campo
   };
   const [pruebaInputs, setPruebaInputs] = useState<PruebaInputs>(defaultPruebaInputs);
-  const [pruebaResults, setPruebaResults] = useState<PruebaResults | null>(null);
+  const [pruebaResults, setPruebaResults] = useState<GroupedPruebaResults | null>(null); // Cambiado tipo
   const [pruebaApiValues, setPruebaApiValues] = useState<PruebaApiValues | null>(null);
   const [isCalculatingPrueba, setIsCalculatingPrueba] = useState<boolean>(false);
   const [pruebaError, setPruebaError] = useState<string | null>(null);
-  const [selectedProfileIdForPrueba, setSelectedProfileIdForPrueba] = useState<string>(''); // ID del perfil seleccionado
+  const [selectedProfileIdForPrueba, setSelectedProfileIdForPrueba] = useState<string>('');
 
   // --- Función para cargar perfiles ---
   const loadPerfiles = useCallback(async () => {
@@ -371,13 +393,13 @@ export default function PerfilesPanel() {
     setPruebaResults(null);
     setPruebaError(null);
     setPruebaApiValues(null);
-    setSelectedProfileIdForPrueba(''); // Reset selection
-    setPruebaInputs(defaultPruebaInputs); // Reset inputs to defaults
+    setSelectedProfileIdForPrueba('');
+    setPruebaInputs(defaultPruebaInputs);
     setIsPruebaModalOpen(true);
   };
 
   const handleClosePruebaModal = () => {
-    if (isCalculatingPrueba) return; // Prevent closing while calculating
+    if (isCalculatingPrueba) return;
     setIsPruebaModalOpen(false);
   };
 
@@ -385,47 +407,44 @@ export default function PerfilesPanel() {
     const { name, value } = event.target;
     setPruebaInputs(prev => ({
         ...prev,
-        // Guardar como string para permitir input parcial, convertir a número al calcular
         [name]: value,
     }));
   };
 
-  // --- Handler para Selección de Perfil en Prueba (Corregido tipo de evento) ---
+  // --- Handler para Selección de Perfil en Prueba ---
   const handleProfileSelectForPrueba = (event: SelectChangeEvent<string>) => {
       const profileId = event.target.value as string;
       setSelectedProfileIdForPrueba(profileId);
+      setPruebaResults(null);
+      setPruebaApiValues(null);
+      setPruebaError(null);
 
       if (profileId) {
           const selectedProfile = perfiles.find(p => p._id === profileId);
           if (selectedProfile) {
-              // Mantener los valores manuales y actualizar el resto desde el perfil
               setPruebaInputs(prev => ({
-                  ...prev, // Mantener ano_cotizacion, ano_en_curso, costo_fabrica_original_eur
-                  descuento_pct: (selectedProfile.descuento_fabrica_pct ?? 0) * 100, // Convertir a % para display
-                  buffer_eur_usd_pct: (selectedProfile.buffer_eur_usd_pct ?? 0) * 100,
-                  costos_origen_eur: selectedProfile.costo_logistica_origen_eur ?? 0,
-                  flete_maritimo_usd: selectedProfile.flete_maritimo_usd ?? 0,
-                  recargos_destino_usd: selectedProfile.recargos_destino_usd ?? 0,
-                  tasa_seguro_pct: (selectedProfile.tasa_seguro_pct ?? 0) * 100,
-                  honorarios_agente_aduana_usd: selectedProfile.costo_agente_aduana_usd ?? 0,
-                  gastos_portuarios_otros_usd: selectedProfile.gastos_portuarios_otros_usd ?? 0,
-                  transporte_nacional_clp: selectedProfile.transporte_nacional_clp ?? 0,
-                  buffer_usd_clp_pct: (selectedProfile.buffer_usd_clp_pct ?? 0) * 100,
-                  margen_adicional_pct: (selectedProfile.margen_adicional_pct ?? 0) * 100,
-                  // NOTA: derecho_advalorem_pct e iva_pct vienen del perfil o backend default, no son input aquí
+                  ...prev,
+                  descuento_pct: ((selectedProfile.descuento_fabrica_pct ?? 0) * 100).toString(),
+                  buffer_eur_usd_pct: ((selectedProfile.buffer_eur_usd_pct ?? 0) * 100).toString(),
+                  costos_origen_eur: (selectedProfile.costo_logistica_origen_eur ?? 0).toString(),
+                  flete_maritimo_usd: (selectedProfile.flete_maritimo_usd ?? 0).toString(),
+                  recargos_destino_usd: (selectedProfile.recargos_destino_usd ?? 0).toString(),
+                  tasa_seguro_pct: ((selectedProfile.tasa_seguro_pct ?? 0) * 100).toString(),
+                  honorarios_agente_aduana_usd: (selectedProfile.costo_agente_aduana_usd ?? 0).toString(),
+                  gastos_portuarios_otros_usd: (selectedProfile.gastos_portuarios_otros_usd ?? 0).toString(),
+                  transporte_nacional_clp: (selectedProfile.transporte_nacional_clp ?? 0).toString(),
+                  buffer_usd_clp_pct: ((selectedProfile.buffer_usd_clp_pct ?? 0) * 100).toString(),
+                  margen_adicional_pct: ((selectedProfile.margen_adicional_pct ?? 0) * 100).toString(),
+                  derecho_advalorem_pct: ((selectedProfile.derecho_advalorem_pct ?? 0.06) * 100).toString(),
+                  iva_pct: ((selectedProfile.iva_pct ?? 0.19) * 100).toString(),
+                  descuento_cliente_pct: ((selectedProfile.descuento_cliente_pct ?? 0) * 100).toString(), // Añadir nuevo campo
               }));
           } else {
-            // Perfil no encontrado (raro), resetear a defaults?
-            setPruebaInputs(prev => ({ ...defaultPruebaInputs, ano_cotizacion: prev.ano_cotizacion, ano_en_curso: prev.ano_en_curso, costo_fabrica_original_eur: prev.costo_fabrica_original_eur }));
+              setPruebaInputs(prev => ({ ...defaultPruebaInputs, ano_cotizacion: prev.ano_cotizacion, ano_en_curso: prev.ano_en_curso, costo_fabrica_original_eur: prev.costo_fabrica_original_eur }));
           }
       } else {
-          // Si se deselecciona (opción "Manual"), resetear a defaults manteniendo los 3 campos manuales
           setPruebaInputs(prev => ({ ...defaultPruebaInputs, ano_cotizacion: prev.ano_cotizacion, ano_en_curso: prev.ano_en_curso, costo_fabrica_original_eur: prev.costo_fabrica_original_eur }));
       }
-      // Limpiar resultados al cambiar perfil
-      setPruebaResults(null);
-      setPruebaApiValues(null);
-      setPruebaError(null);
   };
 
   // --- Handler para Calcular Prueba (Ajustado para enviar tasas de cambio) ---
@@ -433,11 +452,9 @@ export default function PerfilesPanel() {
       setIsCalculatingPrueba(true);
       setPruebaError(null);
       setPruebaResults(null);
-      setPruebaApiValues(null); // Limpiar valores de API previos
+      setPruebaApiValues(null);
 
-      // --- 1. Obtener y validar tasas de cambio ---
       const usdClpRate = dolarValue?.value;
-      // Recalcular eurUsdRate aquí para asegurar que usamos los valores más recientes
       const currentEurUsdRate = (dolarValue?.value && euroValue?.value && dolarValue.value !== 0)
           ? euroValue.value / dolarValue.value
           : null;
@@ -453,7 +470,6 @@ export default function PerfilesPanel() {
            return;
       }
 
-      // --- 2. Validar y obtener inputs manuales ---
       let payload: any = {};
       let hasManualInputError = false;
 
@@ -466,13 +482,11 @@ export default function PerfilesPanel() {
       if (isNaN(costoFabricaOriginalNum)) { setPruebaError("Costo Fábrica Original inválido."); hasManualInputError = true; }
        if (anoEnCursoNum > anoCotizacionNum) { setPruebaError("Año en curso no puede ser mayor a Año cotización."); hasManualInputError = true; }
 
-
       if (hasManualInputError) {
           setIsCalculatingPrueba(false);
           return;
       }
 
-      // Añadir siempre los 3 manuales y las 2 tasas al payload base
       payload = {
           ano_cotizacion: anoCotizacionNum,
           ano_en_curso: anoEnCursoNum,
@@ -481,54 +495,47 @@ export default function PerfilesPanel() {
           tipo_cambio_eur_usd_actual: currentEurUsdRate
       };
 
-      // --- 3. Añadir profileId o parámetros individuales ---
       if (selectedProfileIdForPrueba) {
-          // Si hay perfil seleccionado, añadir su ID
           payload.profileId = selectedProfileIdForPrueba;
       } else {
-          // Si NO hay perfil seleccionado (modo manual), validar y añadir todos los demás inputs
           const numberInputs: Record<string, number> = {};
           let inputError = false;
-          const keysToValidate = [
+          const keysToValidateAndSend = [
               'descuento_pct', 'buffer_eur_usd_pct', 'costos_origen_eur', 'flete_maritimo_usd',
               'recargos_destino_usd', 'tasa_seguro_pct', 'honorarios_agente_aduana_usd',
               'gastos_portuarios_otros_usd', 'transporte_nacional_clp', 'buffer_usd_clp_pct',
-              'margen_adicional_pct'
-              // derecho_advalorem_pct e iva_pct usarán default en backend si no se proveen
+              'margen_adicional_pct', 'derecho_advalorem_pct', 'iva_pct',
+              'descuento_cliente_pct' // Añadir nueva clave a validar y enviar
           ];
 
-          for (const key of keysToValidate) {
-              const value = pruebaInputs[key as keyof PruebaInputs]; // Asegurar que key es válido
-              const numValue = parseFloat(value as string);
-              if (isNaN(numValue)) {
-                  setPruebaError(`Valor inválido para ${key.replace(/_/g, ' ')} en modo manual.`);
-                  inputError = true;
-                  break;
-              }
-              // Convert percentages from (e.g.) 10 to 0.10 for backend
-              if (key.endsWith('_pct')) {
-                  numberInputs[key] = numValue / 100;
-              } else {
-                  numberInputs[key] = numValue;
-              }
-          }
+          for (const key of keysToValidateAndSend) {
+               const value = pruebaInputs[key as keyof PruebaInputs];
+               const numValue = parseFloat(value as string);
+               if (isNaN(numValue)) {
+                   setPruebaError(`Valor inválido para ${key.replace(/_/g, ' ')} en modo manual.`);
+                   inputError = true;
+                   break;
+               }
+               if (key.endsWith('_pct')) {
+                   numberInputs[key] = numValue / 100;
+               } else {
+                   numberInputs[key] = numValue;
+               }
+           }
 
-          if (inputError) {
-              setIsCalculatingPrueba(false);
-              return;
-          }
-          // Añadir los inputs manuales convertidos al payload
-          payload = { ...payload, ...numberInputs };
-      }
+           if (inputError) {
+               setIsCalculatingPrueba(false);
+               return;
+           }
+           payload = { ...payload, ...numberInputs };
+       }
 
-      // --- 4. Realizar la llamada API ---
       try {
-          console.log("Enviando payload a /calcular-prueba:", payload); // Log para depuración
-          const response = await axios.post<{ results: PruebaResults }>('/api/costo-perfiles/calcular-prueba', payload);
+          console.log("Enviando payload a /calcular-prueba:", payload);
+          const response = await axios.post<{ results: GroupedPruebaResults }>('/api/costo-perfiles/calcular-prueba', payload);
 
           if (response.data && response.data.results) {
               setPruebaResults(response.data.results);
-              // Guardar las tasas usadas en el cálculo para mostrarlas (opcional, pero útil)
               setPruebaApiValues({
                    tipo_cambio_usd_clp_actual: usdClpRate,
                    tipo_cambio_eur_usd_actual: currentEurUsdRate
@@ -580,6 +587,76 @@ export default function PerfilesPanel() {
   const currencyValueStyleSecondary: React.CSSProperties = { ...currencyValueStyle, fontSize: '18px', color: '#4b5563' };
   const currencyLabelStyle: React.CSSProperties = { fontSize: '12px', color: '#64748b', marginTop: '4px' };
 
+  // Helper para renderizar sección de resultados
+  const renderResultSection = (title: string, results: Record<string, number | undefined> | undefined, sectionLabels: Record<string, string>) => {
+      if (!results || Object.keys(results).length === 0) return null;
+      return (
+          <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>{title}</Typography>
+              <Grid container spacing={0.5}> {/* Menos espacio entre líneas de resultado */} 
+                  {Object.entries(results).map(([key, value]) => {
+                      const label = sectionLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                      let formattedValue = '--';
+                      if (typeof value === 'number') {
+                          if (key.endsWith('_eur')) formattedValue = formatGenericCurrency(value, 'EUR');
+                          else if (key.endsWith('_usd')) formattedValue = formatGenericCurrency(value, 'USD');
+                          else if (key.endsWith('_clp')) formattedValue = formatCLP(value);
+                          else if (key.includes('_pct') || key.startsWith('tasa_') || key.startsWith('factor_')) formattedValue = formatPercentDisplay(value, 3);
+                          else if (key.includes('tipo_cambio')) formattedValue = value.toFixed(4); // Más decimales para TC
+                          else formattedValue = value.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+                      }
+                      return (
+                          <React.Fragment key={key}>
+                              <Grid item xs={7}><Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{label}:</Typography></Grid>
+                              <Grid item xs={5}><Typography variant="body2" align="right" sx={{ fontWeight: '500', fontSize: '0.8rem' }}>{formattedValue}</Typography></Grid>
+                          </React.Fragment>
+                      );
+                  })}
+              </Grid>
+              <Divider sx={{ my: 1 }} />
+          </Box>
+      );
+  };
+
+  // Labels para resultados (para mejor visualización)
+  const resultLabels = {
+      costo_producto: {
+          factor_actualizacion: "Factor Actualización",
+          costo_fabrica_actualizado_eur_exw: "Costo Fáb. Act. EUR (EXW)",
+          costo_fabrica_actualizado_eur: "Costo Fáb. Act. EUR (Neto Desc.)",
+          tipo_cambio_eur_usd_aplicado: "TC EUR/USD Aplicado",
+          costo_final_fabrica_usd_exw: "Costo Final Fáb. USD (EXW)",
+      },
+      logistica_seguro: {
+          costos_origen_usd: "Costos Origen (USD)",
+          costo_total_flete_manejos_usd: "Costo Total Flete y Manejos (USD)",
+          base_para_seguro_usd: "Base Seguro (USD)",
+          prima_seguro_usd: "Prima Seguro (USD)",
+          total_transporte_seguro_exw_usd: "Total Transporte y Seguro (USD)",
+      },
+      importacion: {
+          valor_cif_usd: "Valor CIF (USD)",
+          derecho_advalorem_usd: "Derecho AdValorem (USD)",
+          base_iva_usd: "Base IVA Importación (USD)",
+          iva_usd: "IVA Importación (USD)",
+          total_costos_importacion_duty_fees_usd: "Total Costos Imp. (Duty+Fees) (USD)",
+      },
+      landed_cost: {
+          transporte_nacional_usd: "Transporte Nac. (USD)",
+          precio_neto_compra_base_usd_landed: "Precio Neto Compra Base (USD Landed)",
+      },
+      conversion_margen: {
+          tipo_cambio_usd_clp_aplicado: "TC USD/CLP Aplicado",
+          precio_neto_compra_base_clp: "Precio Neto Compra Base (CLP)",
+          margen_clp: "Margen (CLP)",
+          precio_venta_neto_clp: "Precio Venta Neto (CLP)",
+      },
+      precios_cliente: {
+          precio_neto_venta_final_clp: "Precio Neto Venta Final (CLP)",
+          iva_venta_clp: "IVA Venta (CLP)",
+          precio_venta_total_cliente_clp: "Precio Venta Total Cliente (CLP)",
+      },
+  };
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
@@ -666,7 +743,7 @@ export default function PerfilesPanel() {
        )}
        {!isLoading && !error && perfiles.length > 0 && (
         <div style={gridStyle}>
-          {perfiles.map((perfil) => (
+          {perfiles.map((perfil: CostoPerfilData) => (
             <div key={perfil._id} style={cardStyle}>
               <div> 
                 <h2 style={cardTitleStyle}>{perfil.nombre || perfil._id}</h2> 
@@ -769,33 +846,32 @@ export default function PerfilesPanel() {
            </Modal>
        )}
 
-       {/* --- Modal de Prueba (Modificado) --- */}
+       {/* --- Modal de Prueba (Reestructurado) --- */}
        <Modal
          open={isPruebaModalOpen}
          onClose={handleClosePruebaModal}
          aria-labelledby="prueba-modal-title"
-         aria-describedby="prueba-modal-description"
        >
          <Box sx={{
              position: 'absolute',
              top: '50%',
              left: '50%',
              transform: 'translate(-50%, -50%)',
-             width: '90%', // Más ancho
-             maxWidth: 800, // Límite más grande
-             maxHeight: '90vh', // Más alto
-             overflowY: 'auto', // Scroll si es necesario
+             width: '90%',
+             maxWidth: 800,
+             maxHeight: '90vh',
+             overflowY: 'auto',
              bgcolor: 'background.paper',
              border: '1px solid #ccc',
              borderRadius: '8px',
              boxShadow: 24,
-             p: 3, // Padding ajustado
+             p: 3,
          }}>
            <Typography id="prueba-modal-title" variant="h6" component="h2" gutterBottom>
              Calculadora de Prueba de Costos
            </Typography>
 
-           {/* --- Sección de Inputs --- */}
+           {/* --- Selector de Perfil --- */}
            <Grid container spacing={2} sx={{ mb: 2}}>
              <Grid item xs={12} sm={6}>
                  <FormControl fullWidth size="small" variant="outlined">
@@ -808,226 +884,115 @@ export default function PerfilesPanel() {
                          onChange={handleProfileSelectForPrueba}
                          disabled={isCalculatingPrueba}
                      >
-                         <MenuItem value="">
-                           <em>-- Entrada Manual --</em>
-                         </MenuItem>
-                         {perfiles.map((perfil) => (
+                         <MenuItem value=""><em>-- Entrada Manual --</em></MenuItem>
+                         {perfiles.map((perfil: CostoPerfilData) => (
                              <MenuItem key={perfil._id} value={perfil._id}>{perfil.nombre}</MenuItem>
                          ))}
                      </Select>
                  </FormControl>
              </Grid>
+             {/* Podríamos mostrar aquí las divisas actuales */}
+             <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                 <Typography variant="body2" sx={{ mr: 2 }}>
+                     USD/CLP: {formatCLP(dolarValue?.value)}
+                 </Typography>
+                 <Typography variant="body2">
+                     EUR/USD: {formatExchangeRate(eurUsdRate)}
+                 </Typography>
+             </Grid>
            </Grid>
+           <Divider sx={{ my: 2 }} />
 
-           <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 1 }}>
-                {selectedProfileIdForPrueba ? "Datos Manuales (Sobrescriben Perfil)" : "Entradas Manuales"}
+           {/* --- Inputs Manuales Esenciales --- */}
+           <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+               Datos Base (Siempre Manuales)
            </Typography>
-           <Grid container spacing={2}>
-               {/* Row 1 - Siempre editables */}
-               <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Año de Cotización"
-                       name="ano_cotizacion"
-                       type="number"
-                       value={pruebaInputs.ano_cotizacion}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       disabled={isCalculatingPrueba}
-                   />
-               </Grid>
-               <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Año en Curso"
-                       name="ano_en_curso"
-                       type="number"
-                       value={pruebaInputs.ano_en_curso}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       disabled={isCalculatingPrueba}
-                   />
-               </Grid>
+           <Grid container spacing={2} sx={{ mb: 2 }}>
                 <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Costo Fábrica Original (EUR)"
-                       name="costo_fabrica_original_eur"
-                       type="number"
-                       value={pruebaInputs.costo_fabrica_original_eur}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ startAdornment: <InputAdornment position="start">€</InputAdornment> }}
-                       disabled={isCalculatingPrueba}
-                   />
-               </Grid>
-               {/* Row 2 - Editables solo si no hay perfil seleccionado */}
-                <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Descuento Fábrica"
-                       name="descuento_pct"
-                       type="number"
-                       value={pruebaInputs.descuento_pct}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
-                       helperText="Ej: 10 para 10%"
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
+                   <TextField label="Año de Cotización" name="ano_cotizacion" type="number" value={pruebaInputs.ano_cotizacion} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" disabled={isCalculatingPrueba} />
                 </Grid>
                 <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Buffer % EUR/USD"
-                       name="buffer_eur_usd_pct"
-                       type="number"
-                       value={pruebaInputs.buffer_eur_usd_pct}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
-                       helperText="Ej: 5 para 5%"
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
+                   <TextField label="Año en Curso" name="ano_en_curso" type="number" value={pruebaInputs.ano_en_curso} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" disabled={isCalculatingPrueba} />
                 </Grid>
-                <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Costos en Origen (EUR)"
-                       name="costos_origen_eur"
-                       type="number"
-                       value={pruebaInputs.costos_origen_eur}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ startAdornment: <InputAdornment position="start">€</InputAdornment> }}
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
-               </Grid>
-                {/* Row 3 - Editables solo si no hay perfil seleccionado */}
                  <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Flete Marítimo (USD)"
-                       name="flete_maritimo_usd"
-                       type="number"
-                       value={pruebaInputs.flete_maritimo_usd}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
-               </Grid>
-                 <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Recargos Destino (USD)"
-                       name="recargos_destino_usd"
-                       type="number"
-                       value={pruebaInputs.recargos_destino_usd}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
-               </Grid>
-                 <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Tasa Seguro"
-                       name="tasa_seguro_pct"
-                       type="number"
-                       value={pruebaInputs.tasa_seguro_pct}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
-                       helperText="Ej: 1 para 1%"
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
-               </Grid>
-                {/* Row 4 - Editables solo si no hay perfil seleccionado */}
-                 <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Honorarios Ag. Aduana (USD)"
-                       name="honorarios_agente_aduana_usd"
-                       type="number"
-                       value={pruebaInputs.honorarios_agente_aduana_usd}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
-               </Grid>
-                <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Gastos Portuarios/Otros (USD)"
-                       name="gastos_portuarios_otros_usd"
-                       type="number"
-                       value={pruebaInputs.gastos_portuarios_otros_usd}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
-               </Grid>
-                <Grid item xs={12} sm={4}>
-                   <TextField
-                       label="Transporte Nacional (CLP)"
-                       name="transporte_nacional_clp"
-                       type="number"
-                       value={pruebaInputs.transporte_nacional_clp}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
-               </Grid>
-                {/* Row 5 - Editables solo si no hay perfil seleccionado */}
-                <Grid item xs={12} sm={6}>
-                   <TextField
-                       label="Buffer % USD/CLP"
-                       name="buffer_usd_clp_pct"
-                       type="number"
-                       value={pruebaInputs.buffer_usd_clp_pct}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
-                       helperText="Ej: 3 para 3%"
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
-               </Grid>
-                <Grid item xs={12} sm={6}>
-                   <TextField
-                       label="% Adicional Total (Margen)"
-                       name="margen_adicional_pct"
-                       type="number"
-                       value={pruebaInputs.margen_adicional_pct}
-                       onChange={handlePruebaInputChange}
-                       fullWidth
-                       variant="outlined"
-                       size="small"
-                       InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
-                       helperText="Ej: 20 para 20%"
-                       disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba}
-                   />
-               </Grid>
+                   <TextField label="Costo Fábrica Original (EUR)" name="costo_fabrica_original_eur" type="number" value={pruebaInputs.costo_fabrica_original_eur} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ startAdornment: <InputAdornment position="start">€</InputAdornment> }} disabled={isCalculatingPrueba} />
+                </Grid>
            </Grid>
+           <Divider sx={{ my: 2 }} />
+
+           {/* --- Sección: Precios para Cliente --- */}
+           <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                🧾 Precios para Cliente {selectedProfileIdForPrueba ? '(Desde Perfil)' : '(Manual)'}
+           </Typography>
+           <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} sm={6}>
+                    <TextField label="Desc. Fábrica (%)" name="descuento_pct" type="number" value={pruebaInputs.descuento_pct} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} helperText="Ej: 10 para 10%" disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                    <TextField label="Desc. Cliente (%)" name="descuento_cliente_pct" type="number" value={pruebaInputs.descuento_cliente_pct} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} helperText="Ej: 5 para 5%" disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+           </Grid>
+           <Divider sx={{ my: 2 }} />
+
+           {/* --- Sección: Logística y Seguro --- */}
+           <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+               🚢 Logística y Seguro {selectedProfileIdForPrueba ? '(Desde Perfil)' : '(Manual)'}
+           </Typography>
+           <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} sm={4}>
+                   <TextField label="Costo Origen (EUR)" name="costos_origen_eur" type="number" value={pruebaInputs.costos_origen_eur} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ startAdornment: <InputAdornment position="start">€</InputAdornment> }} disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                    <TextField label="Flete Marítimo (USD)" name="flete_maritimo_usd" type="number" value={pruebaInputs.flete_maritimo_usd} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                    <TextField label="Recargos Destino (USD)" name="recargos_destino_usd" type="number" value={pruebaInputs.recargos_destino_usd} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                    <TextField label="Tasa Seguro (%)" name="tasa_seguro_pct" type="number" value={pruebaInputs.tasa_seguro_pct} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} helperText="Ej: 1 para 1%" disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                 <Grid item xs={12} sm={4}>
+                   <TextField label="Transporte Nac. (CLP)" name="transporte_nacional_clp" type="number" value={pruebaInputs.transporte_nacional_clp} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+           </Grid>
+           <Divider sx={{ my: 2 }} />
+
+           {/* --- Sección: Costos de Importación --- */}
+            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                🧾 Costos de Importación {selectedProfileIdForPrueba ? '(Desde Perfil)' : '(Manual)'}
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} sm={4}>
+                    <TextField label="Costo Ag. Aduana (USD)" name="honorarios_agente_aduana_usd" type="number" value={pruebaInputs.honorarios_agente_aduana_usd} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                    <TextField label="Gastos Puerto/Otros (USD)" name="gastos_portuarios_otros_usd" type="number" value={pruebaInputs.gastos_portuarios_otros_usd} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                    <TextField label="Derecho AdValorem (%)" name="derecho_advalorem_pct" type="number" value={pruebaInputs.derecho_advalorem_pct} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} helperText="Ej: 6 para 6%" disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+            </Grid>
+            <Divider sx={{ my: 2 }} />
+
+            {/* --- Sección: Conversión a CLP y Margen --- */}
+            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                💸 Conversión a CLP y Margen {selectedProfileIdForPrueba ? '(Desde Perfil)' : '(Manual)'}
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} sm={4}>
+                    <TextField label="Buffer EUR/USD (%)" name="buffer_eur_usd_pct" type="number" value={pruebaInputs.buffer_eur_usd_pct} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} helperText="Ej: 5 para 5%" disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                 <Grid item xs={12} sm={4}>
+                    <TextField label="Buffer USD/CLP (%)" name="buffer_usd_clp_pct" type="number" value={pruebaInputs.buffer_usd_clp_pct} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} helperText="Ej: 3 para 3%" disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                    <TextField label="IVA (%)" name="iva_pct" type="number" value={pruebaInputs.iva_pct} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} helperText="Ej: 19 para 19%" disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+                 <Grid item xs={12} sm={6}> {/* Más ancho para este */} 
+                    <TextField label="% Adicional Total (Margen)" name="margen_adicional_pct" type="number" value={pruebaInputs.margen_adicional_pct} onChange={handlePruebaInputChange} fullWidth variant="outlined" size="small" InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} helperText="Ej: 20 para 20%" disabled={isCalculatingPrueba || !!selectedProfileIdForPrueba} />
+                </Grid>
+            </Grid>
+            <Divider sx={{ my: 2 }} />
 
             {/* --- Botón Calcular y Feedback --- */}
             <Box sx={{ mt: 3, mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -1061,53 +1026,13 @@ export default function PerfilesPanel() {
 
            {pruebaResults && (
                <Box>
-                   <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>Resultados Calculados</Typography>
-                   <Grid container spacing={1}>
-                       {/* Mapear resultados */}
-                       {Object.entries(pruebaResults).map(([key, value]) => {
-                           let formattedValue = '--';
-                           let label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); // Formato Título
-                           
-                           if (typeof value === 'number') {
-                               if (key.endsWith('_eur')) formattedValue = formatGenericCurrency(value, 'EUR');
-                               else if (key.endsWith('_usd')) formattedValue = formatGenericCurrency(value, 'USD');
-                               else if (key.endsWith('_clp')) formattedValue = formatCLP(value);
-                               else if (key.includes('_pct') || key.startsWith('tasa_') || key.startsWith('factor_')) formattedValue = formatPercentDisplay(value, 3); // Más decimales para factores/tasas
-                               else if (key.includes('tipo_cambio')) formattedValue = formatExchangeRate(value); // TC específico
-                               else formattedValue = value.toLocaleString('es-CL', { maximumFractionDigits: 2 }); // Número general
-                           }
-
-                           if (key === 'factor_actualizacion') label = 'Factor Actualización';
-                           if (key === 'costo_fabrica_actualizado_eur_exw') label = 'Costo Fáb. Act. EUR (EXW)';
-                           if (key === 'costo_fabrica_actualizado_eur') label = 'Costo Fáb. Act. EUR (Neto Desc.)';
-                           if (key === 'tipo_cambio_eur_usd_aplicado') label = 'TC EUR/USD Aplicado';
-                           if (key === 'costo_final_fabrica_usd_exw') label = 'Costo Final Fáb. USD (EXW)';
-                           if (key === 'costos_origen_usd') label = 'Costos Origen (USD)';
-                           if (key === 'costo_total_flete_manejos_usd') label = 'Costo Total Flete y Manejos (USD)';
-                           if (key === 'base_para_seguro_usd') label = 'Base Seguro (USD)';
-                           if (key === 'prima_seguro_usd') label = 'Prima Seguro (USD)';
-                           if (key === 'total_transporte_seguro_exw_usd') label = 'Total Transporte y Seguro (USD)';
-                           if (key === 'valor_cif_usd') label = 'Valor CIF (USD)';
-                           if (key === 'derecho_advalorem_usd') label = 'Derecho AdValorem (USD)';
-                           if (key === 'base_iva_usd') label = 'Base IVA (USD)';
-                           if (key === 'iva_usd') label = 'IVA (USD)';
-                           if (key === 'total_costos_importacion_duty_fees_usd') label = 'Total Costos Imp. (Duty+Fees) (USD)';
-                           if (key === 'transporte_nacional_usd') label = 'Transporte Nac. (USD)';
-                           if (key === 'precio_neto_compra_base_usd_landed') label = 'Precio Neto Compra Base (USD Landed)';
-                           if (key === 'tipo_cambio_usd_clp_aplicado') label = 'TC USD/CLP Aplicado';
-                           if (key === 'precio_neto_compra_base_clp') label = 'Precio Neto Compra Base (CLP)';
-                           if (key === 'margen_clp') label = 'Margen (CLP)';
-                           if (key === 'precio_venta_neto_clp') label = 'Precio Venta Neto (CLP)';
-
-
-                           return (
-                               <React.Fragment key={key}>
-                                   <Grid item xs={7} sm={8}><Typography variant="body2">{label}:</Typography></Grid>
-                                   <Grid item xs={5} sm={4}><Typography variant="body2" align="right" sx={{ fontWeight: '500' }}>{formattedValue}</Typography></Grid>
-                               </React.Fragment>
-                           );
-                       })}
-                   </Grid>
+                   <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 1 }}>Resultados Calculados</Typography>
+                   {renderResultSection("Costo de Producto", pruebaResults.costo_producto, resultLabels.costo_producto)}
+                   {renderResultSection("Logística y Seguro", pruebaResults.logistica_seguro, resultLabels.logistica_seguro)}
+                   {renderResultSection("Importación", pruebaResults.importacion, resultLabels.importacion)}
+                   {renderResultSection("Costo Puesto en Bodega (Landed Cost)", pruebaResults.landed_cost, resultLabels.landed_cost)}
+                   {renderResultSection("Conversión a CLP y Margen", pruebaResults.conversion_margen, resultLabels.conversion_margen)}
+                   {renderResultSection("Precios para Cliente", pruebaResults.precios_cliente, resultLabels.precios_cliente)}
                </Box>
            )}
 
