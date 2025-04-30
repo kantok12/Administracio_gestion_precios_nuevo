@@ -49,32 +49,28 @@ export interface PricingOverrideData {
 // --- Nueva Interfaz para CostoPerfil --- 
 export interface CostoPerfilData {
   _id: string; // ID de Mongoose
-  nombre: string;
+  nombre_perfil: string;
   descripcion?: string;
-  activo?: boolean;
 
-  // --- Logistica y seguro ---
+  // --- Seccion: Descuentos y Buffers (%) --- Ajustado para claridad
+  descuento_fabrica_pct: number;
+  buffer_eur_usd_pct: number;
+  buffer_usd_clp_pct: number;
+  tasa_seguro_pct: number;
+  margen_adicional_pct: number;
+  descuento_cliente_pct: number;
+
+  // --- Seccion: Costos Operacionales (Valores Fijos) --- Ajustado para claridad
   costo_logistica_origen_eur: number;
   flete_maritimo_usd: number;
   recargos_destino_usd: number;
-  prima_seguro_usd: number;
-  tasa_seguro_pct: number;
-  transporte_nacional_clp: number;
-
-  // --- Costos de Importación ---
   costo_agente_aduana_usd: number;
   gastos_portuarios_otros_usd: number;
+  transporte_nacional_clp: number;
+
+  // --- Seccion: Impuestos (%) --- Ajustado para claridad
   derecho_advalorem_pct: number;
-
-  // --- Conversón a CLP y Margen ---
-  margen_adicional_pct: number;
-  buffer_usd_clp_pct: number;
-  buffer_eur_usd_pct: number;
   iva_pct: number;
-
-  // --- Precios para Cliente ---
-  descuento_fabrica_pct: number;
-  descuento_cliente_pct: number;
 
   // Timestamps
   createdAt?: string; 

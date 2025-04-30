@@ -37,32 +37,33 @@ const formatCLP = (value: number | string | null | undefined): string => {
   if (value === null || value === undefined) return '--';
   const numberValue = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(numberValue)) return '--';
-  // Mantener el signo $ 
-  return `$ ${Math.round(numberValue).toLocaleString('es-CL')}`;
+  // Mostrar con 2 decimales si los tiene, formato chileno
+  return `$ ${numberValue.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 // Helper para formatear tipo de cambio
 const formatExchangeRate = (value: number | null | undefined): string => {
    if (value === null || value === undefined || !isFinite(value)) return '--';
-   return value.toFixed(2); // 2 decimales
+   // Mostrar más decimales
+   return value.toFixed(6); 
 };
 
 // Helper para formatear otras monedas (usado en resultados)
-const formatGenericCurrency = (value: number | null | undefined, currency: 'USD' | 'EUR', digits = 2): string => {
+const formatGenericCurrency = (value: number | null | undefined, currency: 'USD' | 'EUR', digits = 4): string => { // Aumentar default digits
   if (value === null || value === undefined || isNaN(value)) return '--';
   const options: Intl.NumberFormatOptions = {
       style: 'currency',
       currency: currency,
       minimumFractionDigits: digits,
-      maximumFractionDigits: digits
+      maximumFractionDigits: digits // Usar el mismo para asegurar precisión
   };
-  // Usar 'en-US' o similar para formato estándar, ajustar si se prefiere 'es-CL' con símbolo
   return value.toLocaleString('en-US', options);
 };
 
 // Helper para formatear porcentajes (usado en resultados)
-const formatPercentDisplay = (value: number | null | undefined, digits = 1): string => {
+const formatPercentDisplay = (value: number | null | undefined, digits = 4): string => { // Aumentar default digits
    if (value === null || value === undefined || isNaN(value)) return '--';
+   // Mostrar más decimales en el porcentaje
    return `${(value * 100).toFixed(digits)}%`;
 };
 
@@ -132,6 +133,26 @@ interface PruebaApiValues {
     tipo_cambio_eur_usd_actual?: number;
 }
 
+// Define default structure for a new profile (matching backend model, excluding _id, timestamps)
+const defaultNewProfileData: Omit<CostoPerfilData, '_id' | 'createdAt' | 'updatedAt'> = {
+  nombre_perfil: '',
+  descripcion: '',
+  descuento_fabrica_pct: 0,
+  buffer_eur_usd_pct: 0,
+  buffer_usd_clp_pct: 0,
+  tasa_seguro_pct: 0,
+  margen_adicional_pct: 0,
+  descuento_cliente_pct: 0,
+  costo_logistica_origen_eur: 0,
+  flete_maritimo_usd: 0,
+  recargos_destino_usd: 0,
+  costo_agente_aduana_usd: 0,
+  gastos_portuarios_otros_usd: 0,
+  transporte_nacional_clp: 0,
+  derecho_advalorem_pct: 0.06, // Default 6%
+  iva_pct: 0.19, // Default 19%
+};
+
 export default function PerfilesPanel() {
   // Estados usando el nuevo tipo
   const [perfiles, setPerfiles] = useState<CostoPerfilData[]>([]);
@@ -151,7 +172,7 @@ export default function PerfilesPanel() {
 
   // --- Estados para el modal de creación ---
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
-  const [newProfileName, setNewProfileName] = useState<string>('');
+  const [newProfileData, setNewProfileData] = useState(defaultNewProfileData);
   const [isCreatingProfile, setIsCreatingProfile] = useState<boolean>(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -185,7 +206,8 @@ export default function PerfilesPanel() {
       descuento_cliente_pct: '0', // Default para nuevo campo
   };
   const [pruebaInputs, setPruebaInputs] = useState<PruebaInputs>(defaultPruebaInputs);
-  const [pruebaResults, setPruebaResults] = useState<GroupedPruebaResults | null>(null); // Cambiado tipo
+  const [pruebaResults, setPruebaResults] = useState<GroupedPruebaResults['costo_producto'] | null>(null);
+  const [pruebaInputValuesUsed, setPruebaInputValuesUsed] = useState<any | null>(null);
   const [pruebaApiValues, setPruebaApiValues] = useState<PruebaApiValues | null>(null);
   const [isCalculatingPrueba, setIsCalculatingPrueba] = useState<boolean>(false);
   const [pruebaError, setPruebaError] = useState<string | null>(null);
@@ -291,7 +313,7 @@ export default function PerfilesPanel() {
 
   const handleDeleteProfile = async (profileId: string) => {
       const profileToDelete = perfiles.find(p => p._id === profileId);
-      const profileName = profileToDelete?.nombre || profileId; 
+      const profileName = profileToDelete?.nombre_perfil || profileId; 
       
       if (window.confirm(`¿Está seguro que desea eliminar el perfil "${profileName}"? Esta acción no se puede deshacer.`)) {
           setDeletingProfileId(profileId);
@@ -312,7 +334,7 @@ export default function PerfilesPanel() {
   
   // --- Funciones para el Modal de Creación ---
   const handleOpenCreateModal = () => {
-    setNewProfileName(''); // Limpiar nombre al abrir
+    setNewProfileData(defaultNewProfileData); // Resetear formulario al abrir
     setCreateError(null); // Limpiar errores previos
     setIsCreateModalOpen(true);
   };
@@ -322,54 +344,68 @@ export default function PerfilesPanel() {
     setIsCreateModalOpen(false);
   };
 
-  const handleNewProfileNameChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setNewProfileName(event.target.value);
+  // Handler genérico para los inputs del formulario de creación
+  const handleNewProfileDataChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = event.target;
+
+    setNewProfileData(prev => {
+        let processedValue: string | number = value;
+
+        // Convertir porcentajes (espera ej. 10 para 10%) a decimal (0.10)
+        if (name.endsWith('_pct')) {
+            const num = parseFloat(value);
+            processedValue = isNaN(num) ? 0 : num / 100;
+        } 
+        // Convertir otros campos numéricos
+        else if (type === 'number' && name !== 'nombre_perfil' && name !== 'descripcion') {
+            const num = parseFloat(value);
+            processedValue = isNaN(num) ? 0 : num;
+        }
+        // Mantener string para nombre y descripción
+        else if (name === 'nombre_perfil' || name === 'descripcion') {
+            processedValue = value;
+        }
+
+        return { ...prev, [name]: processedValue };
+    });
   };
   
   // --- Modificada función handleCreateProfile (se llama desde el modal) ---
   const handleConfirmCreateProfile = async () => {
-      if (!newProfileName.trim()) {
+      // Validar nombre
+      if (!newProfileData.nombre_perfil.trim()) {
           setCreateError('El nombre del perfil no puede estar vacío.');
           return;
+      }
+      // Validación básica de números (podría ser más robusta)
+      const numericFields: (keyof typeof newProfileData)[] = [
+          'descuento_fabrica_pct', 'buffer_eur_usd_pct', 'buffer_usd_clp_pct',
+          'tasa_seguro_pct', 'margen_adicional_pct', 'descuento_cliente_pct',
+          'costo_logistica_origen_eur', 'flete_maritimo_usd', 'recargos_destino_usd',
+          'costo_agente_aduana_usd', 'gastos_portuarios_otros_usd', 'transporte_nacional_clp',
+          'derecho_advalorem_pct', 'iva_pct'
+      ];
+      for (const field of numericFields) {
+          if (typeof newProfileData[field] !== 'number' || isNaN(newProfileData[field] as number)) {
+              setCreateError(`Valor inválido para ${field}. Asegúrate de ingresar números.`);
+              return;
+          }
       }
 
       setIsCreatingProfile(true);
       setCreateError(null);
       try {
-          console.log(`[PerfilesPanel] Creando nuevo perfil con nombre: ${newProfileName}`);
+          console.log(`[PerfilesPanel] Creando nuevo perfil con datos:`, newProfileData);
           
-          // Actualizar defaultProfileData con la nueva estructura
-          const defaultProfileData = {
-              nombre: newProfileName.trim(), 
-              descripcion: '',
-              activo: true, 
-              // Logistica y seguro
-              costo_logistica_origen_eur: 0,
-              flete_maritimo_usd: 0,
-              recargos_destino_usd: 0,
-              prima_seguro_usd: 0,
-              tasa_seguro_pct: 0,
-              transporte_nacional_clp: 0,
-              // Costos de Importación
-              costo_agente_aduana_usd: 0,
-              gastos_portuarios_otros_usd: 0,
-              derecho_advalorem_pct: 0.06, // Mantener default del backend
-              // Conversión a CLP y Margen
-              margen_adicional_pct: 0,
-              buffer_usd_clp_pct: 0,
-              buffer_eur_usd_pct: 0,
-              iva_pct: 0.19, // Mantener default del backend
-              // Precios para Cliente
-              descuento_fabrica_pct: 0,
-              descuento_cliente_pct: 0,
-          };
-
-          const newProfile = await api.createProfile(defaultProfileData);
+          // Enviar los datos recolectados del estado
+          const newProfile = await api.createProfile(newProfileData);
           console.log('[PerfilesPanel] Nuevo perfil creado:', newProfile);
 
           if (newProfile && newProfile._id) {
               setIsCreateModalOpen(false); // Cerrar modal
-              navigate(`/perfiles/${newProfile._id}/editar`); // Redirigir
+              loadPerfiles(); // Recargar la lista de perfiles
+              // Opcional: Redirigir a editar si se desea ajustar inmediatamente
+              // navigate(`/perfiles/${newProfile._id}/editar`); 
           } else {
               console.error('[PerfilesPanel] La respuesta de creación no contiene un ID:', newProfile);
               setCreateError('Error: No se recibió el ID del nuevo perfil.');
@@ -378,7 +414,7 @@ export default function PerfilesPanel() {
           console.error('[PerfilesPanel] Error creando perfil:', err);
           const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Error al crear el perfil. Intente de nuevo.';
           // Mostrar error específico de duplicado si es el caso
-          if (errorMessage.includes('E11000')) {
+          if (errorMessage.includes('E11000') && errorMessage.includes('nombre_perfil')) { 
              setCreateError('Error: Ya existe un perfil con ese nombre.');
           } else {
              setCreateError(`Error al crear el perfil: ${errorMessage}`);
@@ -392,7 +428,7 @@ export default function PerfilesPanel() {
   const handleOpenPruebaModal = () => {
     setPruebaResults(null);
     setPruebaError(null);
-    setPruebaApiValues(null);
+    setPruebaInputValuesUsed(null);
     setSelectedProfileIdForPrueba('');
     setPruebaInputs(defaultPruebaInputs);
     setIsPruebaModalOpen(true);
@@ -449,99 +485,122 @@ export default function PerfilesPanel() {
 
   // --- Handler para Calcular Prueba (Ajustado para enviar tasas de cambio) ---
   const handleCalculatePrueba = async () => {
-      setIsCalculatingPrueba(true);
       setPruebaError(null);
       setPruebaResults(null);
-      setPruebaApiValues(null);
+      setPruebaInputValuesUsed(null);
+      setIsCalculatingPrueba(true);
 
-      const usdClpRate = dolarValue?.value;
-      const currentEurUsdRate = (dolarValue?.value && euroValue?.value && dolarValue.value !== 0)
-          ? euroValue.value / dolarValue.value
-          : null;
+      // Obtener tasas de cambio actuales del estado
+      const currentEurUsdRate = eurUsdRate;
+      const currentUsdClpRateString = dolarValue?.value; // Get string value from state
 
-      if (usdClpRate === null || usdClpRate === undefined || usdClpRate <= 0) {
-          setPruebaError("No se pudo obtener una tasa USD/CLP válida. Intente recargar las divisas.");
+      if (!currentEurUsdRate || !currentUsdClpRateString) {
+          setPruebaError("No se pudieron obtener las tasas de cambio actuales.");
           setIsCalculatingPrueba(false);
           return;
       }
-      if (currentEurUsdRate === null || currentEurUsdRate === undefined || !isFinite(currentEurUsdRate) || currentEurUsdRate <= 0) {
-           setPruebaError("No se pudo obtener/calcular una tasa EUR/USD válida. Intente recargar las divisas.");
-           setIsCalculatingPrueba(false);
-           return;
+      // Parse and validate USD/CLP rate
+      const numCurrentUsdClpRate = parseFloat(currentUsdClpRateString);
+      if (isNaN(numCurrentUsdClpRate)) {
+          setPruebaError("El valor actual de USD/CLP no es válido.");
+          setIsCalculatingPrueba(false);
+          return;
       }
 
       let payload: any = {};
-      let hasManualInputError = false;
+      let inputError = false;
 
-      const anoCotizacionNum = parseFloat(pruebaInputs.ano_cotizacion as string);
-      const anoEnCursoNum = parseFloat(pruebaInputs.ano_en_curso as string);
-      const costoFabricaOriginalNum = parseFloat(pruebaInputs.costo_fabrica_original_eur as string);
+      // Determinar modo basado en si hay un perfil seleccionado para la prueba
+      const isInProfileMode = !!selectedProfileIdForPrueba; // Use correct state variable name
 
-      if (isNaN(anoCotizacionNum)) { setPruebaError("Año cotización inválido."); hasManualInputError = true; }
-      if (isNaN(anoEnCursoNum)) { setPruebaError("Año en curso inválido."); hasManualInputError = true; }
-      if (isNaN(costoFabricaOriginalNum)) { setPruebaError("Costo Fábrica Original inválido."); hasManualInputError = true; }
-       if (anoEnCursoNum > anoCotizacionNum) { setPruebaError("Año en curso no puede ser mayor a Año cotización."); hasManualInputError = true; }
-
-      if (hasManualInputError) {
-          setIsCalculatingPrueba(false);
-          return;
-      }
-
-      payload = {
-          ano_cotizacion: anoCotizacionNum,
-          ano_en_curso: anoEnCursoNum,
-          costo_fabrica_original_eur: costoFabricaOriginalNum,
-          tipo_cambio_usd_clp_actual: usdClpRate,
-          tipo_cambio_eur_usd_actual: currentEurUsdRate
-      };
-
-      if (selectedProfileIdForPrueba) {
-          payload.profileId = selectedProfileIdForPrueba;
-      } else {
-          const numberInputs: Record<string, number> = {};
-          let inputError = false;
-          const keysToValidateAndSend = [
-              'descuento_pct', 'buffer_eur_usd_pct', 'costos_origen_eur', 'flete_maritimo_usd',
-              'recargos_destino_usd', 'tasa_seguro_pct', 'honorarios_agente_aduana_usd',
-              'gastos_portuarios_otros_usd', 'transporte_nacional_clp', 'buffer_usd_clp_pct',
-              'margen_adicional_pct', 'derecho_advalorem_pct', 'iva_pct',
-              'descuento_cliente_pct' // Añadir nueva clave a validar y enviar
+      if (!isInProfileMode) { // Modo Manual
+          const requiredKeys = [
+              'ano_cotizacion', 'ano_en_curso', 'costo_fabrica_original_eur',
+              'buffer_eur_usd_pct', 'descuento_pct'
           ];
+          const numberInputs: any = {};
 
-          for (const key of keysToValidateAndSend) {
-               const value = pruebaInputs[key as keyof PruebaInputs];
-               const numValue = parseFloat(value as string);
-               if (isNaN(numValue)) {
-                   setPruebaError(`Valor inválido para ${key.replace(/_/g, ' ')} en modo manual.`);
-                   inputError = true;
-                   break;
-               }
-               if (key.endsWith('_pct')) {
-                   numberInputs[key] = numValue / 100;
-               } else {
-                   numberInputs[key] = numValue;
-               }
-           }
+          for (const key of requiredKeys) {
+              const value = pruebaInputs[key as keyof PruebaInputs];
+              if (value === undefined || value === '') {
+                  setPruebaError(`Falta el valor para ${key.replace(/_/g, ' ')} en modo manual.`);
+                  inputError = true;
+                  break;
+              }
+              const numValue = parseFloat(value as string);
+              if (isNaN(numValue)) {
+                  setPruebaError(`Valor inválido para ${key.replace(/_/g, ' ')} en modo manual: ${value}`);
+                  inputError = true;
+                  break;
+              }
+              numberInputs[key] = numValue;
+          }
 
-           if (inputError) {
-               setIsCalculatingPrueba(false);
-               return;
-           }
-           payload = { ...payload, ...numberInputs };
-       }
+          if (inputError) {
+              setIsCalculatingPrueba(false);
+              return;
+          }
+
+          payload = {
+              anoCotizacion: numberInputs.ano_cotizacion,
+              anoEnCurso: numberInputs.ano_en_curso,
+              costoFabricaOriginalEUR: numberInputs.costo_fabrica_original_eur,
+              tipoCambioEurUsdActual: currentEurUsdRate,
+              bufferEurUsd: numberInputs.buffer_eur_usd_pct / 100, // Convert % to decimal
+              descuentoFabrica: numberInputs.descuento_pct / 100 // Convert % to decimal and map name
+          };
+
+      } else { // Modo Perfil (isInProfileMode is true)
+          // Use correct profile list variable name 'perfiles' and add type to callback param 'p'
+          const selectedProfileData = perfiles.find((p: CostoPerfilData) => p._id === selectedProfileIdForPrueba);
+          if (!selectedProfileData) {
+              setPruebaError("No se encontraron los datos del perfil seleccionado.");
+              setIsCalculatingPrueba(false);
+              return;
+          }
+
+          // Validar inputs manuales requeridos incluso en modo perfil
+          const numAnoCotizacion = parseFloat(pruebaInputs.ano_cotizacion as string);
+          const numAnoEnCurso = parseFloat(pruebaInputs.ano_en_curso as string);
+          const numCostoFabrica = parseFloat(pruebaInputs.costo_fabrica_original_eur as string);
+
+          if (isNaN(numAnoCotizacion) || isNaN(numAnoEnCurso) || isNaN(numCostoFabrica) || numCostoFabrica <= 0) {
+              setPruebaError("Ingrese Año Cotización, Año en Curso y Costo Fábrica válidos.");
+              setIsCalculatingPrueba(false);
+              return;
+          }
+
+          // Construir payload usando datos manuales + datos del perfil
+          // *** CORRECCIÓN: Enviar los valores del perfil directamente (asumiendo que son decimales) ***
+          payload = {
+              anoCotizacion: numAnoCotizacion,
+              anoEnCurso: numAnoEnCurso,
+              costoFabricaOriginalEUR: numCostoFabrica,
+              tipoCambioEurUsdActual: currentEurUsdRate,
+              bufferEurUsd: selectedProfileData.buffer_eur_usd_pct ?? 0, // Enviar el decimal almacenado
+              descuentoFabrica: selectedProfileData.descuento_fabrica_pct ?? 0 // Enviar el decimal almacenado
+          };
+      }
 
       try {
           console.log("Enviando payload a /calcular-prueba:", payload);
-          const response = await axios.post<{ results: GroupedPruebaResults }>('/api/costo-perfiles/calcular-prueba', payload);
+          const response = await axios.post<{
+              message: string, 
+              resultado: { 
+                  inputs: any, 
+                  calculados: GroupedPruebaResults['costo_producto'] 
+              }
+          }>('/api/costo-perfiles/calcular-prueba', payload);
 
-          if (response.data && response.data.results) {
-              setPruebaResults(response.data.results);
+          if (response.data && response.data.resultado && response.data.resultado.calculados && response.data.resultado.inputs) {
+              setPruebaResults(response.data.resultado.calculados); // Guardar calculados
+              setPruebaInputValuesUsed(response.data.resultado.inputs); // Guardar inputs usados
               setPruebaApiValues({
-                   tipo_cambio_usd_clp_actual: usdClpRate,
-                   tipo_cambio_eur_usd_actual: currentEurUsdRate
+                  tipo_cambio_usd_clp_actual: numCurrentUsdClpRate,
+                  tipo_cambio_eur_usd_actual: currentEurUsdRate
               });
           } else {
-              throw new Error("La respuesta del servidor no contiene resultados válidos.");
+              throw new Error("La respuesta del servidor no contiene inputs y calculados válidos.");
           }
       } catch (err: any) {
           console.error("Error calculando prueba:", err);
@@ -598,12 +657,18 @@ export default function PerfilesPanel() {
                       const label = sectionLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                       let formattedValue = '--';
                       if (typeof value === 'number') {
-                          if (key.endsWith('_eur')) formattedValue = formatGenericCurrency(value, 'EUR');
-                          else if (key.endsWith('_usd')) formattedValue = formatGenericCurrency(value, 'USD');
+                          // Specific formatting for calculated exchange rate
+                          if (key === 'tipoCambioEurUsdAplicado') {
+                              formattedValue = value.toFixed(6); 
+                          } 
+                          // Existing formatting logic for other keys
+                          else if (key.endsWith('_eur')) formattedValue = formatGenericCurrency(value, 'EUR', 4);
+                          else if (key.endsWith('_usd')) formattedValue = formatGenericCurrency(value, 'USD', 4);
                           else if (key.endsWith('_clp')) formattedValue = formatCLP(value);
-                          else if (key.includes('_pct') || key.startsWith('tasa_') || key.startsWith('factor_')) formattedValue = formatPercentDisplay(value, 3);
-                          else if (key.includes('tipo_cambio')) formattedValue = value.toFixed(4); // Más decimales para TC
-                          else formattedValue = value.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+                          else if (key.includes('_pct') || key.startsWith('tasa_') || key.startsWith('factor_')) formattedValue = formatPercentDisplay(value, 4);
+                          // Removed the general tipo_cambio check as it's now handled specifically
+                          // else if (key.includes('tipo_cambio')) formattedValue = value.toFixed(6);
+                          else formattedValue = value.toLocaleString('es-CL', { maximumFractionDigits: 4 }); // Increased default decimals slightly
                       }
                       return (
                           <React.Fragment key={key}>
@@ -621,41 +686,88 @@ export default function PerfilesPanel() {
   // Labels para resultados (para mejor visualización)
   const resultLabels = {
       costo_producto: {
-          factor_actualizacion: "Factor Actualización",
-          costo_fabrica_actualizado_eur_exw: "Costo Fáb. Act. EUR (EXW)",
-          costo_fabrica_actualizado_eur: "Costo Fáb. Act. EUR (Neto Desc.)",
-          tipo_cambio_eur_usd_aplicado: "TC EUR/USD Aplicado",
-          costo_final_fabrica_usd_exw: "Costo Final Fáb. USD (EXW)",
+          factorActualizacion: "Factor Actualización",
+          costoFabricaActualizadoEUR: "Costo Fáb. Act. EUR (Antes Desc.)",
+          costoFinalFabricaEUR_EXW: "Costo Final Fáb. EUR (EXW)",
+          tipoCambioEurUsdAplicado: "TC EUR/USD Aplicado",
+          costoFinalFabricaUSD_EXW: "Costo Final Fáb. USD (EXW)",
       },
+      // --- ELIMINAR O COMENTAR secciones no devueltas por /calcular-prueba ---
+      /* 
       logistica_seguro: {
           costos_origen_usd: "Costos Origen (USD)",
-          costo_total_flete_manejos_usd: "Costo Total Flete y Manejos (USD)",
-          base_para_seguro_usd: "Base Seguro (USD)",
-          prima_seguro_usd: "Prima Seguro (USD)",
-          total_transporte_seguro_exw_usd: "Total Transporte y Seguro (USD)",
+          // ...otras etiquetas...
       },
       importacion: {
           valor_cif_usd: "Valor CIF (USD)",
-          derecho_advalorem_usd: "Derecho AdValorem (USD)",
-          base_iva_usd: "Base IVA Importación (USD)",
-          iva_usd: "IVA Importación (USD)",
-          total_costos_importacion_duty_fees_usd: "Total Costos Imp. (Duty+Fees) (USD)",
+           // ...otras etiquetas...
       },
       landed_cost: {
           transporte_nacional_usd: "Transporte Nac. (USD)",
-          precio_neto_compra_base_usd_landed: "Precio Neto Compra Base (USD Landed)",
+           // ...otras etiquetas...
       },
       conversion_margen: {
           tipo_cambio_usd_clp_aplicado: "TC USD/CLP Aplicado",
-          precio_neto_compra_base_clp: "Precio Neto Compra Base (CLP)",
-          margen_clp: "Margen (CLP)",
-          precio_venta_neto_clp: "Precio Venta Neto (CLP)",
+           // ...otras etiquetas...
       },
       precios_cliente: {
           precio_neto_venta_final_clp: "Precio Neto Venta Final (CLP)",
-          iva_venta_clp: "IVA Venta (CLP)",
-          precio_venta_total_cliente_clp: "Precio Venta Total Cliente (CLP)",
+           // ...otras etiquetas...
       },
+      */
+  };
+
+  // Helper para renderizar campos de texto en el modal de creación
+  const renderCreateTextField = (
+      name: keyof typeof newProfileData,
+      label: string,
+      type: 'text' | 'number' | 'textarea' = 'number',
+      required: boolean = false,
+      adornment?: string,
+      helperText?: string,
+      gridProps: { xs?: number, sm?: number } = { xs: 12, sm: 6 } // Default grid props
+  ) => {
+      let value: string | number = '';
+      const rawValue = newProfileData[name];
+
+      // Formatear para visualización
+      if (name.endsWith('_pct') && typeof rawValue === 'number') {
+          value = (rawValue * 100).toString(); // Mostrar como 0-100
+      } else if (typeof rawValue === 'number') {
+          value = rawValue.toString();
+      } else if (typeof rawValue === 'string') {
+          value = rawValue;
+      }
+
+      return (
+          <Grid item {...gridProps}>
+              <TextField
+                  fullWidth
+                  variant="outlined"
+                  margin="dense" // Usar dense para modal
+                  label={label}
+                  name={name}
+                  type={type === 'textarea' ? 'text' : type}
+                  multiline={type === 'textarea'}
+                  rows={type === 'textarea' ? 3 : undefined}
+                  value={value}
+                  onChange={handleNewProfileDataChange}
+                  required={required}
+                  InputProps={adornment ? {
+                      [adornment === '%' ? 'endAdornment' : 'startAdornment']: <InputAdornment position={adornment === '%' ? 'end' : 'start'}>{adornment}</InputAdornment>,
+                  } : undefined}
+                  InputLabelProps={{
+                      shrink: true,
+                  }}
+                  inputProps={{
+                      step: type === 'number' ? (name.endsWith('_pct') ? '0.1' : 'any') : undefined
+                  }}
+                  helperText={helperText}
+                  disabled={isCreatingProfile}
+                  size="small" // Usar tamaño pequeño en modales
+              />
+          </Grid>
+      );
   };
 
   return (
@@ -746,7 +858,7 @@ export default function PerfilesPanel() {
           {perfiles.map((perfil: CostoPerfilData) => (
             <div key={perfil._id} style={cardStyle}>
               <div> 
-                <h2 style={cardTitleStyle}>{perfil.nombre || perfil._id}</h2> 
+                <h2 style={cardTitleStyle}>{perfil.nombre_perfil || perfil._id}</h2> 
                 {perfil.createdAt && (
                     <p style={cardDateStyle}>
                         Creado: {(() => {
@@ -795,37 +907,49 @@ export default function PerfilesPanel() {
       )}
 
        {/* --- Modales (Crear, Ver, Editar) --- */}
-       <Dialog open={isCreateModalOpen} onClose={handleCloseCreateModal} aria-labelledby="create-profile-dialog-title">
+       <Dialog open={isCreateModalOpen} onClose={handleCloseCreateModal} aria-labelledby="create-profile-dialog-title" maxWidth="md" fullWidth>
          <DialogTitle id="create-profile-dialog-title">Crear Nuevo Perfil de Costo</DialogTitle>
          <DialogContent>
-           <DialogContentText sx={{ mb: 2 }}>
-             Ingresa un nombre único para el nuevo perfil.
+            {createError && <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>}
+            <DialogContentText sx={{ mb: 2 }}>
+             Completa los siguientes campos para definir el nuevo perfil de costo.
            </DialogContentText>
-           <TextField
-             autoFocus
-             required
-             margin="dense"
-             id="name"
-             label="Nombre del Perfil"
-             type="text"
-             fullWidth
-             variant="outlined"
-             value={newProfileName}
-             onChange={handleNewProfileNameChange}
-             error={!!createError}
-             helperText={createError}
-             disabled={isCreatingProfile}
-           />
+
+            {/* Formulario de Creación */}
+            <Grid container spacing={2}> 
+                {renderCreateTextField('nombre_perfil', 'Nombre del Perfil', 'text', true, undefined, undefined, { xs: 12, sm: 6 })} 
+                {renderCreateTextField('descripcion', 'Descripción (Opcional)', 'textarea', false, undefined, undefined, { xs: 12, sm: 6 })}
+
+                <Grid item xs={12}><Divider sx={{ my: 1 }}>Descuentos y Buffers (%)</Divider></Grid>
+                {renderCreateTextField('descuento_fabrica_pct', 'Desc. Fábrica (%)', 'number', false, '%', 'Ej: 10 para 10%')}
+                {renderCreateTextField('descuento_cliente_pct', 'Desc. Cliente Final (%)', 'number', false, '%', 'Ej: 5 para 5%')}
+                {renderCreateTextField('buffer_eur_usd_pct', 'Buffer EUR/USD (%)', 'number', false, '%', 'Ej: 3 para 3%')}
+                {renderCreateTextField('buffer_usd_clp_pct', 'Buffer USD/CLP (%)', 'number', false, '%', 'Ej: 2 para 2%')}
+                {renderCreateTextField('margen_adicional_pct', '% Adicional Total (Margen)', 'number', false, '%', 'Ej: 25 para 25%')}
+                {renderCreateTextField('tasa_seguro_pct', 'Tasa Seguro (%)', 'number', false, '%', 'Ej: 0.5 para 0.5%')}
+
+                <Grid item xs={12}><Divider sx={{ my: 1 }}>Costos Operacionales (Valores)</Divider></Grid>
+                {renderCreateTextField('costo_logistica_origen_eur', 'Costo Origen (EUR)', 'number', false, '€')}
+                {renderCreateTextField('flete_maritimo_usd', 'Flete Marítimo (USD)', 'number', false, '$')}
+                {renderCreateTextField('recargos_destino_usd', 'Recargos Destino (USD)', 'number', false, '$')}
+                {renderCreateTextField('costo_agente_aduana_usd', 'Costo Ag. Aduana (USD)', 'number', false, '$')}
+                {renderCreateTextField('gastos_portuarios_otros_usd', 'Gastos Puerto/Otros (USD)', 'number', false, '$')}
+                {renderCreateTextField('transporte_nacional_clp', 'Transporte Nacional (CLP)', 'number', false, '$')}
+
+                <Grid item xs={12}><Divider sx={{ my: 1 }}>Impuestos (%)</Divider></Grid>
+                {renderCreateTextField('derecho_advalorem_pct', 'Derecho AdValorem (%)', 'number', false, '%', 'Default: 6')}
+                {renderCreateTextField('iva_pct', 'IVA (%)', 'number', false, '%', 'Default: 19')}
+            </Grid>
          </DialogContent>
          <DialogActions sx={{ p: '16px 24px' }}>
            <Button onClick={handleCloseCreateModal} disabled={isCreatingProfile} color="secondary">Cancelar</Button>
            <Button 
              onClick={handleConfirmCreateProfile} 
-             disabled={isCreatingProfile || !newProfileName.trim()}
+             disabled={isCreatingProfile} // Podríamos añadir validación más estricta aquí
              variant="contained"
              startIcon={isCreatingProfile ? <CircularProgress size={20} color="inherit" /> : null}
            >
-             {isCreatingProfile ? 'Creando...' : 'Crear'}
+             {isCreatingProfile ? 'Creando...' : 'Guardar Perfil'}
            </Button>
          </DialogActions>
        </Dialog>
@@ -886,7 +1010,7 @@ export default function PerfilesPanel() {
                      >
                          <MenuItem value=""><em>-- Entrada Manual --</em></MenuItem>
                          {perfiles.map((perfil: CostoPerfilData) => (
-                             <MenuItem key={perfil._id} value={perfil._id}>{perfil.nombre}</MenuItem>
+                             <MenuItem key={perfil._id} value={perfil._id}>{perfil.nombre_perfil}</MenuItem>
                          ))}
                      </Select>
                  </FormControl>
@@ -1010,8 +1134,34 @@ export default function PerfilesPanel() {
 
 
            {/* --- Sección de Resultados --- */}
-           {(pruebaResults || pruebaApiValues) && <Divider sx={{ my: 2 }} />}
+           {(pruebaResults || pruebaApiValues || pruebaInputValuesUsed) && <Divider sx={{ my: 2 }} />}
 
+           {/* Mostrar Inputs Usados */}
+           {pruebaInputValuesUsed && (
+              <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>Valores Input Usados en Cálculo</Typography>
+                  <Grid container spacing={0.5}> 
+                      {Object.entries(pruebaInputValuesUsed).map(([key, value]) => {
+                          let label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                          // Mostrar más decimales para los inputs numéricos
+                          let formattedValue: string | number = typeof value === 'number' ? value.toLocaleString('es-CL', {maximumFractionDigits: 6}) : String(value); 
+                          if(key.includes('_fromProfile')){
+                             // Usar el formatter de % con más decimales
+                             formattedValue = formatPercentDisplay(value as number | null | undefined, 4); 
+                             label = key.replace('_fromProfile', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' (Perfil)';
+                          }
+                          return (
+                              <React.Fragment key={key}>
+                                  <Grid item xs={7}><Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{label}:</Typography></Grid>
+                                  <Grid item xs={5}><Typography variant="body2" align="right" sx={{ fontWeight: '500', fontSize: '0.8rem' }}>{formattedValue}</Typography></Grid>
+                              </React.Fragment>
+                          );
+                      })}
+                  </Grid>
+              </Box>
+           )}
+           
+           {/* Mostrar Valores API Usados (igual que antes) */}
            {pruebaApiValues && (
                <Box sx={{ mb: 2 }}>
                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>Valores API Usados</Typography>
@@ -1024,15 +1174,11 @@ export default function PerfilesPanel() {
                </Box>
            )}
 
+           {/* Mostrar Resultados Calculados (igual que antes) */}
            {pruebaResults && (
                <Box>
                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 1 }}>Resultados Calculados</Typography>
-                   {renderResultSection("Costo de Producto", pruebaResults.costo_producto, resultLabels.costo_producto)}
-                   {renderResultSection("Logística y Seguro", pruebaResults.logistica_seguro, resultLabels.logistica_seguro)}
-                   {renderResultSection("Importación", pruebaResults.importacion, resultLabels.importacion)}
-                   {renderResultSection("Costo Puesto en Bodega (Landed Cost)", pruebaResults.landed_cost, resultLabels.landed_cost)}
-                   {renderResultSection("Conversión a CLP y Margen", pruebaResults.conversion_margen, resultLabels.conversion_margen)}
-                   {renderResultSection("Precios para Cliente", pruebaResults.precios_cliente, resultLabels.precios_cliente)}
+                   {renderResultSection("Costo de Producto", pruebaResults, resultLabels.costo_producto)}
                </Box>
            )}
 
@@ -1071,8 +1217,7 @@ const ViewProfileModal: React.FC<ViewProfileModalProps> = ({ isOpen, onClose, pr
             <Box>
                 <Typography variant="h6" gutterBottom>Datos Generales</Typography>
                 <Grid container spacing={1} sx={{ mb: 2 }}>
-                    <Grid item xs={12} sm={8}><Typography><strong>Nombre:</strong> {profileData.nombre}</Typography></Grid>
-                    <Grid item xs={12} sm={4}><Typography><strong>Activo:</strong> {profileData.activo ? 'Sí' : 'No'}</Typography></Grid>
+                    <Grid item xs={12} sm={8}><Typography><strong>Nombre:</strong> {profileData.nombre_perfil}</Typography></Grid>
                     <Grid item xs={12}><Typography><strong>Descripción:</strong> {profileData.descripcion || 'N/A'}</Typography></Grid>
                 </Grid>
                 <Divider />
@@ -1085,8 +1230,6 @@ const ViewProfileModal: React.FC<ViewProfileModalProps> = ({ isOpen, onClose, pr
                     <Grid item xs={6} sm={8}><Typography align="right">{formatCurrency(profileData.flete_maritimo_usd, 'USD')}</Typography></Grid>
                     <Grid item xs={6} sm={4}><Typography>Recargos Destino (USD):</Typography></Grid>
                     <Grid item xs={6} sm={8}><Typography align="right">{formatCurrency(profileData.recargos_destino_usd, 'USD')}</Typography></Grid>
-                    <Grid item xs={6} sm={4}><Typography>Prima Seguro (USD):</Typography></Grid>
-                    <Grid item xs={6} sm={8}><Typography align="right">{formatCurrency(profileData.prima_seguro_usd, 'USD')}</Typography></Grid>
                     <Grid item xs={6} sm={4}><Typography>Tasa Seguro (%):</Typography></Grid>
                     <Grid item xs={6} sm={8}><Typography align="right">{formatPercent(profileData.tasa_seguro_pct)}</Typography></Grid>
                     <Grid item xs={6} sm={4}><Typography>Transporte Nac. (CLP):</Typography></Grid>

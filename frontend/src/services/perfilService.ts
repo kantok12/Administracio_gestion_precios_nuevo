@@ -85,4 +85,39 @@ export const deletePerfil = async (id: string): Promise<{ message: string }> => 
   }
 };
 
+// --- NEW FUNCTION ---
+/**
+ * Calls the backend to calculate product cost using a specific profile and parameters.
+ * @param payload Object containing the necessary data for calculation.
+ * @param payload.profileId The ID of the cost profile to use.
+ * @param payload.anoCotizacion Base year of the original cost.
+ * @param payload.anoEnCurso Target year for the calculation.
+ * @param payload.costoFabricaOriginalEUR Original product cost in EUR.
+ * @param payload.tipoCambioEurUsdActual Current EUR/USD exchange rate (without buffer).
+ * @returns Promise resolving to the calculation result from the backend.
+ */
+export const calculateCostoProductoFromProfileService = async (payload: {
+  profileId: string;
+  anoCotizacion: number;
+  anoEnCurso: number;
+  costoFabricaOriginalEUR: number;
+  tipoCambioEurUsdActual: number;
+}): Promise<any> => { // Consider defining a more specific return type based on backend response
+  const CALCULATION_ENDPOINT = `${PROFILES_ENDPOINT}/calcular-producto`;
+  console.log('[PerfilService] Calculating product cost from profile with payload:', payload);
+  try {
+    const response = await axios.post<any>(CALCULATION_ENDPOINT, payload); // Replace 'any' with a specific type if defined
+    console.log('[PerfilService] Product cost calculation successful:', response.data);
+    return response.data; // The backend returns { perfilUsado: {...}, resultado: {...} }
+  } catch (error) {
+    console.error('[PerfilService] Error calculating product cost:', error);
+    // Consider more specific error handling based on backend error structure
+    if (axios.isAxiosError(error) && error.response) {
+      // Re-throw the error data from the backend if available
+      throw error.response.data; 
+    }
+    throw error; // Re-throw general error if not an Axios error with response
+  }
+};
+
 // Add other service functions related to profiles as needed (e.g., deletePerfil, createPerfil) 

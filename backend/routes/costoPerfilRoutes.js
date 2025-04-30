@@ -6,7 +6,8 @@ const {
   getCostoPerfilById,
   updateCostoPerfil,
   deleteCostoPerfil,
-  calculatePruebaCosto
+  calculatePruebaCosto,
+  calculateCostoProductoFromProfile
 } = require('../controllers/costoPerfilController');
 
 // Middleware de autenticación/autorización (ejemplo - descomentar y ajustar si se usa)
@@ -25,7 +26,11 @@ router.route('/:id')
   .put(/* protect, admin, */ updateCostoPerfil)    // Solo admin puede actualizar (ejemplo)
   .delete(/* protect, admin, */ deleteCostoPerfil); // Solo admin puede eliminar (ejemplo)
 
-// --- Nueva Ruta para Calcular Prueba ---
-router.post('/calcular-prueba', calculatePruebaCosto); // Accesible públicamente por ahora
+// Ruta para el cálculo de prueba (POST)
+// Actualmente esta ruta llamará a una función deshabilitada en el controlador.
+router.post('/calcular-prueba', calculatePruebaCosto);
+
+// NUEVA RUTA: Ruta para calcular el costo de un producto usando un perfil (POST)
+router.post('/calcular-producto', calculateCostoProductoFromProfile);
 
 module.exports = router; 
