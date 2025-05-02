@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+
+**Nota:** Todas las respuestas y comunicaciones relacionadas con este proyecto deben ser en español.
+
 # Índice del Proyecto: Administración y Gestión de Precios
 
 Este archivo sirve como índice para entender la estructura y funcionalidad del proyecto.
@@ -116,3 +120,51 @@ frontend/
     *   Responde al frontend, usualmente con los datos del perfil recién creado o un mensaje de éxito.
 
 Este índice debería facilitar la navegación y modificación del código. Lo usaré como referencia en nuestras próximas interacciones. 
+
+## Solución de Problemas Comunes
+
+### Error: `Cannot find module 'bcryptjs'` (Backend)
+
+Este error indica que falta la dependencia `bcryptjs` necesaria para el hashing de contraseñas en el backend.
+
+**Solución (usando PowerShell en la raíz del proyecto):**
+
+1.  Navega al directorio del backend:
+    ```powershell
+    cd backend
+    ```
+2.  Instala la dependencia faltante:
+    ```powershell
+    npm install bcryptjs
+    ```
+3.  Regresa al directorio raíz (opcional):
+    ```powershell
+    cd ..
+    ```
+
+### Error: `ERR_MODULE_NOT_FOUND` en `vite` (Frontend)
+
+Este error, a menudo relacionado con un archivo como `.../frontend/node_modules/vite/dist/node/chunks/dep-....js`, sugiere problemas con las dependencias instaladas en el frontend, posiblemente por una instalación corrupta o incompleta.
+
+**Solución (usando PowerShell en la raíz del proyecto):**
+
+1.  Navega al directorio del frontend:
+    ```powershell
+    cd frontend
+    ```
+2.  Elimina la carpeta `node_modules` existente:
+    ```powershell
+    Remove-Item -Recurse -Force node_modules
+    ```
+3.  Elimina el archivo `package-lock.json`:
+    ```powershell
+    Remove-Item -Force package-lock.json
+    ```
+4.  Reinstala todas las dependencias:
+    ```powershell
+    npm install
+    ```
+5.  Regresa al directorio raíz (opcional):
+    ```powershell
+    cd ..
+    ``` 
