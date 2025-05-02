@@ -91,41 +91,26 @@ interface PruebaInputs {
 // Interfaz para agrupar resultados (refleja la respuesta del backend)
 interface GroupedPruebaResults {
     costo_producto: {
-        factor_actualizacion?: number;
-        costo_fabrica_actualizado_eur_exw?: number;
-        costo_fabrica_actualizado_eur?: number;
-        tipo_cambio_eur_usd_aplicado?: number;
-        costo_final_fabrica_usd_exw?: number;
+        factorActualizacion?: number;
+        costoFabricaActualizadoEUR?: number; // Renombrado
+        costoFinalFabricaEUR_EXW?: number;
+        tipoCambioEurUsdAplicado?: number;
+        costoFinalFabricaUSD_EXW?: number;
     };
-    logistica_seguro: {
-        costos_origen_usd?: number;
-        costo_total_flete_manejos_usd?: number;
-        base_para_seguro_usd?: number;
-        prima_seguro_usd?: number;
-        total_transporte_seguro_exw_usd?: number;
+    logistica_seguro: { // NUEVA SECCIÓN
+        costosOrigenUSD?: number;
+        costoTotalFleteManejosUSD?: number;
+        baseParaSeguroUSD?: number;
+        primaSeguroUSD?: number;
+        totalTransporteSeguroEXW_USD?: number;
     };
-    importacion: {
-        valor_cif_usd?: number;
-        derecho_advalorem_usd?: number;
-        base_iva_usd?: number;
-        iva_usd?: number; // IVA Importación
-        total_costos_importacion_duty_fees_usd?: number;
-    };
-    landed_cost: {
-        transporte_nacional_usd?: number;
-        precio_neto_compra_base_usd_landed?: number;
-    };
-    conversion_margen: {
-        tipo_cambio_usd_clp_aplicado?: number;
-        precio_neto_compra_base_clp?: number;
-        margen_clp?: number;
-        precio_venta_neto_clp?: number;
-    };
-    precios_cliente: {
-        precio_neto_venta_final_clp?: number;
-        iva_venta_clp?: number; // IVA Venta
-        precio_venta_total_cliente_clp?: number;
-    };
+    // --- Secciones comentadas (importacion, landed_cost, etc.) --- 
+    /*
+    importacion: { ... };
+    landed_cost: { ... };
+    conversion_margen: { ... };
+    precios_cliente: { ... };
+    */
 }
 
 interface PruebaApiValues {
@@ -206,7 +191,7 @@ export default function PerfilesPanel() {
       descuento_cliente_pct: '0', // Default para nuevo campo
   };
   const [pruebaInputs, setPruebaInputs] = useState<PruebaInputs>(defaultPruebaInputs);
-  const [pruebaResults, setPruebaResults] = useState<GroupedPruebaResults['costo_producto'] | null>(null);
+  const [pruebaResults, setPruebaResults] = useState<GroupedPruebaResults | null>(null);
   const [pruebaInputValuesUsed, setPruebaInputValuesUsed] = useState<any | null>(null);
   const [pruebaApiValues, setPruebaApiValues] = useState<PruebaApiValues | null>(null);
   const [isCalculatingPrueba, setIsCalculatingPrueba] = useState<boolean>(false);
@@ -483,23 +468,23 @@ export default function PerfilesPanel() {
       }
   };
 
-  // --- Handler para Calcular Prueba (Ajustado para enviar tasas de cambio) ---
+  // --- Handler para Calcular Prueba (Ajustado para nueva respuesta) ---
   const handleCalculatePrueba = async () => {
       setPruebaError(null);
       setPruebaResults(null);
-      setPruebaInputValuesUsed(null);
+      setPruebaApiValues(null);
+      setPruebaInputValuesUsed(null); 
       setIsCalculatingPrueba(true);
 
       // Obtener tasas de cambio actuales del estado
       const currentEurUsdRate = eurUsdRate;
-      const currentUsdClpRateString = dolarValue?.value; // Get string value from state
+      const currentUsdClpRateString = dolarValue?.value;
 
       if (!currentEurUsdRate || !currentUsdClpRateString) {
           setPruebaError("No se pudieron obtener las tasas de cambio actuales.");
           setIsCalculatingPrueba(false);
           return;
       }
-      // Parse and validate USD/CLP rate
       const numCurrentUsdClpRate = parseFloat(currentUsdClpRateString);
       if (isNaN(numCurrentUsdClpRate)) {
           setPruebaError("El valor actual de USD/CLP no es válido.");
@@ -509,18 +494,21 @@ export default function PerfilesPanel() {
 
       let payload: any = {};
       let inputError = false;
+      let endpoint = '/api/costo-perfiles/calcular-prueba'; // Default endpoint
+      let responseStructureProcessor: (data: any) => { inputs: any, calculados: GroupedPruebaResults } | null;
 
-      // Determinar modo basado en si hay un perfil seleccionado para la prueba
-      const isInProfileMode = !!selectedProfileIdForPrueba; // Use correct state variable name
+      const isInProfileMode = !!selectedProfileIdForPrueba;
 
       if (!isInProfileMode) { // Modo Manual
+          endpoint = '/api/costo-perfiles/calcular-prueba';
           const requiredKeys = [
               'ano_cotizacion', 'ano_en_curso', 'costo_fabrica_original_eur',
               'buffer_eur_usd_pct', 'descuento_pct'
           ];
           const numberInputs: any = {};
 
-          for (const key of requiredKeys) {
+          for (const key of requiredKeys) { 
+              // ... (validación inputs manuales como antes) ...
               const value = pruebaInputs[key as keyof PruebaInputs];
               if (value === undefined || value === '') {
                   setPruebaError(`Falta el valor para ${key.replace(/_/g, ' ')} en modo manual.`);
@@ -535,75 +523,64 @@ export default function PerfilesPanel() {
               }
               numberInputs[key] = numValue;
           }
-
-          if (inputError) {
-              setIsCalculatingPrueba(false);
-              return;
-          }
+          if (inputError) { setIsCalculatingPrueba(false); return; }
 
           payload = {
               anoCotizacion: numberInputs.ano_cotizacion,
               anoEnCurso: numberInputs.ano_en_curso,
               costoFabricaOriginalEUR: numberInputs.costo_fabrica_original_eur,
-              tipoCambioEurUsdActual: currentEurUsdRate,
-              bufferEurUsd: numberInputs.buffer_eur_usd_pct / 100, // Convert % to decimal
-              descuentoFabrica: numberInputs.descuento_pct / 100 // Convert % to decimal and map name
+              tipoCambioEurUsdActual: currentEurUsdRate, // TC Actual para que backend aplique buffer
+              bufferEurUsd: numberInputs.buffer_eur_usd_pct / 100, // Convertir % a decimal
+              descuentoFabrica: numberInputs.descuento_pct / 100 // Convertir % a decimal
           };
+          // Define cómo procesar la respuesta de /calcular-prueba
+          responseStructureProcessor = (data) => data?.resultado; 
 
-      } else { // Modo Perfil (isInProfileMode is true)
-          // Use correct profile list variable name 'perfiles' and add type to callback param 'p'
-          const selectedProfileData = perfiles.find((p: CostoPerfilData) => p._id === selectedProfileIdForPrueba);
-          if (!selectedProfileData) {
-              setPruebaError("No se encontraron los datos del perfil seleccionado.");
-              setIsCalculatingPrueba(false);
-              return;
-          }
-
-          // Validar inputs manuales requeridos incluso en modo perfil
+      } else { // Modo Perfil -> Usar endpoint /calcular-producto
+          endpoint = '/api/costo-perfiles/calcular-producto'; 
+          // Validar inputs manuales requeridos (años, costo)
           const numAnoCotizacion = parseFloat(pruebaInputs.ano_cotizacion as string);
           const numAnoEnCurso = parseFloat(pruebaInputs.ano_en_curso as string);
           const numCostoFabrica = parseFloat(pruebaInputs.costo_fabrica_original_eur as string);
 
           if (isNaN(numAnoCotizacion) || isNaN(numAnoEnCurso) || isNaN(numCostoFabrica) || numCostoFabrica <= 0) {
               setPruebaError("Ingrese Año Cotización, Año en Curso y Costo Fábrica válidos.");
-              setIsCalculatingPrueba(false);
-              return;
+              inputError = true;
           }
+          if (inputError) { setIsCalculatingPrueba(false); return; }
 
-          // Construir payload usando datos manuales + datos del perfil
-          // *** CORRECCIÓN: Enviar los valores del perfil directamente (asumiendo que son decimales) ***
+          // Payload para /calcular-producto
           payload = {
+              profileId: selectedProfileIdForPrueba, // ID del perfil
               anoCotizacion: numAnoCotizacion,
               anoEnCurso: numAnoEnCurso,
               costoFabricaOriginalEUR: numCostoFabrica,
-              tipoCambioEurUsdActual: currentEurUsdRate,
-              bufferEurUsd: selectedProfileData.buffer_eur_usd_pct ?? 0, // Enviar el decimal almacenado
-              descuentoFabrica: selectedProfileData.descuento_fabrica_pct ?? 0 // Enviar el decimal almacenado
+              tipoCambioEurUsdActual: currentEurUsdRate // TC Actual
           };
+          // Define cómo procesar la respuesta de /calcular-producto
+          responseStructureProcessor = (data) => data?.resultado; // También tiene inputs y calculados anidados
       }
 
       try {
-          console.log("Enviando payload a /calcular-prueba:", payload);
-          const response = await axios.post<{
-              message: string, 
-              resultado: { 
-                  inputs: any, 
-                  calculados: GroupedPruebaResults['costo_producto'] 
-              }
-          }>('/api/costo-perfiles/calcular-prueba', payload);
+          console.log(`Enviando payload a ${endpoint}:`, payload);
+          // El tipo de respuesta es el mismo: { message?, perfilUsado?, resultado: { inputs, calculados } }
+          const response = await axios.post<any>(endpoint, payload);
 
-          if (response.data && response.data.resultado && response.data.resultado.calculados && response.data.resultado.inputs) {
-              setPruebaResults(response.data.resultado.calculados); // Guardar calculados
-              setPruebaInputValuesUsed(response.data.resultado.inputs); // Guardar inputs usados
+          // Usar el procesador definido para extraer inputs y calculados
+          const processedResult = responseStructureProcessor(response.data);
+
+          if (processedResult && processedResult.calculados && processedResult.inputs) {
+              setPruebaResults(processedResult.calculados);
+              setPruebaInputValuesUsed(processedResult.inputs);
               setPruebaApiValues({
-                  tipo_cambio_usd_clp_actual: numCurrentUsdClpRate,
+                  tipo_cambio_usd_clp_actual: numCurrentUsdClpRate, 
                   tipo_cambio_eur_usd_actual: currentEurUsdRate
               });
           } else {
               throw new Error("La respuesta del servidor no contiene inputs y calculados válidos.");
           }
       } catch (err: any) {
-          console.error("Error calculando prueba:", err);
+          console.error(`Error calculando prueba (${endpoint}):`, err);
           const message = err.response?.data?.message || err.message || "Error desconocido al calcular.";
           setPruebaError(message);
       } finally {
@@ -692,29 +669,25 @@ export default function PerfilesPanel() {
           tipoCambioEurUsdAplicado: "TC EUR/USD Aplicado",
           costoFinalFabricaUSD_EXW: "Costo Final Fáb. USD (EXW)",
       },
-      // --- ELIMINAR O COMENTAR secciones no devueltas por /calcular-prueba ---
-      /* 
-      logistica_seguro: {
-          costos_origen_usd: "Costos Origen (USD)",
-          // ...otras etiquetas...
+      logistica_seguro: { // NUEVAS ETIQUETAS
+          costosOrigenUSD: "Costos en Origen (USD)",
+          costoTotalFleteManejosUSD: "Costo Total Flete y Manejos (USD)",
+          baseParaSeguroUSD: "Base para Seguro (CFR Aprox - USD)",
+          primaSeguroUSD: "Prima Seguro (USD)",
+          totalTransporteSeguroEXW_USD: "Total Transporte y Seguro EXW (USD)",
       },
-      importacion: {
-          valor_cif_usd: "Valor CIF (USD)",
-           // ...otras etiquetas...
-      },
-      landed_cost: {
-          transporte_nacional_usd: "Transporte Nac. (USD)",
-           // ...otras etiquetas...
-      },
-      conversion_margen: {
-          tipo_cambio_usd_clp_aplicado: "TC USD/CLP Aplicado",
-           // ...otras etiquetas...
-      },
-      precios_cliente: {
-          precio_neto_venta_final_clp: "Precio Neto Venta Final (CLP)",
-           // ...otras etiquetas...
-      },
+      // --- Secciones comentadas --- 
+      /*
+      importacion: { 
+        valorCIF_USD: "Valor CIF (USD)",
+        derechoAdvaloremUSD: "Derecho AdValorem (USD)",
+        baseIvaImportacionUSD: "Base IVA Importación (USD)",
+        ivaImportacionUSD: "IVA Importación (USD)",
+        totalCostosImportacionDutyFeesUSD: "Total Costos Imp. (Duty+Fees) (USD)",
+      }
       */
+      // --- Secciones comentadas --- 
+      /* ... */
   };
 
   // Helper para renderizar campos de texto en el modal de creación
@@ -1143,13 +1116,34 @@ export default function PerfilesPanel() {
                   <Grid container spacing={0.5}> 
                       {Object.entries(pruebaInputValuesUsed).map(([key, value]) => {
                           let label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                          // Mostrar más decimales para los inputs numéricos
-                          let formattedValue: string | number = typeof value === 'number' ? value.toLocaleString('es-CL', {maximumFractionDigits: 6}) : String(value); 
-                          if(key.includes('_fromProfile')){
-                             // Usar el formatter de % con más decimales
-                             formattedValue = formatPercentDisplay(value as number | null | undefined, 4); 
-                             label = key.replace('_fromProfile', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' (Perfil)';
+                          let formattedValue: string | number = String(value); // Initialize here
+
+                          if (key.includes('_fromProfile')) {
+                              label = key.replace('_fromProfile', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' (Perfil)';
+                              // Formato específico según el tipo de valor del perfil
+                              if (key.startsWith('tasa') || key.startsWith('buffer') || key.startsWith('descuento') || key.startsWith('derecho') || key.startsWith('iva') || key.startsWith('margen')) {
+                                 formattedValue = formatPercentDisplay(value as number | null | undefined, 4); 
+                              } else if (key.startsWith('costoOrigenEUR')) {
+                                 formattedValue = formatGenericCurrency(value as number | null | undefined, 'EUR', 2); // Usar formato EUR con 2 decimales
+                              } else if (key.startsWith('flete') || key.startsWith('recargos') || key.startsWith('costoAgente') || key.startsWith('gastos')) {
+                                 formattedValue = formatGenericCurrency(value as number | null | undefined, 'USD', 2); // Usar formato USD con 2 decimales
+                              } else if (key.startsWith('transporte')) { 
+                                 formattedValue = formatCLP(value as number | null | undefined); // Usar formato CLP
+                              } else {
+                                 // Fallback para otros valores del perfil (si los hubiera)
+                                 formattedValue = typeof value === 'number' ? value.toLocaleString('es-CL', {maximumFractionDigits: 6}) : String(value);
+                              }
+                          } else {
+                              // Formato para inputs que NO vienen del perfil (años, costo fábrica base, tc actual)
+                              if(key.includes('tipoCambio')){
+                                  formattedValue = formatExchangeRate(value as number | null | undefined);
+                              } else if (key.includes('EUR')){
+                                  formattedValue = formatGenericCurrency(value as number | null | undefined, 'EUR', 2);
+                              } else {
+                                  formattedValue = typeof value === 'number' ? value.toLocaleString('es-CL', {maximumFractionDigits: 0}) : String(value); // Años sin decimales
+                              }
                           }
+
                           return (
                               <React.Fragment key={key}>
                                   <Grid item xs={7}><Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{label}:</Typography></Grid>
@@ -1174,11 +1168,15 @@ export default function PerfilesPanel() {
                </Box>
            )}
 
-           {/* Mostrar Resultados Calculados (igual que antes) */}
+           {/* Mostrar Resultados Calculados */}
            {pruebaResults && (
                <Box>
                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 1 }}>Resultados Calculados</Typography>
-                   {renderResultSection("Costo de Producto", pruebaResults, resultLabels.costo_producto)}
+                   {/* Renderizar sección Costo de Producto */}
+                   {pruebaResults.costo_producto && renderResultSection("Costo de Producto", pruebaResults.costo_producto, resultLabels.costo_producto)}
+                   {/* Renderizar NUEVA sección Logística y Seguro */} 
+                   {pruebaResults.logistica_seguro && renderResultSection("Logística y Seguro (EXW a Chile)", pruebaResults.logistica_seguro, resultLabels.logistica_seguro)}
+                   
                </Box>
            )}
 
