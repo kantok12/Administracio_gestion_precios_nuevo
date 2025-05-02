@@ -1,5 +1,6 @@
 const CostoPerfil = require('../models/CostoPerfil');
 const { calcularCostoProducto } = require('../utils/calculoCostoProducto'); // Importar la función de cálculo
+const { fetchCurrencyValues } = require('../utils/fetchProducts'); // Importar fetchCurrencyValues
 // Ya no necesitamos getLatestCurrencyValues aquí
 // const { getLatestCurrencyValues } = require('./productController');
 
@@ -133,11 +134,34 @@ const calculatePruebaCosto = async (req, res) => {
          return res.status(400).json({ message: 'Parámetros numéricos inválidos para el cálculo de prueba.' });
     }
 
+    // *** NECESITAMOS USD/CLP también para el cálculo completo simulado ***
+    let tipoCambioUsdClpActual;
+    try {
+      const currencyData = await fetchCurrencyValues();
+      if (!currencyData || typeof currencyData.Valor_Dolar !== 'string' || currencyData.Valor_Dolar.trim() === '') { 
+        throw new Error('Respuesta inválida, faltante o vacía de Valor_Dolar desde webhook');
+      }
+       // *** Lógica de conversión mejorada ***
+      let valorDolarString = currencyData.Valor_Dolar.trim();
+      if (valorDolarString.includes(',')) {
+         valorDolarString = valorDolarString.replace(/\./g, '').replace(',', '.');
+      }
+      tipoCambioUsdClpActual = parseFloat(valorDolarString);
+
+      if (isNaN(tipoCambioUsdClpActual) || tipoCambioUsdClpActual <= 0) {
+         throw new Error(`Valor_Dolar '${currencyData.Valor_Dolar}' no pudo ser convertido a número válido.`);
+      }
+    } catch (currencyError) {
+      console.error('Error obteniendo valor del dólar para prueba:', currencyError);
+      return res.status(500).json({ message: 'No se pudo obtener el tipo de cambio USD/CLP actual.', error: currencyError.message });
+    }
+
     // *** CAMBIO: Construir un objeto perfilData simulado ***
     const perfilDataSimulado = {
       buffer_eur_usd_pct: numBufferEurUsd, // Usar el valor numérico validado
-      descuento_fabrica_pct: numDescuentoFabrica // Usar el valor numérico validado
-      // Añadir otros campos si la función de utilidad los necesitara en el futuro
+      descuento_fabrica_pct: numDescuentoFabrica, // Usar el valor numérico validado
+      // Simular transporte nacional en 0 si no se proporciona (o añadirlo al request si se desea)
+      transporte_nacional_clp: 0, 
     };
 
     // Llamar a la función de cálculo con los datos y el perfil simulado
@@ -146,6 +170,7 @@ const calculatePruebaCosto = async (req, res) => {
       anoEnCurso: numAnoEnCurso,
       costoFabricaOriginalEUR: numCostoFabricaOriginalEUR,
       tipoCambioEurUsdActual: numTipoCambioEurUsdActual,
+      tipoCambioUsdClpActual: tipoCambioUsdClpActual, // Pasar TC USD/CLP obtenido
       perfilData: perfilDataSimulado // Pasar el objeto simulado
     });
     
@@ -194,19 +219,48 @@ const calculateCostoProductoFromProfile = async (req, res) => {
          return res.status(400).json({ message: 'Parámetros numéricos inválidos.' });
     }
 
-    // Buscar el perfil (igual que antes)
+    // *** Obtener TC USD/CLP actual ***
+    let tipoCambioUsdClpActualNum;
+    try {
+      const currencyData = await fetchCurrencyValues(); 
+      if (!currencyData || typeof currencyData.Valor_Dolar !== 'string' || currencyData.Valor_Dolar.trim() === '') { 
+        throw new Error('Respuesta inválida, faltante o vacía de Valor_Dolar desde webhook');
+      }
+
+      // *** Lógica de conversión mejorada ***
+      let valorDolarString = currencyData.Valor_Dolar.trim();
+      // Detectar si usa coma como decimal (formato chileno)
+      if (valorDolarString.includes(',')) {
+         // Asumir formato chileno: quitar puntos de miles, reemplazar coma decimal por punto
+         valorDolarString = valorDolarString.replace(/\./g, '').replace(',', '.');
+      } 
+      // Si no hay coma, se asume que el punto (si existe) es decimal y no de miles.
+      // No se necesita hacer replace en ese caso, parseFloat lo maneja.
+      
+      tipoCambioUsdClpActualNum = parseFloat(valorDolarString);
+
+      if (isNaN(tipoCambioUsdClpActualNum) || tipoCambioUsdClpActualNum <= 0) {
+         throw new Error(`Valor_Dolar '${currencyData.Valor_Dolar}' no pudo ser convertido a número válido.`);
+      }
+    } catch (currencyError) {
+      console.error('Error obteniendo valor del dólar:', currencyError);
+      return res.status(500).json({ message: 'No se pudo obtener el tipo de cambio USD/CLP actual.', error: currencyError.message });
+    }
+
+    // Buscar el perfil
     const perfil = await CostoPerfil.findById(profileId);
     if (!perfil) {
       return res.status(404).json({ message: 'Perfil de costo no encontrado.' });
     }
 
-    // *** CAMBIO: Llamar a la función de cálculo pasando el objeto perfil ***
+    // Llamar a la función de cálculo pasando el objeto perfil y el TC USD/CLP
     const resultadoCalculo = calcularCostoProducto({
       anoCotizacion: numAnoCotizacion,
       anoEnCurso: numAnoEnCurso,
       costoFabricaOriginalEUR: numCostoFabricaOriginalEUR,
       tipoCambioEurUsdActual: numTipoCambioEurUsdActual,
-      perfilData: perfil // Pasar el objeto perfil completo
+      tipoCambioUsdClpActual: tipoCambioUsdClpActualNum, // Pasar el valor numérico
+      perfilData: perfil 
     });
     
     if (resultadoCalculo.error) {
@@ -214,12 +268,12 @@ const calculateCostoProductoFromProfile = async (req, res) => {
         return res.status(400).json({ message: `Error en el cálculo: ${resultadoCalculo.error}`, perfilUsado: profileName });
     }
 
-    res.status(200).json({ 
+    res.status(200).json({
       perfilUsado: { _id: perfil._id, nombre: perfil.nombre_perfil || perfil._id }, 
       resultado: { 
           inputs: resultadoCalculo.inputs, 
           calculados: resultadoCalculo.calculados 
-      }
+        }
     });
 
   } catch (error) {

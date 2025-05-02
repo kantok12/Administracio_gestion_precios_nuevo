@@ -7,6 +7,7 @@
  * @param {number} params.anoEnCurso - Año objetivo para el cálculo.
  * @param {number} params.costoFabricaOriginalEUR - Costo original del producto en EUR.
  * @param {number} params.tipoCambioEurUsdActual - Tasa de cambio EUR/USD sin buffer.
+ * @param {number} params.tipoCambioUsdClpActual - Tasa de cambio USD/CLP observada.
  * @param {object} params.perfilData - El objeto completo del perfil de costo a usar.
  * @returns {object} - Objeto con los resultados del cálculo del costo del producto.
  */
@@ -15,12 +16,13 @@ function calcularCostoProducto({
   anoEnCurso,
   costoFabricaOriginalEUR,
   tipoCambioEurUsdActual,
+  tipoCambioUsdClpActual,
   perfilData
 }) {
 
   // Validaciones básicas de los inputs directos
-  if (costoFabricaOriginalEUR <= 0 || tipoCambioEurUsdActual <= 0 || !perfilData) {
-      console.error("Error en calcularCostoProducto: Inputs inválidos o perfil faltante", { costoFabricaOriginalEUR, tipoCambioEurUsdActual, perfilDataExists: !!perfilData });
+  if (costoFabricaOriginalEUR <= 0 || tipoCambioEurUsdActual <= 0 || tipoCambioUsdClpActual <= 0 || !perfilData) {
+      console.error("Error en calcularCostoProducto: Inputs inválidos o perfil faltante", { costoFabricaOriginalEUR, tipoCambioEurUsdActual, tipoCambioUsdClpActual, perfilDataExists: !!perfilData });
       return { error: "Inputs inválidos o perfil de costo faltante para el cálculo." }; 
   }
 
@@ -33,14 +35,33 @@ function calcularCostoProducto({
   const fleteMaritimoUSD = perfilData.flete_maritimo_usd ?? 0;
   const recargosDestinoUSD = perfilData.recargos_destino_usd ?? 0;
   const tasaSeguroPct = perfilData.tasa_seguro_pct ?? 0; // Asumiendo decimal
+  // Re-extraer valores de importación (excepto IVA fijo)
+  const costoAgenteAduanaUSD = perfilData.costo_agente_aduana_usd ?? 0;
+  const gastosPortuariosOtrosUSD = perfilData.gastos_portuarios_otros_usd ?? 0;
+  const derechoAdvaloremPct = perfilData.derecho_advalorem_pct ?? 0; // Asumiendo decimal
+  const IVA_FIJO = 0.19; // IVA fijo 19%
+  // Extraer valor para Landed Cost
+  const transporteNacionalCLP = perfilData.transporte_nacional_clp ?? 0;
+  // Extraer valores para Conversión y Margen
+  const bufferUsdClpPct = perfilData.buffer_usd_clp_pct ?? 0;
+  const margenAdicionalPct = perfilData.margen_adicional_pct ?? 0;
+  // Extraer valor para Precios Cliente
+  const descuentoClientePct = perfilData.descuento_cliente_pct ?? 0;
 
   // Validar que los valores extraídos sean números válidos
   if (typeof bufferEurUsd !== 'number' || typeof descuentoFabrica !== 'number' ||
       typeof costoOrigenEUR !== 'number' || typeof fleteMaritimoUSD !== 'number' ||
-      typeof recargosDestinoUSD !== 'number' || typeof tasaSeguroPct !== 'number') {
+      typeof recargosDestinoUSD !== 'number' || typeof tasaSeguroPct !== 'number' ||
+      typeof costoAgenteAduanaUSD !== 'number' || typeof gastosPortuariosOtrosUSD !== 'number' ||
+      typeof derechoAdvaloremPct !== 'number' || typeof transporteNacionalCLP !== 'number' ||
+      typeof bufferUsdClpPct !== 'number' || typeof margenAdicionalPct !== 'number' ||
+      typeof descuentoClientePct !== 'number') {
     console.error("Error en calcularCostoProducto: Valores de perfil inválidos", { 
         bufferEurUsd, descuentoFabrica, costoOrigenEUR, fleteMaritimoUSD, 
-        recargosDestinoUSD, tasaSeguroPct 
+        recargosDestinoUSD, tasaSeguroPct, 
+        costoAgenteAduanaUSD, gastosPortuariosOtrosUSD, derechoAdvaloremPct,
+        transporteNacionalCLP, bufferUsdClpPct, margenAdicionalPct,
+        descuentoClientePct
     });
     return { error: "Valores numéricos inválidos encontrados en el perfil de costo." };
   }
@@ -69,6 +90,48 @@ function calcularCostoProducto({
   // 10. Total Transporte y Seguro EXW (USD)
   const totalTransporteSeguroEXW_USD = costoTotalFleteManejosUSD + primaSeguroUSD;
 
+  // --- SECCIÓN 3: Costos de Importación --- 
+  // 11. Valor CIF (USD) 
+  // *** AJUSTE: Calcular CIF según fórmula del usuario (Costo EXW USD + Total Transporte y Seguro USD) ***
+  const valorCIF_USD = costoFinalFabricaUSD_EXW + totalTransporteSeguroEXW_USD; 
+  // 12. Derecho AdValorem (USD) - Usando % del perfil
+  const derechoAdvaloremUSD = valorCIF_USD * derechoAdvaloremPct;
+  // 13. Base IVA Importación (USD)
+  const baseIvaImportacionUSD = valorCIF_USD + derechoAdvaloremUSD;
+  // 14. IVA Importación (USD) - Usando 19% FIJO
+  const ivaImportacionUSD = baseIvaImportacionUSD * IVA_FIJO; 
+  // 15. Total Costos Importación (Duty + Fees) (USD) - Sin IVA calculado
+  const totalCostosImportacionDutyFeesUSD = derechoAdvaloremUSD + costoAgenteAduanaUSD + gastosPortuariosOtrosUSD;
+
+  // --- SECCIÓN 4: Costo puesto en Bodega (Landed Cost) --- 
+  // 16. Transporte Nacional (USD)
+  const transporteNacionalUSD = tipoCambioUsdClpActual !== 0 ? transporteNacionalCLP / tipoCambioUsdClpActual : 0;
+  // 17. Precio Neto Compra Base (USD) - Landed Cost
+  const precioNetoCompraBaseUSD_LandedCost = 
+      valorCIF_USD + 
+      derechoAdvaloremUSD + 
+      costoAgenteAduanaUSD + 
+      gastosPortuariosOtrosUSD + 
+      tipoCambioUsdClpActual; // Sumar el tipo de cambio directamente
+
+  // --- SECCIÓN 5: Conversión a CLP y Margen --- 
+  // 18. Tipo Cambio USD/CLP Aplicado
+  const tipoCambioUsdClpAplicado = tipoCambioUsdClpActual * (1 + bufferUsdClpPct);
+  // 19. Precio Neto Compra Base (CLP)
+  const precioNetoCompraBaseCLP = precioNetoCompraBaseUSD_LandedCost * tipoCambioUsdClpAplicado;
+  // 20. Margen (CLP)
+  const margenCLP = precioNetoCompraBaseCLP * margenAdicionalPct;
+  // 21. Precio Venta Neto (CLP)
+  const precioVentaNetoCLP = margenCLP + precioNetoCompraBaseCLP;
+
+  // --- SECCIÓN 6: Precios para cliente --- 
+  // 22. Precio Neto Venta Final (CLP)
+  const precioNetoVentaFinalCLP = precioVentaNetoCLP * (1 - descuentoClientePct);
+  // 23. IVA Venta (19%) (CLP) - Usando IVA FIJO
+  const ivaVentaCLP = precioNetoVentaFinalCLP * IVA_FIJO; 
+  // 24. Precio Venta Total Cliente (CLP)
+  const precioVentaTotalClienteCLP = precioNetoVentaFinalCLP + ivaVentaCLP;
+
   // Devolver resultados estructurados
   return {
     inputs: { 
@@ -76,12 +139,20 @@ function calcularCostoProducto({
         anoEnCurso,
         costoFabricaOriginalEUR,
         tipoCambioEurUsdActual,
+        tipoCambioUsdClpActual,
         bufferEurUsd_fromProfile: bufferEurUsd,
         descuentoFabrica_fromProfile: descuentoFabrica,
         costoOrigenEUR_fromProfile: costoOrigenEUR,
         fleteMaritimoUSD_fromProfile: fleteMaritimoUSD,
         recargosDestinoUSD_fromProfile: recargosDestinoUSD,
         tasaSeguroPct_fromProfile: tasaSeguroPct,
+        costoAgenteAduanaUSD_fromProfile: costoAgenteAduanaUSD,
+        gastosPortuariosOtrosUSD_fromProfile: gastosPortuariosOtrosUSD,
+        derechoAdvaloremPct_fromProfile: derechoAdvaloremPct,
+        transporteNacionalCLP_fromProfile: transporteNacionalCLP,
+        bufferUsdClpPct_fromProfile: bufferUsdClpPct,
+        margenAdicionalPct_fromProfile: margenAdicionalPct,
+        descuentoClientePct_fromProfile: descuentoClientePct,
     },
     calculados: {
       costo_producto: {
@@ -97,6 +168,28 @@ function calcularCostoProducto({
           baseParaSeguroUSD,
           primaSeguroUSD,
           totalTransporteSeguroEXW_USD
+      },
+      importacion: {
+          valorCIF_USD,
+          derechoAdvaloremUSD,
+          baseIvaImportacionUSD,
+          ivaImportacionUSD,
+          totalCostosImportacionDutyFeesUSD
+      },
+      landed_cost: {
+          transporteNacionalUSD,
+          precioNetoCompraBaseUSD_LandedCost
+      },
+      conversion_margen: {
+          tipoCambioUsdClpAplicado,
+          precioNetoCompraBaseCLP,
+          margenCLP,
+          precioVentaNetoCLP
+      },
+      precios_cliente: {
+          precioNetoVentaFinalCLP,
+          ivaVentaCLP,
+          precioVentaTotalClienteCLP
       }
     }
   };

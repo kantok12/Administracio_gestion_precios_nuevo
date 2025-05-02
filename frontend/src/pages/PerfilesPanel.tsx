@@ -104,6 +104,32 @@ interface GroupedPruebaResults {
         primaSeguroUSD?: number;
         totalTransporteSeguroEXW_USD?: number;
     };
+    // Re-añadir sección importacion
+    importacion: {
+        valorCIF_USD?: number;
+        derechoAdvaloremUSD?: number;
+        baseIvaImportacionUSD?: number;
+        ivaImportacionUSD?: number;
+        totalCostosImportacionDutyFeesUSD?: number;
+    };
+    // Añadir sección landed_cost
+    landed_cost: {
+        transporteNacionalUSD?: number;
+        precioNetoCompraBaseUSD_LandedCost?: number;
+    };
+    // Añadir sección conversion_margen
+    conversion_margen: {
+        tipoCambioUsdClpAplicado?: number;
+        precioNetoCompraBaseCLP?: number;
+        margenCLP?: number;
+        precioVentaNetoCLP?: number;
+    };
+    // Añadir sección precios_cliente
+    precios_cliente: {
+        precioNetoVentaFinalCLP?: number;
+        ivaVentaCLP?: number;
+        precioVentaTotalClienteCLP?: number;
+    };
     // --- Secciones comentadas (importacion, landed_cost, etc.) --- 
     /*
     importacion: { ... };
@@ -468,7 +494,7 @@ export default function PerfilesPanel() {
       }
   };
 
-  // --- Handler para Calcular Prueba (Ajustado para nueva respuesta) ---
+  // --- Handler para Calcular Prueba (Corregir parseFloat) ---
   const handleCalculatePrueba = async () => {
       setPruebaError(null);
       setPruebaResults(null);
@@ -478,19 +504,20 @@ export default function PerfilesPanel() {
 
       // Obtener tasas de cambio actuales del estado
       const currentEurUsdRate = eurUsdRate;
-      const currentUsdClpRateString = dolarValue?.value;
+      const currentUsdClpRateValue = dolarValue?.value; // Obtener el número directamente
 
-      if (!currentEurUsdRate || !currentUsdClpRateString) {
+      if (!currentEurUsdRate || currentUsdClpRateValue === null || currentUsdClpRateValue === undefined) {
           setPruebaError("No se pudieron obtener las tasas de cambio actuales.");
           setIsCalculatingPrueba(false);
           return;
       }
-      const numCurrentUsdClpRate = parseFloat(currentUsdClpRateString);
-      if (isNaN(numCurrentUsdClpRate)) {
-          setPruebaError("El valor actual de USD/CLP no es válido.");
-          setIsCalculatingPrueba(false);
-          return;
-      }
+      // *** CORRECCIÓN LINTER: No necesitamos parseFloat si ya es número ***
+      const numCurrentUsdClpRate = currentUsdClpRateValue; 
+      // if (isNaN(numCurrentUsdClpRate)) { // Esta validación ya no es necesaria si viene como número
+      //     setPruebaError("El valor actual de USD/CLP no es válido.");
+      //     setIsCalculatingPrueba(false);
+      //     return;
+      // }
 
       let payload: any = {};
       let inputError = false;
@@ -676,6 +703,32 @@ export default function PerfilesPanel() {
           primaSeguroUSD: "Prima Seguro (USD)",
           totalTransporteSeguroEXW_USD: "Total Transporte y Seguro EXW (USD)",
       },
+      // Re-añadir sección importacion
+      importacion: {
+        valorCIF_USD: "Valor CIF (USD)",
+        derechoAdvaloremUSD: "Derecho AdValorem (USD)",
+        baseIvaImportacionUSD: "Base IVA Importación (USD)",
+        ivaImportacionUSD: "IVA Importación (USD)", // Usamos etiqueta aunque no esté en total
+        totalCostosImportacionDutyFeesUSD: "Total Costos Imp. (Duty+Fees) (USD)",
+      },
+      // Añadir sección landed_cost
+      landed_cost: {
+          transporteNacionalUSD: "Transporte Nacional (USD)",
+          precioNetoCompraBaseUSD_LandedCost: "Precio Neto Compra Base (USD) - Landed Cost",
+      },
+      // Añadir sección conversion_margen
+      conversion_margen: {
+          tipoCambioUsdClpAplicado: "Tipo Cambio USD/CLP Aplicado",
+          precioNetoCompraBaseCLP: "Precio Neto Compra Base (CLP)",
+          margenCLP: "Margen (CLP)",
+          precioVentaNetoCLP: "Precio Venta Neto (CLP)",
+      },
+      // Añadir sección precios_cliente
+      precios_cliente: {
+          precioNetoVentaFinalCLP: "Precio Neto Venta Final (CLP)",
+          ivaVentaCLP: "IVA Venta (19%) (CLP)",
+          precioVentaTotalClienteCLP: "Precio Venta Total Cliente (CLP)",
+      }
       // --- Secciones comentadas --- 
       /*
       importacion: { 
@@ -1176,7 +1229,14 @@ export default function PerfilesPanel() {
                    {pruebaResults.costo_producto && renderResultSection("Costo de Producto", pruebaResults.costo_producto, resultLabels.costo_producto)}
                    {/* Renderizar NUEVA sección Logística y Seguro */} 
                    {pruebaResults.logistica_seguro && renderResultSection("Logística y Seguro (EXW a Chile)", pruebaResults.logistica_seguro, resultLabels.logistica_seguro)}
-                   
+                   {/* Re-añadir render de Importación */} 
+                   {pruebaResults.importacion && renderResultSection("Costos de Importación", pruebaResults.importacion, resultLabels.importacion)}
+                   {/* Añadir render de Landed Cost */} 
+                   {pruebaResults.landed_cost && renderResultSection("Costo puesto en Bodega (Landed Cost)", pruebaResults.landed_cost, resultLabels.landed_cost)}
+                   {/* Añadir render de Conversión y Margen */} 
+                   {pruebaResults.conversion_margen && renderResultSection("Conversión a CLP y Margen", pruebaResults.conversion_margen, resultLabels.conversion_margen)}
+                   {/* Añadir render de Precios Cliente */} 
+                   {pruebaResults.precios_cliente && renderResultSection("Precios para Cliente", pruebaResults.precios_cliente, resultLabels.precios_cliente)}
                </Box>
            )}
 
