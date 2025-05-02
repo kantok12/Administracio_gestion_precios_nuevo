@@ -38,7 +38,8 @@ function calcularCostoProducto({
   // Re-extraer valores de importación (excepto IVA fijo)
   const costoAgenteAduanaUSD = perfilData.costo_agente_aduana_usd ?? 0;
   const gastosPortuariosOtrosUSD = perfilData.gastos_portuarios_otros_usd ?? 0;
-  const derechoAdvaloremPct = perfilData.derecho_advalorem_pct ?? 0; // Asumiendo decimal
+  // const derechoAdvaloremPct = perfilData.derecho_advalorem_pct ?? 0; // Ya no se usa, es 6% fijo
+  const DERECHO_ADVALOREM_FIJO = 0.06; // Derecho Ad Valorem fijo 6% según documento
   const IVA_FIJO = 0.19; // IVA fijo 19%
   // Extraer valor para Landed Cost
   const transporteNacionalCLP = perfilData.transporte_nacional_clp ?? 0;
@@ -53,13 +54,13 @@ function calcularCostoProducto({
       typeof costoOrigenEUR !== 'number' || typeof fleteMaritimoUSD !== 'number' ||
       typeof recargosDestinoUSD !== 'number' || typeof tasaSeguroPct !== 'number' ||
       typeof costoAgenteAduanaUSD !== 'number' || typeof gastosPortuariosOtrosUSD !== 'number' ||
-      typeof derechoAdvaloremPct !== 'number' || typeof transporteNacionalCLP !== 'number' ||
+      /* Ya no validamos derechoAdvaloremPct */ typeof transporteNacionalCLP !== 'number' ||
       typeof bufferUsdClpPct !== 'number' || typeof margenAdicionalPct !== 'number' ||
       typeof descuentoClientePct !== 'number') {
     console.error("Error en calcularCostoProducto: Valores de perfil inválidos", { 
         bufferEurUsd, descuentoFabrica, costoOrigenEUR, fleteMaritimoUSD, 
         recargosDestinoUSD, tasaSeguroPct, 
-        costoAgenteAduanaUSD, gastosPortuariosOtrosUSD, derechoAdvaloremPct,
+        costoAgenteAduanaUSD, gastosPortuariosOtrosUSD, /* derechoAdvaloremPct, */
         transporteNacionalCLP, bufferUsdClpPct, margenAdicionalPct,
         descuentoClientePct
     });
@@ -72,17 +73,17 @@ function calcularCostoProducto({
   // 2. Costo fábrica actualizado (EUR)
   const costoFabricaActualizadoEUR = costoFabricaOriginalEUR * factorActualizacion;
   // 3. Aplicar descuento del fabricante (extraído del perfil)
-  const costoFinalFabricaEUR_EXW = costoFabricaActualizadoEUR * (1 - descuentoFabrica);
-  // 4. Tipo de cambio EUR/USD con buffer fijo 2%
-  const tipoCambioEurUsdAplicado = tipoCambioEurUsdActual * (1 + 0.02);
+  const costoFabricaDescontadoEUR_EXW = costoFabricaActualizadoEUR * (1 - descuentoFabrica); // Nombre cambiado para claridad
+  // 4. Tipo de cambio EUR/USD con buffer del perfil
+  const tipoCambioEurUsdAplicado = tipoCambioEurUsdActual * (1 + bufferEurUsd); // <--- CORRECCIÓN: Usa buffer del perfil
   // 5. Costo final en USD (EXW)
-  const costoFinalFabricaUSD_EXW = costoFinalFabricaEUR_EXW * tipoCambioEurUsdAplicado;
+  const costoFinalFabricaUSD_EXW = costoFabricaDescontadoEUR_EXW * tipoCambioEurUsdAplicado;
 
   // --- SECCIÓN 2: Logística y Seguro --- 
   // 6. Costos en Origen (USD)
   const costosOrigenUSD = costoOrigenEUR * tipoCambioEurUsdAplicado;
   // 7. Costo Total Flete y Manejos (USD)
-  const costoTotalFleteManejosUSD = costoOrigenEUR + fleteMaritimoUSD + recargosDestinoUSD;
+  const costoTotalFleteManejosUSD = costosOrigenUSD + fleteMaritimoUSD + recargosDestinoUSD; // <--- CORRECCIÓN: Usa costosOrigenUSD
   // 8. Base para Seguro (CFR Aprox - USD)
   const baseParaSeguroUSD = costoFinalFabricaUSD_EXW + costoTotalFleteManejosUSD;
   // 9. Prima Seguro (USD)
@@ -92,10 +93,9 @@ function calcularCostoProducto({
 
   // --- SECCIÓN 3: Costos de Importación --- 
   // 11. Valor CIF (USD) 
-  // *** AJUSTE: Calcular CIF según fórmula del usuario (Costo EXW USD + Total Transporte y Seguro USD) ***
   const valorCIF_USD = costoFinalFabricaUSD_EXW + totalTransporteSeguroEXW_USD; 
-  // 12. Derecho AdValorem (USD) - Usando % del perfil
-  const derechoAdvaloremUSD = valorCIF_USD * derechoAdvaloremPct;
+  // 12. Derecho AdValorem (USD) - Usando % FIJO según documento
+  const derechoAdvaloremUSD = valorCIF_USD * DERECHO_ADVALOREM_FIJO; // <--- CORRECCIÓN: Usa 6% fijo
   // 13. Base IVA Importación (USD)
   const baseIvaImportacionUSD = valorCIF_USD + derechoAdvaloremUSD;
   // 14. IVA Importación (USD) - Usando 19% FIJO
@@ -107,13 +107,9 @@ function calcularCostoProducto({
   // 16. Transporte Nacional (USD)
   const transporteNacionalUSD = tipoCambioUsdClpActual !== 0 ? transporteNacionalCLP / tipoCambioUsdClpActual : 0;
   // 17. Precio Neto Compra Base (USD) - Landed Cost
-  const precioNetoCompraBaseUSD_LandedCost = 
-      valorCIF_USD + 
-      derechoAdvaloremUSD + 
-      costoAgenteAduanaUSD + 
-      gastosPortuariosOtrosUSD + 
-      tipoCambioUsdClpActual; // Sumar el tipo de cambio directamente
-
+  // Fórmula según instrucción Excel: CIF + AdValorem + Aduana + Otros + TC(USD/CLP)
+  const precioNetoCompraBaseUSD_LandedCost = valorCIF_USD + derechoAdvaloremUSD + costoAgenteAduanaUSD + gastosPortuariosOtrosUSD + tipoCambioUsdClpActual; // <--- CORRECCIÓN: Aplicando fórmula Excel
+  
   // --- SECCIÓN 5: Conversión a CLP y Margen --- 
   // 18. Tipo Cambio USD/CLP Aplicado
   const tipoCambioUsdClpAplicado = tipoCambioUsdClpActual * (1 + bufferUsdClpPct);
@@ -132,7 +128,7 @@ function calcularCostoProducto({
   // 24. Precio Venta Total Cliente (CLP)
   const precioVentaTotalClienteCLP = precioNetoVentaFinalCLP + ivaVentaCLP;
 
-  // Devolver resultados estructurados
+  // Devolver resultados estructurados sin redondeo aplicado
   return {
     inputs: { 
         anoCotizacion,
@@ -148,7 +144,6 @@ function calcularCostoProducto({
         tasaSeguroPct_fromProfile: tasaSeguroPct,
         costoAgenteAduanaUSD_fromProfile: costoAgenteAduanaUSD,
         gastosPortuariosOtrosUSD_fromProfile: gastosPortuariosOtrosUSD,
-        derechoAdvaloremPct_fromProfile: derechoAdvaloremPct,
         transporteNacionalCLP_fromProfile: transporteNacionalCLP,
         bufferUsdClpPct_fromProfile: bufferUsdClpPct,
         margenAdicionalPct_fromProfile: margenAdicionalPct,
@@ -158,7 +153,7 @@ function calcularCostoProducto({
       costo_producto: {
           factorActualizacion,
           costoFabricaActualizadoEUR, 
-          costoFinalFabricaEUR_EXW,
+          costoFabricaDescontadoEUR_EXW: costoFabricaDescontadoEUR_EXW, // Nombre actualizado
           tipoCambioEurUsdAplicado,
           costoFinalFabricaUSD_EXW
       },

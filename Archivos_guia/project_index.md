@@ -14,6 +14,10 @@ El proyecto consiste en una aplicación web para la administración y gestión d
 
 ```
 .
+├── Archivos_guia/  # Carpeta con documentación y archivos guía del proyecto
+│   ├── project_index.md    # Este archivo
+│   ├── AI_PROJECT_GUIDE.md # Guía del proyecto AI
+│   └── Costo de Producto.docx # Documento relacionado
 ├── backend/        # Código del servidor backend (Node.js/Express)
 ├── frontend/       # Código de la aplicación frontend (React/Vite)
 ├── node_modules/   # Dependencias de Node.js (nivel raíz, posiblemente para scripts)
@@ -22,7 +26,6 @@ El proyecto consiste en una aplicación web para la administración y gestión d
 ├── .gitattributes  # Atributos de Git
 ├── package.json    # Dependencias y scripts (nivel raíz)
 └── package-lock.json # Versiones exactas de dependencias (nivel raíz)
-└── AI_PROJECT_GUIDE.md # Guía del proyecto AI
 ```
 
 ## Backend (`./backend/`)

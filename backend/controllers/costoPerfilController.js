@@ -9,12 +9,35 @@ const { fetchCurrencyValues } = require('../utils/fetchProducts'); // Importar f
 // @access  Private (ejemplo, ajustar según necesidad)
 const createCostoPerfil = async (req, res) => {
   try {
+    // *** INICIO VALIDACIÓN ADICIONAL ***
+    const { nombre_perfil } = req.body;
+    if (!nombre_perfil || typeof nombre_perfil !== 'string' || nombre_perfil.trim() === '') {
+      return res.status(400).json({ message: 'El campo \'nombre_perfil\' es obligatorio y no puede estar vacío.' });
+    }
+    // *** FIN VALIDACIÓN ADICIONAL ***
+
     const nuevoPerfil = new CostoPerfil(req.body);
     const perfilGuardado = await nuevoPerfil.save();
     res.status(201).json(perfilGuardado);
   } catch (error) {
     console.error('Error al crear perfil de costo:', error);
-    res.status(400).json({ message: 'Error al crear el perfil', error: error.message });
+    // *** INICIO MANEJO DE ERRORES MEJORADO ***
+    if (error.name === 'ValidationError') {
+      // Error de validación de Mongoose (campos requeridos faltantes, tipos inválidos, etc.)
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({ 
+          message: 'Datos de perfil inválidos. Por favor revise los campos.', 
+          errors: messages 
+      });
+    } 
+    if (error.code === 11000) {
+      // Error de clave duplicada (probablemente nombre_perfil repetido ahora)
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ message: `Error: Ya existe un perfil con ese valor para '${field}'.` });
+    }
+    // Otros errores al intentar guardar o errores inesperados
+    res.status(500).json({ message: 'Error interno al intentar crear el perfil.', error: error.message });
+    // *** FIN MANEJO DE ERRORES MEJORADO ***
   }
 };
 
