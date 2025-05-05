@@ -1,46 +1,28 @@
 const express = require('express');
 const router = express.Router();
-const { 
-  fetchProducts, 
-  getCachedProducts, 
-  fetchFilteredProductsController, 
-  fetchCurrencyValuesController, 
-  getCachedDollarValue, 
-  getCachedEuroValue,
-  getAllCachedValues,
-  clearCache,
-  getProductDetail,
-  getOptionalProducts,
-  resetCache,
-  createIndividualEquipment
-} = require('../controllers/productController');
+
+// --- Importar controladores ---
+// Controlador para operaciones con Mongoose (crear, cargar excel)
+const productoCtrl = require('../controllers/productoController.js'); // Con 'o'
+// Controlador para operaciones con caché y llamadas a webhook (sin 'o')
+const productCtrl = require('../controllers/productController.js');
+
 const path = require('path');
 const fs = require('fs');
 
-// Importar la nueva función del controlador
-const { cargarProductosDesdeExcel } = require('../controllers/productoController'); // Asegúrate que la ruta al controlador sea correcta
+// --- Rutas que usan productController (sin 'o' - caché/webhook) ---
+router.get('/fetch', productCtrl.fetchProducts);
+router.get('/', productCtrl.getCachedProducts); // Asumiendo que esto debe mostrar caché
+router.get('/filter', productCtrl.fetchFilteredProductsController);
+router.get('/cache/all', productCtrl.getAllCachedValues);
+router.post('/cache/reset', productCtrl.resetCache);
+router.delete('/cache', productCtrl.clearCache); // Corregido DELETE
+router.get('/detail', productCtrl.getProductDetail);
+router.get('/opcionales', productCtrl.getOptionalProducts);
 
-// Rutas principales de productos
-router.get('/fetch', fetchProducts);                    // Obtener productos frescos del webhook
-router.get('/', getCachedProducts);                     // Obtener productos del caché
-router.get('/cache/all', getAllCachedValues);          // Obtener todos los valores en caché (productos y divisas)
-router.get('/detail', getProductDetail);               // Obtener detalles de un producto específico
-router.get('/opcionales', getOptionalProducts);        // Obtener productos opcionales
-
-// Rutas de gestión de caché
-router.post('/cache/reset', resetCache);               // Resetear todo el caché
-router.delete('/cache', clearCache);                   // Limpiar todo el caché
-
-// Rutas de divisas
-router.get('/currency/fetch', fetchCurrencyValuesController);  // Obtener valores de divisas frescos
-router.get('/currency/dollar', getCachedDollarValue);         // Obtener valor del dólar en caché
-router.get('/currency/euro', getCachedEuroValue);            // Obtener valor del euro en caché
-
-// Route to download the equipment template
+// Ruta para descargar plantilla (lógica local)
 router.get('/download-template', (req, res) => {
   const templatePath = path.join(__dirname, '../Plantilla_Carga_Equipos.xlsx');
-  
-  // Check if file exists
   if (fs.existsSync(templatePath)) {
     res.download(templatePath, 'Plantilla_Carga_Equipos.xlsx', (err) => {
       if (err) {
@@ -53,11 +35,10 @@ router.get('/download-template', (req, res) => {
   }
 });
 
-// Route to create individual equipment
-router.post('/equipment', createIndividualEquipment);
-
-// Nueva ruta para cargar productos desde Excel
-// POST /api/products/cargar-excel
-router.post('/cargar-excel', cargarProductosDesdeExcel);
+// --- Rutas que usan productoController (con 'o' - Mongoose) ---
+// Crear equipo individual (AHORA USA la versión con Mongoose)
+router.post('/equipment', productoCtrl.createIndividualEquipment);
+// Cargar productos desde Excel
+router.post('/cargar-excel', productoCtrl.cargarProductosDesdeExcel);
 
 module.exports = router;

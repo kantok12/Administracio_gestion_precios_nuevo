@@ -22,6 +22,10 @@ const initialFormData = {
     ancho_cm: '',
     alto_cm: '',
   },
+  // <<<--- Añadir campos de costo al estado inicial --->>>
+  costo_fabrica_original_eur: '',
+  costo_ano_cotizacion: '',
+  // <<<---------------------------------------------->>>
   // Otros campos opcionales de nivel superior
   tipo: '',
   familia: '',
@@ -123,7 +127,7 @@ export default function CargaEquiposPanel() {
     else if (formData.peso_kg.trim() === '') { newErrors.peso_kg = 'Peso (kg) es obligatorio'; isValid = false; }
 
     // Campos obligatorios en caracteristicas
-    if (!formData.caracteristicas.nombre_del_producto.trim()) { newErrors['caracteristicas.nombre_del_producto'] = 'Nombre es obligatorio'; isValid = false; }
+    // if (!formData.caracteristicas.nombre_del_producto.trim()) { newErrors['caracteristicas.nombre_del_producto'] = 'Nombre es obligatorio'; isValid = false; }
     if (!formData.caracteristicas.modelo.trim()) { newErrors['caracteristicas.modelo'] = 'Modelo es obligatorio'; isValid = false; }
 
     // Campos obligatorios en dimensiones
@@ -139,6 +143,16 @@ export default function CargaEquiposPanel() {
      if (isNaN(altoCm)) { newErrors['dimensiones.alto_cm'] = 'Alto (cm) debe ser un número válido'; isValid = false; }
      else if (formData.dimensiones.alto_cm.trim() === '') { newErrors['dimensiones.alto_cm'] = 'Alto (cm) es obligatorio'; isValid = false; }
 
+    // <<<--- Validar nuevos campos de costo (si no están vacíos, deben ser números) --->>>
+    if (formData.costo_fabrica_original_eur.trim() !== '' && isNaN(parseFloat(formData.costo_fabrica_original_eur))) {
+      newErrors.costo_fabrica_original_eur = 'Costo Fábrica debe ser un número válido';
+      isValid = false;
+    }
+    if (formData.costo_ano_cotizacion.trim() !== '' && isNaN(parseFloat(formData.costo_ano_cotizacion))) {
+      newErrors.costo_ano_cotizacion = 'Costo Año Cotización debe ser un número válido';
+      isValid = false;
+    }
+    // <<<----------------------------------------------------------------------------->>>
 
     // Validar especificaciones (nombre y valor no pueden estar vacíos si la fila existe)
     specItems.forEach(spec => {
@@ -182,6 +196,12 @@ export default function CargaEquiposPanel() {
       return acc;
     }, {} as Record<string, string>);
 
+    // --- DEBUG: Loggear el estado ANTES de construir el payload ---
+    console.log('Estado formData ANTES de crear payload:', formData);
+    console.log('Nombre producto en estado:', formData.caracteristicas.nombre_del_producto);
+    console.log('Modelo en estado:', formData.caracteristicas.modelo);
+    // -------------------------------------------------------------
+
     // Preparar payload final para enviar
     const payload = {
         ...formData,
@@ -192,14 +212,20 @@ export default function CargaEquiposPanel() {
             ancho_cm: parseFloat(formData.dimensiones.ancho_cm) || 0,
             alto_cm: parseFloat(formData.dimensiones.alto_cm) || 0,
          },
+         // <<<--- Convertir nuevos campos de costo a Number si existen --->>>
+         ...(formData.costo_fabrica_original_eur && { costo_fabrica_original_eur: parseFloat(formData.costo_fabrica_original_eur) }),
+         ...(formData.costo_ano_cotizacion && { costo_ano_cotizacion: parseFloat(formData.costo_ano_cotizacion) }),
+         // <<<-------------------------------------------------------------->>>
         especificaciones_tecnicas,
     };
 
     console.log('Enviando payload:', payload);
 
     try {
-        // Usar la ruta correcta del backend
-      const response = await fetch('/api/products/equipment', { 
+        // --- PRUEBA TEMPORAL: Usar URL absoluta del backend ---
+        // const response = await fetch('/api/products/equipment', { 
+        const response = await fetch('http://localhost:5001/api/products/equipment', { 
+        // -----------------------------------------------------
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -214,13 +240,14 @@ export default function CargaEquiposPanel() {
         throw new Error(result.message || `Error del servidor: ${response.status}`); 
       }
       
-      setSubmitStatus({ type: 'success', message: '¡Equipo creado exitosamente!' });
+      // Cambiar el mensaje de éxito y cerrar el modal
+      setSubmitStatus({ type: 'success', message: 'EL PRODUCTO A SIDO AGREGADO CON EXITO' }); // Mensaje exacto
       // Resetear formulario y specs después de éxito
       setFormData(initialFormData);
       setSpecItems([]);
       setNextSpecId(1);
-      // Opcional: cerrar modal después de un tiempo o con botón
-      // setTimeout(() => setShowModal(false), 2000);
+      // Cerrar el modal automáticamente
+      setShowModal(false); 
 
     } catch (error: unknown) {
       console.error('Error al crear equipo:', error);
@@ -457,16 +484,19 @@ export default function CargaEquiposPanel() {
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Código de Producto *</label>
                 <input type="text" name="Codigo_Producto" value={formData.Codigo_Producto} onChange={handleInputChange} style={inputStyle} required />
+                {errors.Codigo_Producto && <span style={errorStyle}>{errors.Codigo_Producto}</span>}
               </div>
               <div style={inputContainerStyle}>
-                <label style={labelStyle}>Nombre del Producto *</label>
-                <input type="text" name="nombre_del_producto" value={formData.caracteristicas.nombre_del_producto} onChange={(e) => handleNestedInputChange('caracteristicas', e)} style={inputStyle} required />
+                <label style={labelStyle}>Nombre del Producto</label>
+                <input type="text" name="nombre_del_producto" value={formData.caracteristicas.nombre_del_producto} onChange={(e) => handleNestedInputChange('caracteristicas', e)} style={inputStyle} />
+                {errors['caracteristicas.nombre_del_producto'] && <span style={errorStyle}>{errors['caracteristicas.nombre_del_producto']}</span>}
               </div>
             </div>
             <div style={inputGroupStyle}>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Modelo *</label>
                 <input type="text" name="modelo" value={formData.caracteristicas.modelo} onChange={(e) => handleNestedInputChange('caracteristicas', e)} style={inputStyle} required />
+                {errors['caracteristicas.modelo'] && <span style={errorStyle}>{errors['caracteristicas.modelo']}</span>}
               </div>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Categoría *</label>
@@ -496,6 +526,36 @@ export default function CargaEquiposPanel() {
                 <input type="number" name="peso_kg" value={formData.peso_kg} onChange={handleInputChange} style={inputStyle} required />
               </div>
             </div>
+
+            {/* <<<--- Nueva Sección: Costos --->>> */} 
+            <h3 style={{ marginTop: '20px', marginBottom: '12px', fontSize: '16px', fontWeight: 600, color: '#334155' }}>Costos</h3>
+            <div style={inputGroupStyle}>
+              <div style={inputContainerStyle}>
+                <label style={labelStyle}>Costo Fábrica Original (EUR)</label>
+                <input 
+                  type="number" 
+                  name="costo_fabrica_original_eur" 
+                  value={formData.costo_fabrica_original_eur} 
+                  onChange={handleInputChange} 
+                  style={inputStyle} 
+                  step="0.01" // Permite decimales
+                />
+                {errors.costo_fabrica_original_eur && <span style={errorStyle}>{errors.costo_fabrica_original_eur}</span>}
+              </div>
+              <div style={inputContainerStyle}>
+                <label style={labelStyle}>Costo Año Cotización</label>
+                <input 
+                  type="number" 
+                  name="costo_ano_cotizacion" 
+                  value={formData.costo_ano_cotizacion} 
+                  onChange={handleInputChange} 
+                  style={inputStyle} 
+                  step="0.01" // Permite decimales
+                />
+                {errors.costo_ano_cotizacion && <span style={errorStyle}>{errors.costo_ano_cotizacion}</span>}
+              </div>
+            </div>
+            {/* <<<-------------------------------->>> */}
 
             {/* Sección: Especificaciones Técnicas */}
             <h3 style={{ marginTop: '20px', marginBottom: '12px', fontSize: '16px', fontWeight: 600, color: '#334155' }}>Especificaciones Técnicas</h3>

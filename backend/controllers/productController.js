@@ -476,55 +476,100 @@ const createIndividualEquipment = async (req, res) => {
     const equipmentData = req.body;
 
     // Validate required fields
-    const requiredFields = [
-      'Codigo_Producto',
-      'nombre_del_producto',
-      'modelo',
-      'categoria',
-      'largo_cm',
-      'ancho_cm',
-      'alto_cm',
-      'peso_kg',
-      'linea_de_producto',
-      'combustible',
-      'hp',
-      'clasificacion_easysystems',
-      'codigo_ea',
-      'proveedor',
-      'procedencia'
-    ];
+    const requiredFields = {
+      topLevel: [
+        'Codigo_Producto',
+        'categoria',
+        'peso_kg',
+        'clasificacion_easysystems',
+        'codigo_ea',
+        'proveedor',
+        'procedencia'
+        // 'linea_de_producto', // Comentado - ¿Realmente requerido aquí?
+        // 'combustible',       // Comentado - ¿Realmente requerido aquí?
+        // 'hp'                 // Comentado - ¿Realmente requerido aquí?
+      ],
+      caracteristicas: ['nombre_del_producto', 'modelo'],
+      dimensiones: ['largo_cm', 'ancho_cm', 'alto_cm']
+    };
 
-    for (const field of requiredFields) {
-      if (!equipmentData[field]) {
+    // --- Validación Modificada --- 
+    // Validar campos de nivel superior
+    for (const field of requiredFields.topLevel) {
+      if (equipmentData[field] === undefined || equipmentData[field] === null || equipmentData[field] === '') {
         return res.status(400).json({ 
           message: `El campo ${field} es requerido`,
-          field: field
+          field: field 
         });
       }
     }
+    
+    // Validar campos anidados en caracteristicas
+    if (!equipmentData.caracteristicas) {
+        return res.status(400).json({ message: 'El objeto caracteristicas es requerido', field: 'caracteristicas' });
+    }
+    for (const field of requiredFields.caracteristicas) {
+       if (equipmentData.caracteristicas[field] === undefined || equipmentData.caracteristicas[field] === null || equipmentData.caracteristicas[field] === '') {
+         return res.status(400).json({ 
+           message: `El campo caracteristicas.${field} es requerido`,
+           field: `caracteristicas.${field}` 
+         });
+       }
+     }
 
-    // Validate numeric fields
-    const numericFields = ['largo_cm', 'ancho_cm', 'alto_cm', 'peso_kg', 'hp'];
-    for (const field of numericFields) {
-      if (isNaN(Number(equipmentData[field]))) {
-        return res.status(400).json({ 
-          message: `El campo ${field} debe ser un número`,
-          field: field
-        });
-      }
+    // Validar campos anidados en dimensiones
+    if (!equipmentData.dimensiones) {
+        return res.status(400).json({ message: 'El objeto dimensiones es requerido', field: 'dimensiones' });
+    }
+    for (const field of requiredFields.dimensiones) {
+       if (equipmentData.dimensiones[field] === undefined || equipmentData.dimensiones[field] === null || equipmentData.dimensiones[field] === '') {
+         return res.status(400).json({ 
+           message: `El campo dimensiones.${field} es requerido`,
+           field: `dimensiones.${field}` 
+         });
+       }
+     }
+    // --- Fin Validación Modificada --- 
+
+    // Validate numeric fields (adjust paths as needed)
+    const numericFields = {
+        topLevel: ['peso_kg' /*, 'hp'*/ ], // Comentado hp
+        dimensiones: ['largo_cm', 'ancho_cm', 'alto_cm']
+    };
+
+    // Validar números nivel superior
+    for (const field of numericFields.topLevel) {
+        if (equipmentData[field] === undefined || isNaN(Number(equipmentData[field]))) {
+            return res.status(400).json({ 
+                message: `El campo ${field} debe ser un número válido`,
+                field: field
+            });
+        }
+    }
+    // Validar números en dimensiones
+    if (equipmentData.dimensiones) { // Solo si dimensiones existe
+        for (const field of numericFields.dimensiones) {
+            if (equipmentData.dimensiones[field] === undefined || isNaN(Number(equipmentData.dimensiones[field]))) {
+                return res.status(400).json({ 
+                    message: `El campo dimensiones.${field} debe ser un número válido`,
+                    field: `dimensiones.${field}`
+                });
+            }
+        }
     }
 
-    // TODO: Add database integration here
+    // TODO: Add database integration here (consider using the Mongoose model now?)
     // For now, just return success
+    console.log('[INFO] Validation passed for:', equipmentData.Codigo_Producto);
     res.status(201).json({
-      message: 'Equipo creado exitosamente',
+      message: 'Equipo creado exitosamente (Validación manual pasada)',
       data: equipmentData
     });
 
   } catch (error) {
-    console.error('Error creating equipment:', error);
+    console.error('[ERROR] Error creating equipment (manual validation controller):', error);
     res.status(500).json({ 
-      message: 'Error al crear el equipo',
+      message: 'Error al crear el equipo (manual validation controller)',
       error: error.message 
     });
   }

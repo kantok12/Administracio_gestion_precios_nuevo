@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 // Esquema de Características (Subdocumento)
 const caracteristicasSchema = new mongoose.Schema({
-    nombre_del_producto: { type: String, required: [true, 'El nombre del producto es obligatorio.'], trim: true },
+    nombre_del_producto: { type: String, /* required: [true, 'El nombre del producto es obligatorio.'], */ trim: true },
     modelo: { type: String, required: [true, 'El modelo es obligatorio.'], trim: true },
     // Añade otros campos si existen dentro de caracteristicas
 }, { _id: false });
@@ -55,6 +55,10 @@ const productoSchema = new mongoose.Schema({
     descripcion: { type: String, trim: true },
     clasificacion_easysystems: { type: String, trim: true },
     codigo_ea: { type: String, trim: true },
+    // <<<--- NUEVOS CAMPOS DE COSTO --->>>
+    costo_fabrica_original_eur: { type: Number },
+    costo_ano_cotizacion: { type: Number },
+    // <<<------------------------------>>>
      // Campos JSON embebidos originales (mantener por compatibilidad con carga masiva si aún se usan)
     dimensiones_json: { type: mongoose.Schema.Types.Mixed },
     especificaciones_tecnicas_json: { type: mongoose.Schema.Types.Mixed },
@@ -65,7 +69,7 @@ const productoSchema = new mongoose.Schema({
     strict: false, // Permite campos no definidos en el schema 
     timestamps: true, // Añade createdAt y updatedAt automáticamente
     versionKey: false, // No añadir __v
-    collection: 'productos' // Especificar nombre consistente en minúsculas
+    collection: 'Productos' // Especificar nombre con P mayúscula
 });
 
 // Índice para búsquedas comunes
@@ -74,6 +78,6 @@ productoSchema.index({ "caracteristicas.nombre_del_producto": 1 });
 productoSchema.index({ categoria: 1 });
 
 // Crear y exportar el modelo. Mongoose se encargará de no recompilarlo.
-const Producto = mongoose.model('Producto', productoSchema, 'productos');
+const Producto = mongoose.model('Producto', productoSchema, 'Productos');
 
 module.exports = Producto; 

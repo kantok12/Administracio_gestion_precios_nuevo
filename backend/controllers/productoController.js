@@ -154,7 +154,21 @@ const cargarProductosDesdeExcel = async (req, res) => {
 
 // Función createIndividualEquipment (usa el modelo importado)
 const createIndividualEquipment = async (req, res) => {
-    console.log('[Create Equip] Received request body:', req.body);
+    // --- DEBUG: Log súper básico y robusto al inicio --- 
+    console.log(`
+--- [${new Date().toISOString()}] Accediendo a createIndividualEquipment... ---
+`);
+    // ---------------------------------------------------
+
+    // --- DEBUG: Log inicial del body recibido --- 
+    // Intentar loggear el body de forma segura
+    try {
+        console.log('[Create Equip] Raw request body received:', JSON.stringify(req.body, null, 2));
+    } catch (stringifyError) {
+        console.error('[Create Equip] Error stringifying req.body:', stringifyError);
+        console.log('[Create Equip] req.body (raw): ', req.body);
+    }
+    // ---------------------------------------------
     try {
         // Extraer datos del body
         const {
@@ -165,19 +179,30 @@ const createIndividualEquipment = async (req, res) => {
             dimensiones,    
             especificaciones_tecnicas, 
             metadata,
+            // Campos de costo nuevos
+            costo_fabrica_original_eur, 
+            costo_ano_cotizacion,
             // Otros campos...
             tipo, familia, proveedor, procedencia, nombre_comercial, descripcion, clasificacion_easysystems, codigo_ea 
         } = req.body;
+
+        // --- DEBUG: Log de datos extraídos --- 
+        console.log('[Create Equip] Extracted caracteristicas:', JSON.stringify(caracteristicas, null, 2));
+        console.log('[Create Equip] Extracted dimensiones:', JSON.stringify(dimensiones, null, 2));
+        // --------------------------------------
 
         // Construir el documento (Mongoose validará al crear)
         const nuevoProductoData = {
             Codigo_Producto,
             categoria,
             peso_kg,
-            caracteristicas,
-            dimensiones,
-            especificaciones_tecnicas: especificaciones_tecnicas || {}, 
+            caracteristicas, // Pasar el objeto extraído
+            dimensiones,   // Pasar el objeto extraído
+            especificaciones_tecnicas: especificaciones_tecnicas || {},
             metadata: metadata || {},
+            // Añadir nuevos campos (asegurarse que sean números si existen)
+            ...(costo_fabrica_original_eur !== undefined && { costo_fabrica_original_eur: Number(costo_fabrica_original_eur) }),
+            ...(costo_ano_cotizacion !== undefined && { costo_ano_cotizacion: Number(costo_ano_cotizacion) }),
             ...(tipo && { tipo }),
             ...(familia && { familia }),
             ...(proveedor && { proveedor }),
@@ -187,20 +212,31 @@ const createIndividualEquipment = async (req, res) => {
             ...(clasificacion_easysystems && { clasificacion_easysystems }),
             ...(codigo_ea && { codigo_ea }),
         };
+        
+        // --- DEBUG: Log del objeto a crear --- 
+        console.log('[Create Equip] Object being passed to Producto.create():', JSON.stringify(nuevoProductoData, null, 2));
+        // ------------------------------------
 
-        console.log('[Create Equip] Attempting to create product with data:', nuevoProductoData);
+        console.log('[Create Equip] Attempting to create product with data:', nuevoProductoData); // Log anterior, puede ser redundante ahora
 
         // Crear usando el modelo importado
         const productoCreado = await Producto.create(nuevoProductoData);
 
         console.log('[Create Equip] Product created successfully:', productoCreado);
-        res.status(201).json({ message: 'Equipo creado exitosamente', producto: productoCreado });
+        res.status(201).json({ message: 'Equipo creado exitosamente', producto: productoCreado }); // Devolver mensaje genérico, frontend lo cambia
 
     } catch (error) {
          console.error('[Create Equip] Error creating equipment:', error);
          if (error.name === 'ValidationError') {
+             // --- DEBUG: Log cuando ocurre ValidationError --- 
+             console.log(`
+--- !!! VALIDATION ERROR DETECTED (${new Date().toISOString()}) !!! ---
+`);
+             console.log('Validation Error Details:', JSON.stringify(error.errors, null, 2));
+             // ---------------------------------------------
              const errors = Object.values(error.errors).map(el => el.message);
-             return res.status(400).json({ message: 'Error de validación', errors });
+             // Devolver el primer error o todos concatenados
+             return res.status(400).json({ message: errors[0] || 'Error de validación', errors }); // Devolver mensaje específico de error
          } else if (error.code === 11000) { 
               return res.status(409).json({ message: 'Error: El Código de Producto ya existe.' });
          } else if (error instanceof mongoose.Error) {
