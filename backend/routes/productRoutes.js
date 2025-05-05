@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 
 // --- Importar controladores ---
 // Controlador para operaciones con Mongoose (crear, cargar excel)
@@ -10,6 +11,10 @@ const productCtrl = require('../controllers/productController.js');
 const path = require('path');
 const fs = require('fs');
 
+// Configurar multer para almacenamiento en memoria
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
 // --- Rutas que usan productController (sin 'o' - caché/webhook) ---
 router.get('/fetch', productCtrl.fetchProducts);
 router.get('/', productCtrl.getCachedProducts); // Asumiendo que esto debe mostrar caché
@@ -19,6 +24,11 @@ router.post('/cache/reset', productCtrl.resetCache);
 router.delete('/cache', productCtrl.clearCache); // Corregido DELETE
 router.get('/detail', productCtrl.getProductDetail);
 router.get('/opcionales', productCtrl.getOptionalProducts);
+
+// <<<--- Añadir Rutas para Divisas Cacheadas --->>>
+router.get('/currency/dollar', productCtrl.getCachedDollarValue);
+router.get('/currency/euro', productCtrl.getCachedEuroValue);
+// <<<------------------------------------------->>>
 
 // Ruta para descargar plantilla (lógica local)
 router.get('/download-template', (req, res) => {
@@ -40,5 +50,7 @@ router.get('/download-template', (req, res) => {
 router.post('/equipment', productoCtrl.createIndividualEquipment);
 // Cargar productos desde Excel
 router.post('/cargar-excel', productoCtrl.cargarProductosDesdeExcel);
+// <<<--- Nueva Ruta para Carga Masiva --->>>
+router.post('/upload-bulk', upload.single('archivoExcel'), productoCtrl.uploadBulkProducts);
 
 module.exports = router;

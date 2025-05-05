@@ -47,6 +47,11 @@ export default function CargaEquiposPanel() {
   const [errors, setErrors] = useState<Record<string, string>>({}); // Para errores de validación
   const [submitStatus, setSubmitStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error'; message: string }>({ type: 'idle', message: '' });
 
+  // <<<--- Estados para Carga Masiva --->>>
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<{ type: 'idle' | 'uploading' | 'success' | 'error'; message: string; summary?: any }>({ type: 'idle', message: '' });
+  // <<<-------------------------------->>>
+
   // --- Manejadores de Input --- 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -260,12 +265,76 @@ export default function CargaEquiposPanel() {
   const handleDownloadTemplate = () => {
     const link = document.createElement('a');
     // La ruta debe coincidir con la definida en productRoutes.js
-    link.href = '/api/products/download-template'; 
+    link.href = 'http://localhost:5001/api/products/download-template'; // <-- Usar URL completa por si acaso
     link.download = 'Plantilla_Carga_Equipos.xlsx';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
+
+  // <<<--- Manejadores para Carga Masiva --->>>
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setSelectedFile(event.target.files[0]);
+      setUploadStatus({ type: 'idle', message: '' }); // Reset status on new file selection
+      console.log('Archivo seleccionado:', event.target.files[0].name);
+    } else {
+      setSelectedFile(null);
+    }
+  };
+
+  const handleBulkUpload = async () => {
+    if (!selectedFile) {
+      setUploadStatus({ type: 'error', message: 'Por favor, seleccione un archivo Excel.' });
+      return;
+    }
+
+    setUploadStatus({ type: 'uploading', message: 'Subiendo y procesando archivo...' });
+
+    const formData = new FormData();
+    formData.append('archivoExcel', selectedFile); // El nombre 'archivoExcel' debe coincidir con upload.single() en backend
+
+    try {
+      const response = await fetch('http://localhost:5001/api/products/upload-bulk', {
+        method: 'POST',
+        body: formData,
+        // ¡No establecer Content-Type manualmente para FormData!
+      });
+
+      const result = await response.json();
+
+      // --- Revisar si hubo errores, incluso con respuesta OK (status 207) --- 
+      const hasErrors = result.summary?.errors?.length > 0;
+      const finalStatusType = hasErrors ? 'error' : 'success';
+      const finalMessage = hasErrors 
+          ? `Error al cargar: ${result.summary.errors.length} ${result.summary.errors.length === 1 ? 'error encontrado' : 'errores encontrados'}.` 
+          : (result.message || 'Carga completada exitosamente.');
+      // ------------------------------------------------------------------------
+
+      if (!response.ok && !hasErrors) { // Si la respuesta NO es ok Y NO es por errores parciales
+        // Usar mensaje de error del backend
+        throw new Error(result.message || `Error del servidor: ${response.status}`);
+      }
+
+      // Establecer estado final (éxito o error basado en errores parciales)
+      setUploadStatus({
+        type: finalStatusType, 
+        message: finalMessage,
+        summary: result.summary // Guardar el resumen para mostrar
+      });
+      console.log('Resultado carga masiva:', result);
+      setSelectedFile(null); // Limpiar archivo seleccionado
+      // Limpiar el input de archivo (forma un poco hacky pero común)
+      const fileInput = document.getElementById('bulk-upload-input') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+    } catch (error: unknown) {
+      console.error('Error en carga masiva:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido durante la carga.';
+      setUploadStatus({ type: 'error', message: errorMessage });
+    }
+  };
+  // <<<------------------------------------>>>
 
   const panelStyle: React.CSSProperties = {
     // Removido padding aquí para confiar en el padding de App.tsx
@@ -634,128 +703,90 @@ export default function CargaEquiposPanel() {
       {/* Sección de Carga Masiva */}
       <div style={sectionStyle}>
         <div style={cardStyle}>
-          <h2 style={subtitleStyle}>Carga de Equipos Base</h2>
+          <h2 style={subtitleStyle}>Carga Masiva de Equipos</h2>
           <p style={descriptionStyle}>
-            Utilice una plantilla Excel con las siguientes columnas. Todos los campos son obligatorios a menos que se indique lo contrario.
+            Descargue la plantilla Excel, complete los datos y suba el archivo para cargar múltiples equipos a la vez.
+            La columna 'es_opcional' acepta valores como SI/NO, VERDADERO/FALSO, 1/0.
           </p>
+
+          {/* Botón Descargar Plantilla */}
+          <button 
+            style={{...buttonStyle, marginBottom: '20px'}} 
+            onClick={handleDownloadTemplate}
+          >
+            <Download size={16} />
+            Descargar Plantilla
+          </button>
           
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Columna</th>
-                <th style={thStyle}>Tipo</th>
-                <th style={thStyle}>Descripción</th>
-                <th style={thStyle}>Ejemplo</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={tdStyle}>Codigo_Producto</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>Código único del producto</td>
-                <td style={tdStyle}>"61529"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>nombre_del_producto</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>Nombre completo del producto</td>
-                <td style={tdStyle}>"Chipeadora Motor A530L - 35 HP K"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>modelo</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>Modelo específico</td>
-                <td style={tdStyle}>"A530L - 35 HP K - Chasis 80km/h"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>categoria</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>Categoría del equipo</td>
-                <td style={tdStyle}>"Chipeadora Motor"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>largo_cm</td>
-                <td style={tdStyle}>Número</td>
-                <td style={tdStyle}>Largo en centímetros</td>
-                <td style={tdStyle}>3400</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>ancho_cm</td>
-                <td style={tdStyle}>Número</td>
-                <td style={tdStyle}>Ancho en centímetros</td>
-                <td style={tdStyle}>1380</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>alto_cm</td>
-                <td style={tdStyle}>Número</td>
-                <td style={tdStyle}>Alto en centímetros</td>
-                <td style={tdStyle}>2200</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>peso_kg</td>
-                <td style={tdStyle}>Número</td>
-                <td style={tdStyle}>Peso en kilogramos</td>
-                <td style={tdStyle}>1800</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <h3 style={{...subtitleStyle, fontSize: '16px'}}>Especificaciones Técnicas</h3>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Columna</th>
-                <th style={thStyle}>Tipo</th>
-                <th style={thStyle}>Descripción</th>
-                <th style={thStyle}>Ejemplo</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={tdStyle}>clasificacion_easysystems</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>Clasificación del sistema</td>
-                <td style={tdStyle}>"1. Chipeadora Equipo"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>codigo_ea</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>Código EA</td>
-                <td style={tdStyle}>"CHm530L-d35R-15"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>proveedor</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>Nombre del proveedor</td>
-                <td style={tdStyle}>"Jensen"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>procedencia</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>País de origen</td>
-                <td style={tdStyle}>"Alemania"</td>
-              </tr>
-            </tbody>
-          </table>
-
+          {/* Zona de Carga */}
           <div style={uploadZoneStyle}>
             <UploadCloud size={48} style={{ marginBottom: '16px', color: '#94a3b8' }} />
             <p style={{...descriptionStyle, marginBottom: '24px'}}>
-              Arrastre aquí su archivo Excel o haga clic para seleccionarlo.
+              {selectedFile ? `Archivo seleccionado: ${selectedFile.name}` : 'Arrastre aquí su archivo Excel o haga clic para seleccionarlo.'}
               <br />
               Formatos soportados: .xlsx, .xls
             </p>
-            <div style={{display: 'flex', gap: '12px', justifyContent: 'center'}}>
-              <button style={buttonStyle} onClick={handleDownloadTemplate}>
-                <Download size={16} />
-                Descargar Plantilla
-              </button>
-              <button style={disabledButtonStyle} disabled>
-                <FileText size={16} />
-                Seleccionar Archivo
-              </button>
-            </div>
+            {/* Input de archivo oculto y botón visible */}
+            <input 
+              type="file" 
+              id="bulk-upload-input" 
+              style={{ display: 'none' }} 
+              accept=".xlsx, .xls" 
+              onChange={handleFileChange} 
+            />
+            <label htmlFor="bulk-upload-input" style={{...buttonStyle, cursor: 'pointer', backgroundColor: '#64748b', marginRight: '12px'}}>
+              <FileText size={16} />
+              Seleccionar Archivo
+            </label>
+            <button 
+              style={selectedFile && uploadStatus.type !== 'uploading' ? buttonStyle : disabledButtonStyle} 
+              onClick={handleBulkUpload} 
+              disabled={!selectedFile || uploadStatus.type === 'uploading'}
+            >
+              {uploadStatus.type === 'uploading' ? 'Cargando...' : 'Cargar Archivo'}
+            </button>
           </div>
+
+          {/* Mensajes de Estado/Resultado Carga Masiva */}
+          {uploadStatus.type === 'uploading' && (
+            <div style={loadingStatusStyle}>{uploadStatus.message}</div>
+          )}
+          {uploadStatus.type === 'success' && (
+            <div style={successStatusStyle}>
+              <CheckCircle size={16} /> {uploadStatus.message}
+            </div>
+          )}
+          {uploadStatus.type === 'error' && (
+            <div style={errorStatusStyle}>
+              <AlertCircle size={16} /> {uploadStatus.message}
+            </div>
+          )}
+          
+          {/* Mostrar Resumen detallado en caso de éxito o error con summary */}
+          {uploadStatus.summary && (
+            <div style={{ marginTop: '15px', padding: '15px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', backgroundColor: '#f8fafc' }}>
+              <h4 style={{ marginBottom: '10px', fontWeight: 600 }}>Resumen de la Carga:</h4>
+              <ul style={{ listStyle: 'disc', paddingLeft: '20px' }}>
+                <li>Filas en Excel: {uploadStatus.summary.totalRowsInExcel ?? 'N/A'}</li>
+                <li>Filas Procesadas: {uploadStatus.summary.rowsProcessed ?? 'N/A'}</li>
+                <li>Insertados: {uploadStatus.summary.inserted ?? 0}</li>
+                <li>Actualizados: {uploadStatus.summary.updated ?? 0}</li>
+                <li>Filas con Errores: {uploadStatus.summary.rowsWithErrors ?? 0}</li>
+              </ul>
+              {uploadStatus.summary.errors && uploadStatus.summary.errors.length > 0 && (
+                <div style={{ marginTop: '10px' }}>
+                  <h5 style={{ marginBottom: '5px', fontWeight: 600 }}>Detalle de Errores:</h5>
+                  <ul style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #fee2e2', padding: '10px', borderRadius: '4px' }}>
+                    {uploadStatus.summary.errors.map((err: any, index: number) => (
+                      <li key={index} style={{ marginBottom: '5px' }}>
+                        <strong>{err.codigo ? `Código ${err.codigo}:` : 'Fila sin código:'}</strong> {err.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{fontSize: '13px', color: '#64748b'}}>
             <strong>Notas importantes:</strong>

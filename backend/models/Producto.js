@@ -58,6 +58,7 @@ const productoSchema = new mongoose.Schema({
     // <<<--- NUEVOS CAMPOS DE COSTO --->>>
     costo_fabrica_original_eur: { type: Number },
     costo_ano_cotizacion: { type: Number },
+    es_opcional: { type: Boolean, default: false },
     // <<<------------------------------>>>
      // Campos JSON embebidos originales (mantener por compatibilidad con carga masiva si aún se usan)
     dimensiones_json: { type: mongoose.Schema.Types.Mixed },

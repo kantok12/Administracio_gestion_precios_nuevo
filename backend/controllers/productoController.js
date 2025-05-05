@@ -483,6 +483,196 @@ const clearCache = async (req, res) => {
     }
 };
 
+// <<<--- NUEVA FUNCIÓN PARA CARGA MASIVA DESDE ARCHIVO SUBIDO --->>>
+const uploadBulkProducts = async (req, res) => {
+    console.log('[Bulk Upload] Request received.');
+    if (!req.file) {
+        return res.status(400).json({ message: 'No se subió ningún archivo.' });
+    }
+
+    console.log(`[Bulk Upload] Processing file: ${req.file.originalname}, size: ${req.file.size} bytes`);
+
+    try {
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        // Usar { raw: true } para fechas si es necesario, { raw: false } para valores formateados
+        const data = xlsx.utils.sheet_to_json(worksheet, { raw: false });
+
+        if (!data || data.length === 0) {
+            return res.status(400).json({ message: 'No se encontraron datos en el archivo Excel subido.' });
+        };
+
+        console.log(`[Bulk Upload] Found ${data.length} rows in uploaded Excel.`);
+        let operaciones = [];
+        let errores = [];
+
+        // Iterar sobre las filas, empezando desde la fila 2 del Excel (índice 0 + 2)
+        data.forEach((row, index) => {
+            const rowNumber = index + 2; // Número de fila en el archivo Excel
+            let codigoProducto = 'N/A'; // Para referencia en errores
+
+            try {
+                // Mapeo robusto
+                const getVal = (key) => row[key]?.toString().trim();
+                const getNum = (key) => {
+                    const val = getVal(key);
+                    // Permitir vacío o null, pero fallar si no es número cuando hay valor
+                    if (val === undefined || val === null || val === '') return undefined;
+                    const num = Number(val);
+                    if (isNaN(num)) throw new Error(`Valor no numérico para ${key}`);
+                    return num;
+                }
+                const getBool = (key) => {
+                    const val = getVal(key)?.toLowerCase();
+                    // Permitir vacío o null como false
+                    if (val === undefined || val === null || val === '') return false;
+                    if (['true', 'verdadero', 'si', '1'].includes(val)) return true;
+                    if (['false', 'falso', 'no', '0'].includes(val)) return false;
+                    throw new Error(`Valor no booleano reconocible para ${key}`);
+                }
+
+                codigoProducto = getVal('Codigo_Producto') || 'N/A';
+
+                let productoData = {
+                    Codigo_Producto: codigoProducto === 'N/A' ? undefined : codigoProducto,
+                    categoria: getVal('categoria'),
+                    peso_kg: getNum('peso_kg'),
+                    caracteristicas: {
+                        nombre_del_producto: getVal('nombre_del_producto'),
+                        modelo: getVal('modelo')
+                    },
+                    dimensiones: {
+                        largo_cm: getNum('largo_cm'),
+                        ancho_cm: getNum('ancho_cm'),
+                        alto_cm: getNum('alto_cm')
+                    },
+                    costo_fabrica_original_eur: getNum('costo_fabrica_original_eur'),
+                    costo_ano_cotizacion: getNum('costo_ano_cotizacion'),
+                    es_opcional: getBool('es_opcional'),
+                    tipo: getVal('tipo'),
+                    familia: getVal('familia'),
+                    proveedor: getVal('proveedor'),
+                    procedencia: getVal('procedencia'),
+                    nombre_comercial: getVal('nombre_comercial'),
+                    descripcion: getVal('descripcion'),
+                    clasificacion_easysystems: getVal('clasificacion_easysystems'),
+                    codigo_ea: getVal('codigo_ea'),
+                    especificaciones_tecnicas: {}, // Inicializar
+                    metadata: {}, // Inicializar
+                };
+
+                // Limpiar campos undefined (importante para evitar enviar 'undefined' a Mongoose)
+                Object.keys(productoData).forEach(key => {
+                    if (productoData[key] === undefined) {
+                        delete productoData[key];
+                    }
+                });
+                 // Limpiar subdocumentos si están vacíos o sus campos son undefined
+                if (productoData.caracteristicas && Object.keys(productoData.caracteristicas).every(k => productoData.caracteristicas[k] === undefined)) delete productoData.caracteristicas;
+                if (productoData.dimensiones && Object.keys(productoData.dimensiones).every(k => productoData.dimensiones[k] === undefined)) delete productoData.dimensiones;
+                
+                // Validar con Mongoose
+                const tempProduct = new Producto(productoData);
+                const validationError = tempProduct.validateSync();
+
+                if (validationError) {
+                    // Extraer errores específicos
+                    for (const fieldPath in validationError.errors) {
+                        errores.push({
+                            rowNumber: rowNumber,
+                            field: fieldPath, // Campo que falló (puede ser anidado)
+                            message: validationError.errors[fieldPath].message,
+                            value: validationError.errors[fieldPath].value, // Valor que causó el error
+                            codigo: codigoProducto
+                        });
+                    }
+                    console.warn(`[Bulk Upload] Fila ${rowNumber} (Código: ${codigoProducto}) con errores de validación.`);
+                } else if (!productoData.Codigo_Producto) {
+                     // Error si no hay código después de todo el procesamiento
+                     console.warn(`[Bulk Upload] Fila ${rowNumber} sin Codigo_Producto.`);
+                     errores.push({ rowNumber: rowNumber, field: 'Codigo_Producto', message: 'Falta Codigo_Producto o está vacío.', codigo: 'N/A' });
+                 } else {
+                    // Preparar operación si todo está bien
+                    operaciones.push({
+                        updateOne: {
+                            filter: { Codigo_Producto: productoData.Codigo_Producto },
+                            update: { $set: productoData },
+                            upsert: true
+                        }
+                    });
+                }
+
+            } catch (parseError) {
+                // Capturar errores de getNum/getBool
+                console.warn(`[Bulk Upload] Fila ${rowNumber} (Código: ${codigoProducto}) con error de parseo: ${parseError.message}`);
+                errores.push({
+                    rowNumber: rowNumber,
+                    field: parseError.message.includes('para') ? parseError.message.split('para ')[1] : 'Desconocido', // Intentar obtener el campo
+                    message: parseError.message,
+                    codigo: codigoProducto
+                });
+            }
+        }); // Fin del forEach
+
+        console.log(`[Bulk Upload] Prepared ${operaciones.length} bulk operations. Found ${errores.length} rows with initial errors.`);
+        let resultado = { upsertedCount: 0, modifiedCount: 0, writeErrors: [] };
+        let finalErrorList = [...errores]; // Copiar errores iniciales
+
+        if (operaciones.length > 0) {
+            try {
+                 resultado = await Producto.bulkWrite(operaciones, { ordered: false });
+                 console.log('[Bulk Upload] Bulk write operation result:', resultado);
+                 // Añadir errores específicos del bulkWrite si existen
+                 if (resultado.hasWriteErrors()) {
+                     resultado.getWriteErrors().forEach(err => {
+                        const codigo = err.err.op?.Codigo_Producto || err.err.op?.$set?.Codigo_Producto || 'Desconocido';
+                        finalErrorList.push({ 
+                             rowNumber: 'N/A', // Es difícil saber la fila original exacta desde bulkWriteError
+                             field: 'bulkWrite', // Indicar que es error de escritura DB
+                             message: err.errmsg || 'Error de escritura en Base de Datos',
+                             details: `Código de error: ${err.code}`,
+                             codigo: codigo
+                         });
+                     });
+                 }
+            } catch (bulkError) {
+                 console.error('[Bulk Upload] Error executing BulkWrite:', bulkError);
+                 // Error general del bulkWrite
+                 finalErrorList.push({ 
+                    rowNumber: 'N/A',
+                    field: 'bulkWrite',
+                    message: 'Error general durante la operación de escritura masiva.', 
+                    details: bulkError.message, 
+                    codigo: 'N/A' 
+                 });
+            }
+        }
+
+        const resumen = {
+            totalRowsInExcel: data.length,
+            rowsProcessed: data.length, // Se intentan procesar todas las filas
+            rowsAttemptedInBulk: operaciones.length,
+            rowsWithErrors: finalErrorList.length,
+            inserted: resultado.upsertedCount || 0,
+            updated: resultado.modifiedCount || 0,
+            writeErrorsCount: resultado.getWriteErrors?.().length || 0,
+            errors: finalErrorList // Usar la lista final de errores
+        };
+        console.log('[Bulk Upload] Final Summary:', JSON.stringify(resumen, null, 2));
+        
+        const status = finalErrorList.length > 0 ? 207 : 200; // 207 Multi-Status si hay errores
+        const message = finalErrorList.length > 0 ? `Carga completada con ${finalErrorList.length} errores.` : 'Carga masiva completada exitosamente.';
+
+        res.status(status).json({ message, summary: resumen });
+
+    } catch (error) {
+        console.error('[Bulk Upload] General error processing uploaded file:', error);
+        res.status(500).json({ message: 'Error interno del servidor al procesar el archivo subido.', error: error.message });
+    }
+};
+// <<<------------------------------------------------------------>>>
+
 // --- Exportaciones (asegurar que todas las necesarias estén aquí) ---
 module.exports = {
     cargarProductosDesdeExcel,
@@ -502,4 +692,5 @@ module.exports = {
     // updateCurrencyValues, // Si es llamada externamente (aunque parece interna con setInterval)
     // saveCacheToDisk, // Si es llamada externamente
     // readProductsFromFile // Si es llamada externamente
+    uploadBulkProducts,
 }; 
