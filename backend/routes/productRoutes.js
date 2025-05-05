@@ -17,6 +17,9 @@ const {
 const path = require('path');
 const fs = require('fs');
 
+// Importar la nueva función del controlador
+const { cargarProductosDesdeExcel } = require('../controllers/productoController'); // Asegúrate que la ruta al controlador sea correcta
+
 // Rutas principales de productos
 router.get('/fetch', fetchProducts);                    // Obtener productos frescos del webhook
 router.get('/', getCachedProducts);                     // Obtener productos del caché
@@ -52,5 +55,9 @@ router.get('/download-template', (req, res) => {
 
 // Route to create individual equipment
 router.post('/equipment', createIndividualEquipment);
+
+// Nueva ruta para cargar productos desde Excel
+// POST /api/products/cargar-excel
+router.post('/cargar-excel', cargarProductosDesdeExcel);
 
 module.exports = router;

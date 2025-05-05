@@ -1,86 +1,239 @@
-import React, { useState } from 'react';
-import { UploadCloud, FileText, Download, Plus, X } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { UploadCloud, FileText, Download, Plus, X, AlertCircle, CheckCircle } from 'lucide-react';
 
-export default function CargaEquiposPanel() {
-  const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({
-    Codigo_Producto: '',
+// Interfaz para una especificación técnica
+interface SpecItem {
+  id: number; // Para el key en React
+  nombre: string;
+  valor: string;
+}
+
+// Estado inicial para el formulario, reflejando la estructura del Schema
+const initialFormData = {
+  Codigo_Producto: '',
+  categoria: '',
+  peso_kg: '',
+  caracteristicas: {
     nombre_del_producto: '',
     modelo: '',
-    categoria: '',
+  },
+  dimensiones: {
     largo_cm: '',
     ancho_cm: '',
     alto_cm: '',
-    peso_kg: '',
-    linea_de_producto: '',
-    marca: '',
-    combustible: '',
-    hp: '',
-    clasificacion_easysystems: '',
-    codigo_ea: '',
-    proveedor: '',
-    procedencia: ''
-  });
+  },
+  // Otros campos opcionales de nivel superior
+  tipo: '',
+  familia: '',
+  proveedor: '',
+  procedencia: '',
+  nombre_comercial: '',
+  descripcion: '',
+  clasificacion_easysystems: '',
+  codigo_ea: '',
+  // No incluimos especificaciones técnicas aquí, se manejarán por separado
+  // metadata tampoco se maneja desde el form individual por ahora
+};
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+export default function CargaEquiposPanel() {
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState(initialFormData);
+  const [specItems, setSpecItems] = useState<SpecItem[]>([]); // Estado para especificaciones dinámicas
+  const [nextSpecId, setNextSpecId] = useState(1); // Para generar IDs únicos para keys
+  const [errors, setErrors] = useState<Record<string, string>>({}); // Para errores de validación
+  const [submitStatus, setSubmitStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error'; message: string }>({ type: 'idle', message: '' });
+
+  // --- Manejadores de Input --- 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+    // Limpiar error para este campo al empezar a escribir
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
   };
 
+  const handleNestedInputChange = (group: 'caracteristicas' | 'dimensiones', e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [group]: {
+        ...prev[group],
+        [name]: value
+      }
+    }));
+    // Limpiar error para este campo
+    const errorKey = `${group}.${name}`;
+    if (errors[errorKey]) {
+      setErrors(prev => ({ ...prev, [errorKey]: '' }));
+    }
+  };
+
+  // --- Manejadores de Especificaciones Técnicas --- 
+  const handleSpecChange = (id: number, field: 'nombre' | 'valor', value: string) => {
+    setSpecItems(prevSpecs => 
+      prevSpecs.map(spec => 
+        spec.id === id ? { ...spec, [field]: value } : spec
+      )
+    );
+    // Limpiar errores relacionados con specs
+    if (errors[`spec_${id}_nombre`] || errors[`spec_${id}_valor`]) {
+        setErrors(prev => {
+            const newErrors = {...prev};
+            delete newErrors[`spec_${id}_nombre`];
+            delete newErrors[`spec_${id}_valor`];
+            return newErrors;
+        });
+    }
+  };
+
+  const addSpecItem = () => {
+    setSpecItems(prevSpecs => [
+      ...prevSpecs,
+      { id: nextSpecId, nombre: '', valor: '' }
+    ]);
+    setNextSpecId(prevId => prevId + 1);
+  };
+
+  const removeSpecItem = (idToRemove: number) => {
+    setSpecItems(prevSpecs => prevSpecs.filter(spec => spec.id !== idToRemove));
+     // Limpiar errores asociados si existían
+     setErrors(prev => {
+        const newErrors = {...prev};
+        delete newErrors[`spec_${idToRemove}_nombre`];
+        delete newErrors[`spec_${idToRemove}_valor`];
+        return newErrors;
+    });
+  };
+
+  // --- Validación --- 
+  const validateForm = useCallback(() => {
+    const newErrors: Record<string, string> = {};
+    let isValid = true;
+
+    // Campos obligatorios de nivel superior
+    if (!formData.Codigo_Producto.trim()) { newErrors.Codigo_Producto = 'Código es obligatorio'; isValid = false; }
+    if (!formData.categoria.trim()) { newErrors.categoria = 'Categoría es obligatoria'; isValid = false; }
+    // Validar peso después de intentar parsear
+    const pesoKg = parseFloat(formData.peso_kg);
+    if (isNaN(pesoKg)) { newErrors.peso_kg = 'Peso (kg) debe ser un número válido'; isValid = false; }
+    else if (formData.peso_kg.trim() === '') { newErrors.peso_kg = 'Peso (kg) es obligatorio'; isValid = false; }
+
+    // Campos obligatorios en caracteristicas
+    if (!formData.caracteristicas.nombre_del_producto.trim()) { newErrors['caracteristicas.nombre_del_producto'] = 'Nombre es obligatorio'; isValid = false; }
+    if (!formData.caracteristicas.modelo.trim()) { newErrors['caracteristicas.modelo'] = 'Modelo es obligatorio'; isValid = false; }
+
+    // Campos obligatorios en dimensiones
+    const largoCm = parseFloat(formData.dimensiones.largo_cm);
+    if (isNaN(largoCm)) { newErrors['dimensiones.largo_cm'] = 'Largo (cm) debe ser un número válido'; isValid = false; }
+    else if (formData.dimensiones.largo_cm.trim() === '') { newErrors['dimensiones.largo_cm'] = 'Largo (cm) es obligatorio'; isValid = false; }
+
+    const anchoCm = parseFloat(formData.dimensiones.ancho_cm);
+    if (isNaN(anchoCm)) { newErrors['dimensiones.ancho_cm'] = 'Ancho (cm) debe ser un número válido'; isValid = false; }
+    else if (formData.dimensiones.ancho_cm.trim() === '') { newErrors['dimensiones.ancho_cm'] = 'Ancho (cm) es obligatorio'; isValid = false; }
+
+    const altoCm = parseFloat(formData.dimensiones.alto_cm);
+     if (isNaN(altoCm)) { newErrors['dimensiones.alto_cm'] = 'Alto (cm) debe ser un número válido'; isValid = false; }
+     else if (formData.dimensiones.alto_cm.trim() === '') { newErrors['dimensiones.alto_cm'] = 'Alto (cm) es obligatorio'; isValid = false; }
+
+
+    // Validar especificaciones (nombre y valor no pueden estar vacíos si la fila existe)
+    specItems.forEach(spec => {
+        const nombreTrimmed = spec.nombre.trim();
+        const valorTrimmed = spec.valor.trim();
+        if (!nombreTrimmed) { newErrors[`spec_${spec.id}_nombre`] = 'Nombre de especificación no puede estar vacío'; isValid = false; }
+        if (!valorTrimmed) { newErrors[`spec_${spec.id}_valor`] = 'Valor de especificación no puede estar vacío'; isValid = false; }
+        // Validar unicidad de nombres de especificación
+        if (nombreTrimmed) {
+             const duplicate = specItems.find(s => s.id !== spec.id && s.nombre.trim().toLowerCase() === nombreTrimmed.toLowerCase());
+             if (duplicate) {
+                 newErrors[`spec_${spec.id}_nombre`] = `Nombre "${spec.nombre}" duplicado (ignorando mayúsculas)`; 
+                 isValid = false;
+             }
+         }
+    });
+
+    setErrors(newErrors);
+    return isValid;
+  }, [formData, specItems]);
+
+  // --- Submit --- 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitStatus({ type: 'idle', message: '' }); // Reset status
+    setErrors({}); // Reset errors
+
+    if (!validateForm()) {
+        setSubmitStatus({ type: 'error', message: 'Por favor, corrija los errores en el formulario.' });
+        return;
+    }
+
+    setSubmitStatus({ type: 'loading', message: 'Creando equipo...' });
+
+    // Formatear especificaciones técnicas como objeto { nombre: valor }
+    const especificaciones_tecnicas = specItems.reduce((acc, spec) => {
+        // Solo incluir si nombre y valor no están vacíos (ya validado, pero doble check)
+        if (spec.nombre.trim() && spec.valor.trim()) {
+             acc[spec.nombre.trim()] = spec.valor.trim();
+        }
+      return acc;
+    }, {} as Record<string, string>);
+
+    // Preparar payload final para enviar
+    const payload = {
+        ...formData,
+         // Convertir números a Number
+         peso_kg: parseFloat(formData.peso_kg) || 0,
+         dimensiones: {
+            largo_cm: parseFloat(formData.dimensiones.largo_cm) || 0,
+            ancho_cm: parseFloat(formData.dimensiones.ancho_cm) || 0,
+            alto_cm: parseFloat(formData.dimensiones.alto_cm) || 0,
+         },
+        especificaciones_tecnicas,
+    };
+
+    console.log('Enviando payload:', payload);
+
     try {
-      const response = await fetch('/api/equipment', {
+        // Usar la ruta correcta del backend
+      const response = await fetch('/api/products/equipment', { 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Error al crear el equipo');
-      }
 
       const result = await response.json();
-      alert('Equipo creado exitosamente');
-      // Reset form and close modal
-      setFormData({
-        Codigo_Producto: '',
-        nombre_del_producto: '',
-        modelo: '',
-        categoria: '',
-        largo_cm: '',
-        ancho_cm: '',
-        alto_cm: '',
-        peso_kg: '',
-        linea_de_producto: '',
-        marca: '',
-        combustible: '',
-        hp: '',
-        clasificacion_easysystems: '',
-        codigo_ea: '',
-        proveedor: '',
-        procedencia: ''
-      });
-      setShowModal(false);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        alert(error.message);
-      } else {
-        alert('Error desconocido al crear el equipo');
+
+      if (!response.ok) {
+        // Usar mensaje de error del backend si está disponible
+        throw new Error(result.message || `Error del servidor: ${response.status}`); 
       }
+      
+      setSubmitStatus({ type: 'success', message: '¡Equipo creado exitosamente!' });
+      // Resetear formulario y specs después de éxito
+      setFormData(initialFormData);
+      setSpecItems([]);
+      setNextSpecId(1);
+      // Opcional: cerrar modal después de un tiempo o con botón
+      // setTimeout(() => setShowModal(false), 2000);
+
+    } catch (error: unknown) {
+      console.error('Error al crear equipo:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido al crear el equipo';
+      setSubmitStatus({ type: 'error', message: errorMessage });
     }
   };
 
+  // --- Descarga Plantilla --- 
   const handleDownloadTemplate = () => {
-    // Create a link element
     const link = document.createElement('a');
-    link.href = '/api/download-template';
+    // La ruta debe coincidir con la definida en productRoutes.js
+    link.href = '/api/products/download-template'; 
     link.download = 'Plantilla_Carga_Equipos.xlsx';
     document.body.appendChild(link);
     link.click();
@@ -212,6 +365,8 @@ export default function CargaEquiposPanel() {
     color: '#334155'
   };
 
+  const errorStyle: React.CSSProperties = { color: '#ef4444', fontSize: '12px', marginTop: '4px' };
+
   // Modal styles
   const modalOverlayStyle: React.CSSProperties = {
     position: 'fixed',
@@ -219,33 +374,35 @@ export default function CargaEquiposPanel() {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     display: showModal ? 'flex' : 'none',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
+    padding: '20px'
   };
 
   const modalContentStyle: React.CSSProperties = {
     backgroundColor: 'white',
     borderRadius: '8px',
-    padding: '24px',
-    width: '90%',
-    maxWidth: '900px',
+    padding: '30px',
+    width: '100%',
+    maxWidth: '800px',
     maxHeight: '90vh',
-    overflow: 'auto',
+    overflowY: 'auto',
     position: 'relative',
-    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)'
   };
 
   const modalCloseButtonStyle: React.CSSProperties = {
     position: 'absolute',
-    top: '16px',
-    right: '16px',
+    top: '15px',
+    right: '15px',
     background: 'none',
     border: 'none',
     cursor: 'pointer',
     color: '#64748b',
+    padding: '5px'
   };
 
   const actionButtonsStyle: React.CSSProperties = {
@@ -254,6 +411,12 @@ export default function CargaEquiposPanel() {
     alignItems: 'center',
     marginBottom: '24px',
   };
+
+  const specRowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' };
+  const statusMessageStyle: React.CSSProperties = { marginTop: '15px', padding: '10px', borderRadius: '6px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' };
+  const successStatusStyle: React.CSSProperties = { ...statusMessageStyle, backgroundColor: '#dcfce7', color: '#166534' };
+  const errorStatusStyle: React.CSSProperties = { ...statusMessageStyle, backgroundColor: '#fee2e2', color: '#991b1b' };
+  const loadingStatusStyle: React.CSSProperties = { ...statusMessageStyle, backgroundColor: '#e0f2fe', color: '#075985' };
 
   return (
     <div style={panelStyle}>
@@ -272,8 +435,8 @@ export default function CargaEquiposPanel() {
       </div>
 
       {/* Modal para carga individual */}
-      <div style={modalOverlayStyle}>
-        <div style={modalContentStyle}>
+      <div style={modalOverlayStyle} onClick={() => setShowModal(false)}>
+        <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
           <button 
             style={modalCloseButtonStyle} 
             onClick={() => setShowModal(false)}
@@ -297,13 +460,13 @@ export default function CargaEquiposPanel() {
               </div>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Nombre del Producto *</label>
-                <input type="text" name="nombre_del_producto" value={formData.nombre_del_producto} onChange={handleInputChange} style={inputStyle} required />
+                <input type="text" name="nombre_del_producto" value={formData.caracteristicas.nombre_del_producto} onChange={(e) => handleNestedInputChange('caracteristicas', e)} style={inputStyle} required />
               </div>
             </div>
             <div style={inputGroupStyle}>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Modelo *</label>
-                <input type="text" name="modelo" value={formData.modelo} onChange={handleInputChange} style={inputStyle} required />
+                <input type="text" name="modelo" value={formData.caracteristicas.modelo} onChange={(e) => handleNestedInputChange('caracteristicas', e)} style={inputStyle} required />
               </div>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Categoría *</label>
@@ -316,17 +479,17 @@ export default function CargaEquiposPanel() {
             <div style={inputGroupStyle}>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Largo (cm) *</label>
-                <input type="number" name="largo_cm" value={formData.largo_cm} onChange={handleInputChange} style={inputStyle} required />
+                <input type="number" name="largo_cm" value={formData.dimensiones.largo_cm} onChange={(e) => handleNestedInputChange('dimensiones', e)} style={inputStyle} required />
               </div>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Ancho (cm) *</label>
-                <input type="number" name="ancho_cm" value={formData.ancho_cm} onChange={handleInputChange} style={inputStyle} required />
+                <input type="number" name="ancho_cm" value={formData.dimensiones.ancho_cm} onChange={(e) => handleNestedInputChange('dimensiones', e)} style={inputStyle} required />
               </div>
             </div>
             <div style={inputGroupStyle}>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Alto (cm) *</label>
-                <input type="number" name="alto_cm" value={formData.alto_cm} onChange={handleInputChange} style={inputStyle} required />
+                <input type="number" name="alto_cm" value={formData.dimensiones.alto_cm} onChange={(e) => handleNestedInputChange('dimensiones', e)} style={inputStyle} required />
               </div>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Peso (kg) *</label>
@@ -336,26 +499,6 @@ export default function CargaEquiposPanel() {
 
             {/* Sección: Especificaciones Técnicas */}
             <h3 style={{ marginTop: '20px', marginBottom: '12px', fontSize: '16px', fontWeight: 600, color: '#334155' }}>Especificaciones Técnicas</h3>
-            <div style={inputGroupStyle}>
-              <div style={inputContainerStyle}>
-                <label style={labelStyle}>Línea de Producto *</label>
-                <input type="text" name="linea_de_producto" value={formData.linea_de_producto} onChange={handleInputChange} style={inputStyle} required />
-              </div>
-              <div style={inputContainerStyle}>
-                <label style={labelStyle}>Marca</label>
-                <input type="text" name="marca" value={formData.marca} onChange={handleInputChange} style={inputStyle} />
-              </div>
-            </div>
-            <div style={inputGroupStyle}>
-              <div style={inputContainerStyle}>
-                <label style={labelStyle}>Combustible *</label>
-                <input type="text" name="combustible" value={formData.combustible} onChange={handleInputChange} style={inputStyle} required />
-              </div>
-              <div style={inputContainerStyle}>
-                <label style={labelStyle}>HP *</label>
-                <input type="number" name="hp" value={formData.hp} onChange={handleInputChange} style={inputStyle} required />
-              </div>
-            </div>
             <div style={inputGroupStyle}>
               <div style={inputContainerStyle}>
                 <label style={labelStyle}>Clasificación EasySystems *</label>
@@ -376,6 +519,41 @@ export default function CargaEquiposPanel() {
                 <input type="text" name="procedencia" value={formData.procedencia} onChange={handleInputChange} style={inputStyle} required />
               </div>
             </div>
+
+            {/* Sección: Especificaciones Técnicas Dinámicas */}
+            <section>
+              <h3 style={{...subtitleStyle, fontSize: '16px'}}>Especificaciones Técnicas</h3>
+              {specItems.map((spec, index) => (
+                <div key={spec.id} style={specRowStyle}>
+                  <div style={{...inputContainerStyle, flexGrow: 1}}>
+                    <input 
+                      type="text" 
+                      placeholder={`Nombre Especificación ${index + 1}`}
+                      value={spec.nombre}
+                      onChange={(e) => handleSpecChange(spec.id, 'nombre', e.target.value)}
+                      style={inputStyle}
+                    />
+                    {errors[`spec_${spec.id}_nombre`] && <span style={errorStyle}>{errors[`spec_${spec.id}_nombre`]}</span>}
+                  </div>
+                  <div style={{...inputContainerStyle, flexGrow: 1}}>
+                    <input 
+                      type="text" 
+                      placeholder={`Valor Especificación ${index + 1}`}
+                      value={spec.valor}
+                      onChange={(e) => handleSpecChange(spec.id, 'valor', e.target.value)}
+                      style={inputStyle}
+                    />
+                    {errors[`spec_${spec.id}_valor`] && <span style={errorStyle}>{errors[`spec_${spec.id}_valor`]}</span>}
+                  </div>
+                  <button type="button" onClick={() => removeSpecItem(spec.id)} style={{...buttonStyle, padding: '8px'}} aria-label="Eliminar especificación">
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={addSpecItem} style={{...buttonStyle, marginTop: '10px'}}>
+                <Plus size={16} /> Añadir Especificación
+              </button>
+            </section>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
               <button type="button" 
@@ -473,30 +651,6 @@ export default function CargaEquiposPanel() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td style={tdStyle}>linea_de_producto</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>Código de línea</td>
-                <td style={tdStyle}>"CH"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>marca</td>
-                <td style={tdStyle}>Texto (Opcional)</td>
-                <td style={tdStyle}>Marca del equipo</td>
-                <td style={tdStyle}>"Jensen"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>combustible</td>
-                <td style={tdStyle}>Texto</td>
-                <td style={tdStyle}>Tipo de combustible</td>
-                <td style={tdStyle}>"Diesel"</td>
-              </tr>
-              <tr>
-                <td style={tdStyle}>hp</td>
-                <td style={tdStyle}>Número</td>
-                <td style={tdStyle}>Potencia en HP</td>
-                <td style={tdStyle}>35</td>
-              </tr>
               <tr>
                 <td style={tdStyle}>clasificacion_easysystems</td>
                 <td style={tdStyle}>Texto</td>
