@@ -19,8 +19,8 @@ const dimensionesSchema = new mongoose.Schema({
 const productoSchema = new mongoose.Schema({
     Codigo_Producto: {
         type: String, 
-        required: [true, 'El Código de Producto es obligatorio.'], 
-        unique: true, 
+        // required: [true, 'El Código de Producto es obligatorio.'],
+        // unique: true,
         trim: true 
     },
     categoria: { 
@@ -75,8 +75,13 @@ const productoSchema = new mongoose.Schema({
 
 // Índice para búsquedas comunes
 productoSchema.index({ Codigo_Producto: 1 });
-productoSchema.index({ "caracteristicas.nombre_del_producto": 1 });
 productoSchema.index({ categoria: 1 });
+productoSchema.index({ "caracteristicas.nombre_del_producto": 1 });
+// <<<--- NUEVOS ÍNDICES --->>>
+productoSchema.index({ "caracteristicas.modelo": 1 });
+productoSchema.index({ proveedor: 1 });
+productoSchema.index({ es_opcional: 1 });
+// <<<---------------------->>>
 
 // Crear y exportar el modelo. Mongoose se encargará de no recompilarlo.
 const Producto = mongoose.model('Producto', productoSchema, 'Productos');

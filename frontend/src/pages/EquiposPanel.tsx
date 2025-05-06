@@ -44,6 +44,12 @@ interface OpcionalesResponse {
   products: Producto[];
 }
 
+// Definición de la interfaz ProductoConOpcionales (puede estar en un archivo de tipos más adelante)
+interface ProductoConOpcionales {
+  principal: Producto;
+  opcionales: Producto[];
+}
+
 // --- Placeholder para la función API --- 
 // Deberás implementar esto en tu archivo de servicios API (ej. frontend/src/services/api.ts)
 const api = {
@@ -82,19 +88,10 @@ export default function EquiposPanel() {
   const [categorias, setCategorias] = useState<string[]>(['Todas las categorías']);
   const [totalMostrado, setTotalMostrado] = useState(0);
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
-  const [loadingOpcionales, setLoadingOpcionales] = useState<string | null>(null);
-  const [loadingSettings, setLoadingSettings] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [productoSeleccionado, setProductoSeleccionado] = useState<Producto | null>(null);
   const [showDetalleModal, setShowDetalleModal] = useState(false);
   const [detalleProducto, setDetalleProducto] = useState<Producto | null>(null);
-  const [opcionalesLoading, setOpcionalesLoading] = useState(false);
-  const [opcionalesError, setOpcionalesError] = useState<string | null>(null);
-  const [opcionalesData, setOpcionalesData] = useState<Producto[]>([]);
-  const [showCotizacionModal, setShowCotizacionModal] = useState(false);
-  const [productoParaCotizar, setProductoParaCotizar] = useState<Producto | null>(null);
 
-  // NUEVOS Estados para Vista/Modal Opcionales (botón Opcionales)
+  // Estados para el modal de "Ver Opcionales" (el que se abre desde el botón de información en cada fila)
   const [showVistaOpcionalesModal, setShowVistaOpcionalesModal] = useState(false);
   const [productoParaVistaOpcionales, setProductoParaVistaOpcionales] = useState<Producto | null>(null);
   const [vistaOpcionalesData, setVistaOpcionalesData] = useState<Producto[]>([]);
@@ -111,6 +108,24 @@ export default function EquiposPanel() {
   const [pricingLoading, setPricingLoading] = useState<boolean>(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
   // -------------------------------------------------------
+
+  // --- Estado para el modo de selección de equipos para cotización ---
+  const [isSelectionModeActive, setIsSelectionModeActive] = useState<boolean>(false);
+  // --- Estado para almacenar los códigos de los productos seleccionados para cotizar ---
+  const [productosSeleccionadosParaCotizar, setProductosSeleccionadosParaCotizar] = useState<string[]>([]);
+  // --- NUEVO: Estado para la configuración secuencial de opcionales ---
+  const [indiceProductoActualParaOpcionales, setIndiceProductoActualParaOpcionales] = useState<number | null>(null);
+  const [opcionalesSeleccionadosPorProducto, setOpcionalesSeleccionadosPorProducto] = useState<Record<string, Producto[]>>({});
+  // --- NUEVO: Estado para pasar datos estructurados a DetallesCargaPanel ---
+  const [datosParaDetallesCarga, setDatosParaDetallesCarga] = useState<ProductoConOpcionales[]>([]);
+  // --- NUEVO: Estado para el producto principal cuyos opcionales se están configurando ---
+  const [productoActualConfigurandoOpcionales, setProductoActualConfigurandoOpcionales] = useState<Producto | null>(null);
+
+  // --- NUEVO: Estados para los datos del OpcionalesCotizacionModal ---
+  // Estos se llenarán dinámicamente para el productoActualConfigurandoOpcionales
+  const [opcionalesDataModal, setOpcionalesDataModal] = useState<Producto[]>([]);
+  const [opcionalesLoadingModal, setOpcionalesLoadingModal] = useState(false);
+  const [opcionalesErrorModal, setOpcionalesErrorModal] = useState<string | null>(null);
 
   // --- Estilos Unificados (Basados en Ver Detalle) ---
   const unifiedModalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1040 };
@@ -233,12 +248,10 @@ export default function EquiposPanel() {
 
   const handleConfigurar = async (producto: Producto) => {
     console.log("Abriendo selección de opcionales para:", producto.nombre_del_producto);
-    setProductoParaCotizar(producto);
-    setOpcionalesLoading(true); // Mostrar loading en el modal mientras carga
-    setOpcionalesError(null);
-    setOpcionalesData([]);
-    setShowCotizacionModal(true); // Abrir el modal de selección
-    setLoadingSettings(producto.codigo_producto || null);
+    setProductoActualConfigurandoOpcionales(producto);
+    setOpcionalesLoadingModal(true); // Mostrar loading en el modal mientras carga
+    setOpcionalesErrorModal(null);
+    setOpcionalesDataModal([]);
 
     try {
       if (!producto.codigo_producto || !producto.Modelo || !producto.categoria) {
@@ -259,16 +272,15 @@ export default function EquiposPanel() {
       }
       const data = await response.json();
       if (data.success && data.data && Array.isArray(data.data.products)) {
-        setOpcionalesData(data.data.products); // Cargar datos para el modal
+        setOpcionalesDataModal(data.data.products); // Cargar datos para el modal
       } else {
          throw new Error('Formato de respuesta inválido');
       }
     } catch (error: any) {
        console.error('Error al obtener opcionales para modal configuración:', error);
-       setOpcionalesError(error instanceof Error ? error.message : 'Error desconocido');
+       setOpcionalesErrorModal(error instanceof Error ? error.message : 'Error desconocido');
     } finally {
-       setOpcionalesLoading(false); // Terminar carga del modal
-       setLoadingSettings(null);
+       setOpcionalesLoadingModal(false); // Terminar carga del modal
     }
   };
   
@@ -345,137 +357,374 @@ export default function EquiposPanel() {
       if (event.key === 'Escape') {
          if (showVistaOpcionalesModal) { handleCloseModal(); }
          if (showDetalleModal) { handleCloseDetalleModal(); }
-         if (showCotizacionModal) { handleCloseCotizacionModal(); } // Ya cierra este
-         // No necesitamos cerrar DetallesCargaPanel con ESC (se usa botón Volver)
       }
     };
     window.addEventListener('keydown', handleEscKey);
     return () => { window.removeEventListener('keydown', handleEscKey); };
-  }, [showVistaOpcionalesModal, showDetalleModal, showCotizacionModal]);
+  }, [showVistaOpcionalesModal, showDetalleModal]);
 
   const handleCloseDetalleModal = () => {
     setShowDetalleModal(false);
     setDetalleProducto(null);
   };
 
-  const handleCloseCotizacionModal = () => { 
-      setShowCotizacionModal(false); 
-      setProductoParaCotizar(null); // Limpiar al cerrar sin confirmar
-      setOpcionalesData([]); // Limpiar datos del modal
-      setOpcionalesError(null);
+  // --- NUEVO: Función para avanzar en la configuración de opcionales o finalizar ---
+  const avanzarConfiguracionOpcionales = (guardarOpcionalesActuales: Producto[] | null = null) => {
+    if (indiceProductoActualParaOpcionales === null) return; // No debería pasar si se llama correctamente
+
+    const codigoProductoActual = productosSeleccionadosParaCotizar[indiceProductoActualParaOpcionales];
+
+    if (codigoProductoActual && guardarOpcionalesActuales) {
+      setOpcionalesSeleccionadosPorProducto(prev => ({
+        ...prev,
+        [codigoProductoActual]: guardarOpcionalesActuales
+      }));
+    } else if (codigoProductoActual && guardarOpcionalesActuales === null) { // Modal cerrado sin confirmar
+      setOpcionalesSeleccionadosPorProducto(prev => ({
+        ...prev,
+        [codigoProductoActual]: prev[codigoProductoActual] || [] // Mantener opcionales previos o array vacío si no hay
+      }));
+    }
+
+    const siguienteIndice = indiceProductoActualParaOpcionales + 1;
+
+    if (siguienteIndice < productosSeleccionadosParaCotizar.length) {
+      setIndiceProductoActualParaOpcionales(siguienteIndice);
+      const siguienteCodigoProducto = productosSeleccionadosParaCotizar[siguienteIndice];
+      const siguienteProducto = productosOriginales.find(p => p.codigo_producto === siguienteCodigoProducto);
+      if (siguienteProducto) {
+        console.log("Configurando opcionales para el SIGUIENTE producto:", siguienteProducto.nombre_del_producto);
+        // Asegurarse de que el modal de opcionales se limpie y recargue para el nuevo producto
+        setOpcionalesDataModal([]); // Limpiar datos de opcionales del producto anterior
+        setOpcionalesErrorModal(null);
+        handleConfigurar(siguienteProducto); // Abre el modal para el siguiente producto
+      } else {
+        console.error("Error: Siguiente producto para configurar no encontrado.");
+        // Considerar cómo manejar este error (ej. finalizar prematuramente)
+        setIndiceProductoActualParaOpcionales(null);
+        setPasoCotizacion(0); // Volver a la tabla de equipos
+      }
+    } else {
+      // Todos los productos seleccionados han sido configurados (o se les dio la oportunidad)
+      console.log("Configuración de opcionales finalizada.");
+      console.log("Productos Principales Seleccionados (códigos):", productosSeleccionadosParaCotizar);
+      console.log("Opcionales Seleccionados por Producto:", opcionalesSeleccionadosPorProducto);
+      
+      const itemsParaDetalleCarga: ProductoConOpcionales[] = productosSeleccionadosParaCotizar.map(codigoPrincipal => {
+        const principal = productosOriginales.find(p => p.codigo_producto === codigoPrincipal);
+        const opcionales = opcionalesSeleccionadosPorProducto[codigoPrincipal] || [];
+        return {
+          principal: principal || {} as Producto, // Evitar undefined si no se encuentra
+          opcionales: opcionales
+        };
+      }).filter(item => item.principal && item.principal.codigo_producto); // Asegurarse que el principal es válido
+
+      console.log("Datos preparados para DetallesCargaPanel:", itemsParaDetalleCarga);
+      setDatosParaDetallesCarga(itemsParaDetalleCarga);
+      
+      setPasoCotizacion(1); // Transición a DetallesCargaPanel
+      setIndiceProductoActualParaOpcionales(null); // Resetear índice
+    }
   };
 
-  // --- NUEVO: Función llamada desde OpcionalesCotizacionModal ---
-  const handleConfirmarSeleccionOpcionales = (codigosSeleccionados: string[]) => {
-    console.log("Confirmando opcionales con códigos:", codigosSeleccionados);
-    // Filtrar los opcionales completos basados en los códigos seleccionados
-    const seleccionadosCompletos = opcionalesData.filter(op => 
-        op.codigo_producto && codigosSeleccionados.includes(op.codigo_producto)
-    );
-    setOpcionalesConfirmados(seleccionadosCompletos); // Guardar los opcionales seleccionados
-    setPasoCotizacion(1); // Avanzar al paso 1: Detalles de la Carga
-    setShowCotizacionModal(false); // Cerrar el modal de selección
-    setProductoParaCotizar(productoParaCotizar); // Mantener el producto principal para el siguiente paso
-  };
-  
-  // --- NUEVO: Función para volver desde DetallesCargaPanel ---
-   const handleVolverDesdeDetalles = () => {
-    setPasoCotizacion(0); // Volver al paso 0: Tabla de Equipos
-    setProductoParaCotizar(null); // Limpiar producto en cotización
-    setOpcionalesConfirmados([]); // Limpiar opcionales confirmados
-    setPricingResult(null); // Limpiar resultado al volver
-    setPricingError(null);
-  };
+  // --- useEffect para cargar opcionales cuando productoActualConfigurandoOpcionales cambia y estamos en paso 1 ---
+  useEffect(() => {
+    const fetchOpcionalesParaProductoActual = async () => {
+      if (!productoActualConfigurandoOpcionales || !productoActualConfigurandoOpcionales.codigo_producto) {
+        setOpcionalesDataModal([]);
+        return;
+      }
 
-  // --- MODIFICADO: Función para avanzar desde DetallesCargaPanel y CALCULAR PRECIOS ---
-  const handleSiguienteDesdeDetalles = async () => {
-    if (!productoParaCotizar?.codigo_producto) {
-      console.error("No hay producto seleccionado para calcular precios.");
-      setPricingError("Error: No se seleccionó ningún producto.");
+      console.log(`Cargando opcionales (para modal) para: ${productoActualConfigurandoOpcionales.nombre_del_producto}`);
+      setOpcionalesLoadingModal(true);
+      setOpcionalesErrorModal(null);
+      setOpcionalesDataModal([]); // Limpiar datos previos
+
+      try {
+        const { codigo_producto, Modelo, categoria } = productoActualConfigurandoOpcionales;
+        if (!codigo_producto || !Modelo || !categoria) {
+          throw new Error('Faltan parámetros (código, modelo o categoría) para obtener opcionales.');
+        }
+        const params = new URLSearchParams();
+        params.append('codigo', codigo_producto);
+        params.append('modelo', Modelo);
+        params.append('categoria', categoria);
+        const url = `http://localhost:5001/api/products/opcionales?${params.toString()}`;
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const response = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: `Error del servidor: ${response.status}` }));
+          throw new Error(errorData.message || `Error del servidor: ${response.status}`);
+        }
+        const dataAPI = await response.json(); // Renombrado para evitar conflicto con opcionalesDataModal
+
+        if (dataAPI.success && dataAPI.data && Array.isArray(dataAPI.data.products)) {
+          setOpcionalesDataModal(dataAPI.data.products);
+        } else {
+          throw new Error('Formato de respuesta de opcionales inválido.');
+        }
+      } catch (error: any) {
+        console.error('Error al obtener opcionales para el producto actual en modal:', error);
+        if (error.name === 'AbortError') {
+          setOpcionalesErrorModal('La solicitud para obtener opcionales tardó demasiado.');
+        } else {
+          setOpcionalesErrorModal(error instanceof Error ? error.message : 'Error desconocido al obtener opcionales.');
+        }
+        setOpcionalesDataModal([]);
+      } finally {
+        setOpcionalesLoadingModal(false);
+      }
+    };
+
+    if (pasoCotizacion === 1 && productoActualConfigurandoOpcionales) {
+      fetchOpcionalesParaProductoActual();
+    }
+  }, [productoActualConfigurandoOpcionales, pasoCotizacion]);
+
+  // --- MODIFICADO: Función llamada desde OpcionalesCotizacionModal --- 
+  // Esta función se llama cuando el usuario confirma la selección de opcionales DENTRO DEL MODAL
+  // para el producto principal que se está mostrando actualmente en ese modal.
+  const handleConfirmarOpcionalesParaPrincipalActual = (codigosOpcionalesSeleccionados: string[]) => {
+    if (!productoActualConfigurandoOpcionales || !productoActualConfigurandoOpcionales.codigo_producto) {
+      console.error("Error: No hay producto principal actual para confirmar opcionales.");
+      // Considerar cerrar el modal o mostrar un error al usuario aquí si esto sucede.
       return;
     }
+    const codigoPrincipalActual = productoActualConfigurandoOpcionales.codigo_producto;
+    console.log(`Opcionales confirmados para ${codigoPrincipalActual}:`, codigosOpcionalesSeleccionados);
     
-    console.log(`Iniciando cálculo de precios para producto: ${productoParaCotizar.codigo_producto}`);
-    setPricingLoading(true);
-    setPricingError(null);
-    setPricingResult(null); // Limpiar resultado previo
+    // opcionalesDataModal tiene los opcionales disponibles para el productoActualConfigurandoOpcionales
+    const seleccionadosCompletos = opcionalesDataModal.filter(op => 
+        op.codigo_producto && codigosOpcionalesSeleccionados.includes(op.codigo_producto)
+    );
 
-    try {
-      // Llamar a la API del backend
-      // Enviamos solo el productCode inicialmente para usar defaults de categoría
-      const result = await api.calculatePricing({ 
-        productCode: productoParaCotizar.codigo_producto 
-        // Podrías añadir aquí parámetros específicos si necesitas sobrescribir los defaults
-        // ej: discountPercentage: 0.15 
-      });
+    setOpcionalesSeleccionadosPorProducto(prev => ({
+      ...prev,
+      [codigoPrincipalActual]: seleccionadosCompletos
+    }));
+
+    // Avanzar al siguiente producto principal para configurar sus opcionales, o finalizar.
+    avanzarAlSiguientePrincipalParaOpcionales(); 
+  };
+  
+  // --- MODIFICADO: Al cerrar el modal de cotización/opcionales (OpcionalesCotizacionModal) ---
+  // Esto se llama si el usuario cierra el modal (ej. con su botón 'X') ANTES de completar la selección de todos los productos.
+  const handleCerrarProcesoSeleccionOpcionalesGlobal = () => { 
+      console.log("Proceso global de selección de opcionales cerrado/cancelado por el usuario.");
+      setIsSelectionModeActive(false); // Salir del modo de checkboxes si aún estaba activo (no debería)
+      setProductosSeleccionadosParaCotizar([]);
+      setOpcionalesSeleccionadosPorProducto({});
+      setIndiceProductoActualParaOpcionales(null);
+      setProductoActualConfigurandoOpcionales(null);
+      setDatosParaDetallesCarga([]);
       
-      console.log("Resultado del cálculo recibido:", result);
-      setPricingResult(result); // Guardar el resultado completo
-      setPasoCotizacion(2); // Avanzar al paso 2 (Detalles Envío) si el cálculo fue exitoso
+      // Limpiar estados del modal
+      setOpcionalesDataModal([]);
+      setOpcionalesLoadingModal(false);
+      setOpcionalesErrorModal(null);
 
-    } catch (error) {
-      console.error("Error al calcular precios:", error);
-      const errorMsg = error instanceof Error ? error.message : "Error desconocido al calcular precios.";
-      setPricingError(errorMsg);
-      // No avanzamos al paso 2 si hay error
-    } finally {
-      setPricingLoading(false);
+      setPasoCotizacion(0); // Volver a la tabla de equipos
+  };
+
+  // --- NUEVA: Función para avanzar al siguiente producto principal para la selección de opcionales ---
+  const avanzarAlSiguientePrincipalParaOpcionales = () => {
+    const siguienteIndice = (indiceProductoActualParaOpcionales ?? -1) + 1; // Inicia en 0 si es null
+
+    if (siguienteIndice < productosSeleccionadosParaCotizar.length) {
+      setIndiceProductoActualParaOpcionales(siguienteIndice);
+      const siguienteCodigoProducto = productosSeleccionadosParaCotizar[siguienteIndice];
+      const siguienteProducto = productosOriginales.find(p => p.codigo_producto === siguienteCodigoProducto);
+      
+      if (siguienteProducto) {
+        console.log(`Avanzando para configurar opcionales de: ${siguienteProducto.nombre_del_producto}`);
+        setProductoActualConfigurandoOpcionales(siguienteProducto);
+        // El useEffect se encargará de llamar a fetchOpcionalesParaProductoActual
+        // y el OpcionalesCotizacionModal se re-renderizará con el nuevo producto y sus opcionales.
+      } else {
+        console.error(`Error: Siguiente producto principal (${siguienteCodigoProducto}) no encontrado. Deteniendo el proceso.`);
+        handleCerrarProcesoSeleccionOpcionalesGlobal(); // Volver al inicio si hay un error grave
+      }
+    } else {
+      // Todos los productos principales han sido procesados para opcionales.
+      console.log("Todos los productos principales han tenido la oportunidad de configurar opcionales.");
+      
+      const itemsParaDetalleCargaCalc: ProductoConOpcionales[] = productosSeleccionadosParaCotizar.map(codigoPrincipal => {
+        const principal = productosOriginales.find(p => p.codigo_producto === codigoPrincipal);
+        const opcionales = opcionalesSeleccionadosPorProducto[codigoPrincipal] || []; // Usar los opcionales guardados
+        return {
+          principal: principal || {} as Producto,
+          opcionales: opcionales
+        };
+      }).filter(item => item.principal && item.principal.codigo_producto); 
+      
+      setDatosParaDetallesCarga(itemsParaDetalleCargaCalc);
+      console.log("Datos finales para Detalles de la Carga:", itemsParaDetalleCargaCalc);
+
+      setPasoCotizacion(2); // Ir a Detalles de la Carga
+      
+      // Limpiar estados de la configuración de opcionales actual
+      setIndiceProductoActualParaOpcionales(null);
+      setProductoActualConfigurandoOpcionales(null);
+      // No limpiar opcionalesSeleccionadosPorProducto aquí, se usó para datosParaDetallesCarga
+      // No limpiar productosSeleccionadosParaCotizar aquí, se usó para datosParaDetallesCarga
     }
   };
 
-  // --- NUEVO: Función para volver desde DetallesEnvioPanel ---
-  const handleVolverDesdeEnvio = () => {
-    console.log("Volviendo a Detalles de Carga...");
-    setPasoCotizacion(1); // Volver al paso 1
-    // No limpiamos el resultado aquí, podría ser útil verlo al volver
-    // setPricingResult(null); 
-    setPricingError(null); // Sí limpiar error
+  // --- MODIFICADO: Función para proceder a la selección de opcionales (cuando se hace clic en "Cotizar X Equipos")
+  const handleProceedToOptionSelection = () => {
+    if (productosSeleccionadosParaCotizar.length === 0) return;
+
+    setIsSelectionModeActive(false); // Salir del modo de selección con checkboxes
+    setOpcionalesSeleccionadosPorProducto({}); // Limpiar opcionales guardados de una sesión anterior
+    setIndiceProductoActualParaOpcionales(0); // Empezar con el primer producto seleccionado
+
+    const primerCodigoProducto = productosSeleccionadosParaCotizar[0];
+    const primerProducto = productosOriginales.find(p => p.codigo_producto === primerCodigoProducto);
+    
+    if (primerProducto) {
+      setProductoActualConfigurandoOpcionales(primerProducto);
+      // El useEffect se encargará de buscar los opcionales del primerProducto
+      // y el OpcionalesCotizacionModal se mostrará porque pasoCotizacion será 1
+    } else {
+      console.error("No se encontró el primer producto para configurar opcionales. Volviendo al inicio.");
+      handleCerrarProcesoSeleccionOpcionalesGlobal(); // Resetear todo y volver al paso 0
+      return; 
+    }
+    setPasoCotizacion(1); // Cambiar al panel/vista de "Selección de Opcionales"
   };
 
-  // --- NUEVO: Función para eliminar un opcional confirmado ---
-  const handleEliminarOpcionalConfirmado = (codigoAEliminar: string) => {
-    console.log("Eliminando opcional confirmado:", codigoAEliminar);
-    setOpcionalesConfirmados(prevConfirmados => 
-      prevConfirmados.filter(op => op.codigo_producto !== codigoAEliminar)
-    );
+  // --- Función para eliminar un opcional confirmado (desde DetallesCargaPanel) ---
+  // Esta es la versión correcta que actualiza los estados relevantes
+  const handleEliminarOpcionalConfirmado = (codigoPrincipal: string, codigoOpcionalAEliminar: string) => {
+    console.log(`Eliminando opcional ${codigoOpcionalAEliminar} del principal ${codigoPrincipal}`);
+    setOpcionalesSeleccionadosPorProducto(prevOpcionalesPorProducto => {
+      const nuevosOpcionalesParaPrincipal = (prevOpcionalesPorProducto[codigoPrincipal] || []).filter(
+        op => op.codigo_producto !== codigoOpcionalAEliminar
+      );
+      return {
+        ...prevOpcionalesPorProducto,
+        [codigoPrincipal]: nuevosOpcionalesParaPrincipal
+      };
+    });
+    // Actualizar datosParaDetallesCarga para que la UI de DetallesCargaPanel refleje el cambio
+    setDatosParaDetallesCarga(prevDatos => prevDatos.map(item => {
+      if (item.principal.codigo_producto === codigoPrincipal) {
+        return {
+          ...item,
+          opcionales: (item.opcionales || []).filter(op => op.codigo_producto !== codigoOpcionalAEliminar)
+        };
+      }
+      return item;
+    }).filter(item => item.principal.codigo_producto)); // Asegurar que no queden items sin principal
+  };
+
+  // --- Función para alternar el modo de selección de equipos ---
+  const toggleSelectionMode = () => {
+    setIsSelectionModeActive(prevIsActive => {
+      if (prevIsActive) { 
+        // Al salir del modo de selección, no hacer nada especial aquí ya que "Cotizar" tiene su propia lógica.
+      }
+      return !prevIsActive;
+    });
+  };
+
+  // --- Función para manejar la selección/deselección de un producto para cotizar ---
+  const handleToggleProductoParaCotizar = (codigoProducto: string) => {
+    setProductosSeleccionadosParaCotizar(prevSeleccionados => {
+      if (prevSeleccionados.includes(codigoProducto)) {
+        return prevSeleccionados.filter(codigo => codigo !== codigoProducto);
+      } else {
+        return [...prevSeleccionados, codigoProducto];
+      }
+    });
+  };
+
+  // --- Funciones de navegación y cálculo de precios que fueron eliminadas accidentalmente ---
+  const handleVolverDesdeDetalles = () => {
+    // Al volver desde DetallesCargaPanel, usualmente se quiere volver a la tabla de equipos
+    // o al inicio del proceso de selección de opcionales si se desea modificar.
+    // Por consistencia con handleCerrarProcesoSeleccionOpcionalesGlobal, reseteamos todo.
+    handleCerrarProcesoSeleccionOpcionalesGlobal(); 
+  };
+
+  const handleSiguienteDesdeDetalles = async () => {
+    // Esta función se llama desde DetallesCargaPanel.
+    // Aquí se debería implementar la lógica para el siguiente paso, ej. Detalles de Envío.
+    // Y potencialmente el cálculo de precios para los itemsEnDetalleCarga.
+    console.log("Paso a Detalles de Envío/Cálculo de Precios...", datosParaDetallesCarga);
+    
+    // Lógica de ejemplo para el cálculo de precios (Placeholder)
+    if (datosParaDetallesCarga.length > 0) {
+      // Suponiendo que necesitamos el primer producto para la API de precios actual
+      const primerItem = datosParaDetallesCarga[0];
+      if (primerItem.principal.codigo_producto) {
+        setPricingLoading(true);
+        setPricingError(null);
+        setPricingResult(null);
+        try {
+          const result = await api.calculatePricing({ 
+            productCode: primerItem.principal.codigo_producto 
+            // Aquí se podría extender para enviar también los opcionales del primerItem
+            // o si la API soporta múltiples productos, enviar todos los datosParaDetallesCarga.
+          });
+          setPricingResult(result);
+          // setPasoCotizacion(3); // Suponiendo que 3 es DetallesEnvioPanel después del cálculo
+          console.log("Cálculo de precios simulado exitoso para el primer item.", result);
+          alert("Cálculo de precios (simulado) para el primer producto realizado. Ver consola. Siguiente paso no implementado.");
+          // Por ahora, no avanzamos a otro paso ya que DetallesEnvioPanel no está totalmente integrado
+          // en este nuevo flujo de múltiples productos.
+
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : "Error desconocido al calcular precios.";
+          setPricingError(errorMsg);
+          console.error("Error en cálculo de precios (simulado):", errorMsg);
+        } finally {
+          setPricingLoading(false);
+        }
+      } else {
+        setPricingError("El primer producto seleccionado no tiene código para calcular precios.");
+      }
+    } else {
+      setPricingError("No hay productos en Detalles de Carga para calcular precios.");
+    }
   };
 
   // JSX (movido de App.tsx, corresponde al <main>...</main>)
-  if (pasoCotizacion === 1) {
-    // Renderizar el panel de Detalles de la Carga
+  if (pasoCotizacion === 1 && productoActualConfigurandoOpcionales) {
+    // PASO 1: Selección de Opcionales (usando OpcionalesCotizacionModal)
+    return (
+      <OpcionalesCotizacionModal 
+        productoNombre={productoActualConfigurandoOpcionales.nombre_del_producto || 'Seleccionar Opcionales'}
+        opcionales={opcionalesDataModal} 
+        isLoading={opcionalesLoadingModal}
+        error={opcionalesErrorModal}
+        onClose={handleCerrarProcesoSeleccionOpcionalesGlobal} 
+        onConfirmarSeleccion={handleConfirmarOpcionalesParaPrincipalActual} // Corregido aquí si era necesario
+      />
+    );
+  }
+
+  if (pasoCotizacion === 2) {
+    // PASO 2: Detalles de la Carga
+    // Renderizar el panel de Detalles de la Carga con todos los productos y sus opcionales seleccionados
     return (
       <PageLayout>
         <DetallesCargaPanel 
-          productoPrincipal={productoParaCotizar} 
-          opcionalesSeleccionados={opcionalesConfirmados} 
+          itemsParaCotizar={datosParaDetallesCarga} 
           onVolver={handleVolverDesdeDetalles}
           onSiguiente={handleSiguienteDesdeDetalles}
-          onEliminarOpcional={handleEliminarOpcionalConfirmado}
+          onEliminarOpcionalDePrincipal={handleEliminarOpcionalConfirmado}
         />
       </PageLayout>
     );
   }
 
-  // --- MODIFICADO: Renderizar el panel de Detalles de Envío con datos del cálculo ---
-  if (pasoCotizacion === 2) {
-    return (
-      <PageLayout>
-        <DetallesEnvioPanel
-          productoPrincipal={productoParaCotizar}
-          opcionalesSeleccionados={opcionalesConfirmados}
-          onVolver={handleVolverDesdeEnvio}
-          onSiguiente={() => { console.log("Ir a Detalles Tributarios..."); /* Lógica futura */ }}
-          // --- Nuevas props para el resultado del cálculo ---
-          pricingResult={pricingResult}
-          isLoading={pricingLoading}
-          error={pricingError}
-          // --------------------------------------------------
-        />
-      </PageLayout>
-    );
-  }
-
-  // Renderizado por defecto (pasoCotizacion === 0): Tabla de Equipos
+  // PASO 0: Tabla de Equipos (renderizado por defecto)
   return (
     <PageLayout>
       <div style={{ padding: '24px' }}>
@@ -520,6 +769,35 @@ export default function EquiposPanel() {
           <button onClick={fetchProductos} className="button-hover" style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'white', border: '1px solid #1e88e5', color: '#1e88e5', padding: '8px 16px', borderRadius: '6px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>
             {loading ? (<><div style={{ width: '16px', height: '16px', border: '2px solid #E5E7EB', borderTopColor: '#1e88e5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>Actualizando...</>) : (<><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path></svg>Actualizar Caché</>)}
           </button>
+          {/* --- Botón para iniciar/finalizar modo de selección de equipos --- */}
+          <button 
+            onClick={isSelectionModeActive ? handleProceedToOptionSelection : toggleSelectionMode} 
+            className="button-hover" 
+            disabled={isSelectionModeActive && productosSeleccionadosParaCotizar.length === 0} // Deshabilitar "Cotizar" si no hay nada seleccionado
+            style={{
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              backgroundColor: isSelectionModeActive ? '#22c55e' : 'white', // Verde cuando activo
+              border: `1px solid ${isSelectionModeActive ? '#16a34a' : '#1e88e5'}`, // Borde verde o azul
+              color: isSelectionModeActive ? 'white' : '#1e88e5', 
+              padding: '8px 16px', 
+              borderRadius: '6px', 
+              fontSize: '14px', 
+              fontWeight: '500', 
+              cursor: 'pointer', 
+              transition: 'all 0.2s ease' 
+            }}
+          >
+            {/* Icono podría cambiar según el modo */} 
+            {isSelectionModeActive ? 
+              <Check size={16} /> : 
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            }
+            {isSelectionModeActive 
+              ? `Cotizar ${productosSeleccionadosParaCotizar.length} Equipo(s)` 
+              : 'Seleccionar para Cotizar'}
+          </button>
         </div>
 
         {/* Contador */}
@@ -548,7 +826,9 @@ export default function EquiposPanel() {
                       <th style={{ padding: '12px 16px', textAlign: 'left' }}>Categoría</th>
                       <th style={{ padding: '12px 16px', textAlign: 'center' }}>Ver Detalle</th>
                       <th style={{ padding: '12px 16px', textAlign: 'center' }}>Opcionales</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Configurar</th>
+                      {isSelectionModeActive && (
+                        <th style={{ padding: '12px 16px', textAlign: 'center', width: '100px' }}>Seleccionar</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -570,7 +850,20 @@ export default function EquiposPanel() {
                             {loadingOpcionalesBtn === producto.codigo_producto ? (<div style={{ width: '14px', height: '14px', border: '2px solid #E5E7EB', borderTopColor: '#059669', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>) : (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line><polyline points="12 8 16 12 12 16"></polyline></svg>)}
                           </button>
                         </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}><button className="button-hover" style={{ padding: '8px', backgroundColor: 'white', color: '#d97706', border: '1px solid #e5e7eb', borderRadius: '50%', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', transition: 'all 0.2s ease' }} onClick={() => handleConfigurar(producto)} disabled={loadingSettings === producto.codigo_producto}>{loadingSettings === producto.codigo_producto ? (<div style={{ width: '14px', height: '14px', border: '2px solid #E5E7EB', borderTopColor: '#d97706', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>) : (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M9 9h6v6H9z"></path></svg>)}</button></td>
+                        {isSelectionModeActive && (
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            <input 
+                              type="checkbox"
+                              checked={productosSeleccionadosParaCotizar.includes(producto.codigo_producto || '')}
+                              onChange={() => producto.codigo_producto && handleToggleProductoParaCotizar(producto.codigo_producto)}
+                              disabled={!producto.codigo_producto} // Deshabilitar si no hay código de producto
+                              style={{
+                                transform: 'scale(1.3)', // Hacer el checkbox un poco más grande
+                                cursor: 'pointer'
+                              }}
+                            />
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -608,17 +901,6 @@ export default function EquiposPanel() {
               </div>
             </div>
           </div>
-        )}
-
-        {showCotizacionModal && productoParaCotizar && (
-          <OpcionalesCotizacionModal 
-            productoNombre={productoParaCotizar.nombre_del_producto || 'Producto sin nombre'}
-            opcionales={opcionalesData}
-            isLoading={opcionalesLoading}
-            error={opcionalesError}
-            onClose={handleCloseCotizacionModal}
-            onConfirmarSeleccion={handleConfirmarSeleccionOpcionales}
-          />
         )}
 
         {showVistaOpcionalesModal && productoParaVistaOpcionales && (

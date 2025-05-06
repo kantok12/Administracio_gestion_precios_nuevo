@@ -1,6 +1,6 @@
 import React from 'react';
 
-// Interfaces temporales (usar las reales cuando se pasen props)
+// Interfaces (Producto ya existe, ProductoConOpcionales es nueva)
 interface Producto {
   codigo_producto?: string;
   nombre_del_producto?: string;
@@ -10,12 +10,16 @@ interface Producto {
   pf_eur?: string | number;
 }
 
+interface ProductoConOpcionales {
+  principal: Producto;
+  opcionales: Producto[];
+}
+
 interface DetallesCargaPanelProps {
-  productoPrincipal: Producto | null;
-  opcionalesSeleccionados: Producto[]; // Recibirá la lista filtrada de opcionales
+  itemsParaCotizar: ProductoConOpcionales[];
   onVolver: () => void;
-  onSiguiente: () => void; // Para pasos futuros
-  onEliminarOpcional: (codigoOpcional: string) => void; // NUEVA prop para eliminar
+  onSiguiente: () => void;
+  onEliminarOpcionalDePrincipal: (codigoPrincipal: string, codigoOpcional: string) => void;
 }
 
 // Componente Stepper simple (se puede mejorar)
@@ -48,11 +52,10 @@ const Stepper = ({ pasoActual }: { pasoActual: number }) => {
 };
 
 export default function DetallesCargaPanel({
-  productoPrincipal,
-  opcionalesSeleccionados,
+  itemsParaCotizar,
   onVolver,
   onSiguiente,
-  onEliminarOpcional, // Recibir la prop
+  onEliminarOpcionalDePrincipal,
 }: DetallesCargaPanelProps) {
 
   // Estilos (podrían moverse a CSS o unificar)
@@ -70,10 +73,10 @@ export default function DetallesCargaPanel({
   const primaryButtonStyle: React.CSSProperties = { ...buttonStyle, backgroundColor: '#1e88e5', color: 'white', borderColor: '#1e88e5' };
   const secondaryButtonStyle: React.CSSProperties = { ...buttonStyle, backgroundColor: 'white', color: '#6c757d', border: '1px solid #dee2e6' };
 
-  // Función interna para manejar el clic en eliminar
-  const handleEliminarClick = (codigoOpcional: string | undefined) => {
-    if (codigoOpcional) {
-      onEliminarOpcional(codigoOpcional);
+  // Función interna para manejar el clic en eliminar (adaptada)
+  const handleEliminarClick = (codigoPrincipal: string | undefined, codigoOpcional: string | undefined) => {
+    if (codigoPrincipal && codigoOpcional) {
+      onEliminarOpcionalDePrincipal(codigoPrincipal, codigoOpcional);
     }
   };
 
@@ -86,77 +89,84 @@ export default function DetallesCargaPanel({
             <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#343a40', margin: 0 }}>
                 Detalles de la Carga
             </h2>
-            {/* Botón cerrar opcional */}
-            {/* <button>X</button> */}
          </div>
 
-        {/* Sección Producto Principal */}
-        <div style={sectionTitleStyle}>
-          <span style={principalTagStyle}>Principal</span>
-          <h3 style={{ fontSize: '16px', fontWeight: 500, margin: 0, color: '#495057' }}>Producto Principal</h3>
-        </div>
-        <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Código</th>
-                <th style={thStyle}>Nombre</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Precio en EUR</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={tdStyle}>{productoPrincipal?.codigo_producto || '-'}</td>
-                <td style={tdStyle}>{productoPrincipal?.nombre_del_producto || '-'}</td>
-                <td style={{ ...tdStyle, textAlign: 'right' }}>{productoPrincipal?.pf_eur ? `€${Number(productoPrincipal.pf_eur).toLocaleString('de-DE')}` : '-'}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        {itemsParaCotizar.length === 0 ? (
+          <p style={{textAlign: 'center', color: '#6c757d', fontStyle: 'italic'}}>No hay equipos seleccionados para cotizar.</p>
+        ) : (
+          itemsParaCotizar.map((item, idx) => (
+            <div key={item.principal.codigo_producto || idx} style={{ marginBottom: idx < itemsParaCotizar.length - 1 ? '32px' : '0' }}>
+              {/* Sección Producto Principal */}
+              <div style={sectionTitleStyle}>
+                <span style={principalTagStyle}>Principal</span>
+                <h3 style={{ fontSize: '16px', fontWeight: 500, margin: 0, color: '#495057' }}>
+                  {`Equipo Principal ${idx + 1}: ${item.principal.nombre_del_producto || 'Sin nombre'}`}
+                </h3>
+              </div>
+              <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Código</th>
+                      <th style={thStyle}>Nombre</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>Precio en EUR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={tdStyle}>{item.principal?.codigo_producto || '-'}</td>
+                      <td style={tdStyle}>{item.principal?.nombre_del_producto || '-'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{item.principal?.pf_eur ? `€${Number(item.principal.pf_eur).toLocaleString('de-DE')}` : '-'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
-        {/* Sección Opcionales Seleccionados */}
-        <div style={sectionTitleStyle}>
-          <span style={adicionalesTagStyle}>Adicionales</span>
-          <h3 style={{ fontSize: '16px', fontWeight: 500, margin: 0, color: '#495057' }}>Opcionales Seleccionados</h3>
-          <span style={countTagStyle}>{opcionalesSeleccionados.length} seleccionados</span>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={{ ...thStyle, width: '120px' }}>Código</th>
-                <th style={thStyle}>Nombre</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Precio en EUR</th>
-                <th style={{ ...thStyle, textAlign: 'center', width: '80px' }}>Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {opcionalesSeleccionados.length > 0 ? (
-                opcionalesSeleccionados.map((opcional, index) => (
-                  <tr key={opcional.codigo_producto || index}>
-                    <td style={tdStyle}>{opcional.codigo_producto || '-'}</td>
-                    <td style={tdStyle}>{opcional.nombre_del_producto || '-'}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{opcional.pf_eur ? `€${Number(opcional.pf_eur).toLocaleString('de-DE')}` : '-'}</td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <button 
-                        style={{ background: 'none', border: 'none', color: '#dc3545', cursor: 'pointer' }} 
-                        title="Eliminar"
-                        onClick={() => handleEliminarClick(opcional.codigo_producto)} // Llamar a la función de eliminar
-                      >
-                         {/* Icono Basura */}
-                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={4} style={{ ...tdStyle, textAlign: 'center', fontStyle: 'italic', color: '#6c757d' }}>No hay opcionales seleccionados.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              {/* Sección Opcionales Seleccionados para este Principal */}
+              <div style={sectionTitleStyle}>
+                <span style={adicionalesTagStyle}>Adicionales</span>
+                <h3 style={{ fontSize: '16px', fontWeight: 500, margin: 0, color: '#495057' }}>Opcionales Seleccionados</h3>
+                <span style={countTagStyle}>{item.opcionales.length} seleccionados</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...thStyle, width: '120px' }}>Código</th>
+                      <th style={thStyle}>Nombre</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>Precio en EUR</th>
+                      <th style={{ ...thStyle, textAlign: 'center', width: '80px' }}>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {item.opcionales.length > 0 ? (
+                      item.opcionales.map((opcional, opcionalIndex) => (
+                        <tr key={opcional.codigo_producto || opcionalIndex}>
+                          <td style={tdStyle}>{opcional.codigo_producto || '-'}</td>
+                          <td style={tdStyle}>{opcional.nombre_del_producto || '-'}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right' }}>{opcional.pf_eur ? `€${Number(opcional.pf_eur).toLocaleString('de-DE')}` : '-'}</td>
+                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                            <button 
+                              style={{ background: 'none', border: 'none', color: '#dc3545', cursor: 'pointer' }} 
+                              title="Eliminar"
+                              onClick={() => handleEliminarClick(item.principal.codigo_producto, opcional.codigo_producto)}
+                            >
+                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} style={{ ...tdStyle, textAlign: 'center', fontStyle: 'italic', color: '#6c757d' }}>No hay opcionales seleccionados para este equipo.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Footer de navegación */}
@@ -164,7 +174,7 @@ export default function DetallesCargaPanel({
         <button style={secondaryButtonStyle} onClick={onVolver}>
           &larr; Volver
         </button>
-        <button style={primaryButtonStyle} onClick={onSiguiente}>
+        <button style={primaryButtonStyle} onClick={onSiguiente} disabled={itemsParaCotizar.length === 0}>
           Siguiente &rarr;
         </button>
       </div>

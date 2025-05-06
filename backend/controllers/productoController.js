@@ -532,8 +532,21 @@ const uploadBulkProducts = async (req, res) => {
                     throw new Error(`Valor no booleano reconocible para ${key}`);
                 }
 
+                // --- OBTENER Y VALIDAR Codigo_Producto PRIMERO ---
                 codigoProducto = getVal('Codigo_Producto') || 'N/A';
+                if (!codigoProducto) { // Si es undefined, null o cadena vacía
+                    console.warn(`[Bulk Upload] Fila ${rowNumber} omitida: Falta Codigo_Producto.`);
+                    errores.push({
+                        rowNumber: rowNumber,
+                        field: 'Codigo_Producto',
+                        message: 'Fila omitida por falta de Codigo_Producto.',
+                        codigo: 'N/A'
+                    });
+                    return; // Saltar al siguiente ciclo del forEach
+                }
+                // --------------------------------------------------
 
+                // Ahora que sabemos que hay código, proceder a mapear el resto
                 let productoData = {
                     Codigo_Producto: codigoProducto === 'N/A' ? undefined : codigoProducto,
                     categoria: getVal('categoria'),
@@ -572,7 +585,7 @@ const uploadBulkProducts = async (req, res) => {
                 if (productoData.caracteristicas && Object.keys(productoData.caracteristicas).every(k => productoData.caracteristicas[k] === undefined)) delete productoData.caracteristicas;
                 if (productoData.dimensiones && Object.keys(productoData.dimensiones).every(k => productoData.dimensiones[k] === undefined)) delete productoData.dimensiones;
                 
-                // Validar con Mongoose
+                // Validar con Mongoose (ya no necesitamos verificar Codigo_Producto aquí)
                 const tempProduct = new Producto(productoData);
                 const validationError = tempProduct.validateSync();
 
@@ -588,12 +601,8 @@ const uploadBulkProducts = async (req, res) => {
                         });
                     }
                     console.warn(`[Bulk Upload] Fila ${rowNumber} (Código: ${codigoProducto}) con errores de validación.`);
-                } else if (!productoData.Codigo_Producto) {
-                     // Error si no hay código después de todo el procesamiento
-                     console.warn(`[Bulk Upload] Fila ${rowNumber} sin Codigo_Producto.`);
-                     errores.push({ rowNumber: rowNumber, field: 'Codigo_Producto', message: 'Falta Codigo_Producto o está vacío.', codigo: 'N/A' });
-                 } else {
-                    // Preparar operación si todo está bien
+                } else {
+                    // Preparar operación si todo está bien (Ya sabemos que hay Codigo_Producto)
                     operaciones.push({
                         updateOne: {
                             filter: { Codigo_Producto: productoData.Codigo_Producto },
