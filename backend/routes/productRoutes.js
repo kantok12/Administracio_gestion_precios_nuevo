@@ -17,13 +17,27 @@ const upload = multer({ storage: storage });
 
 // --- Rutas que usan productController (sin 'o' - caché/webhook) ---
 router.get('/fetch', productCtrl.fetchProducts);
-router.get('/', productCtrl.getCachedProducts); // Asumiendo que esto debe mostrar caché
+router.get('/', productCtrl.getCachedProducts); // Lista todos los productos (del caché)
+router.post('/', productCtrl.createProductController); // Crea un nuevo producto
+
+// --- NUEVA RUTA para obtener un producto por Codigo_Producto ---
+router.get('/code/:codigoProducto', productCtrl.getProductByCodeController);
+
+// --- NUEVA RUTA para actualizar un producto por Codigo_Producto ---
+router.put('/code/:codigoProducto', productCtrl.updateProductController);
+
+// --- NUEVA RUTA para eliminar un producto por Codigo_Producto ---
+router.delete('/code/:codigoProducto', productCtrl.deleteProductController);
+
 router.get('/filter', productCtrl.fetchFilteredProductsController);
-router.get('/cache/all', productCtrl.getAllCachedValues);
+router.get('/cache/all', productCtrl.getAllProductsAndCache);
 router.post('/cache/reset', productCtrl.resetCache);
 router.delete('/cache', productCtrl.clearCache); // Corregido DELETE
 router.get('/detail', productCtrl.getProductDetail);
 router.get('/opcionales', productCtrl.getOptionalProducts);
+
+// --- NUEVA RUTA DE PRUEBA PARA DB ---
+router.get('/test/db-base-products', productCtrl.testGetBaseProductsFromDBController);
 
 // <<<--- Añadir Rutas para Divisas Cacheadas --->>>
 router.get('/currency/dollar', productCtrl.getCachedDollarValue);
@@ -45,12 +59,9 @@ router.get('/download-template', (req, res) => {
   }
 });
 
-// --- Rutas que usan productoController (con 'o' - Mongoose) ---
-// Crear equipo individual (AHORA USA la versión con Mongoose)
-router.post('/equipment', productoCtrl.createIndividualEquipment);
-// Cargar productos desde Excel
+// Cargar productos desde Excel (se mantiene si aún es necesaria)
 router.post('/cargar-excel', productoCtrl.cargarProductosDesdeExcel);
-// <<<--- Nueva Ruta para Carga Masiva --->>>
+// <<<--- Nueva Ruta para Carga Masiva --->>> (se mantiene si aún es necesaria)
 router.post('/upload-bulk', upload.single('archivoExcel'), productoCtrl.uploadBulkProducts);
 
 module.exports = router;

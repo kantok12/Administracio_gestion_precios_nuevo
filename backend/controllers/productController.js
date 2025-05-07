@@ -1,4 +1,5 @@
-const { fetchAvailableProducts, fetchFilteredProducts, fetchCurrencyValues } = require('../utils/fetchProducts');
+const { fetchFilteredProducts, fetchCurrencyValues } = require('../utils/fetchProducts');
+const { fetchBaseProductsFromDB, createProductInDB, getProductByCodeFromDB, updateProductInDB, deleteProductFromDB } = require('../utils/mongoDataService');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -84,28 +85,32 @@ updateCurrencyValues();
 
 const saveCacheToDisk = () => {
   try {
-    if (!fs.existsSync(CACHE_FILE)) {
-      fs.writeFileSync(CACHE_FILE, JSON.stringify(cachedProducts, null, 2), 'utf-8');
-      //console.log('Cache de productos guardado en disco.');
-    } else {
-      //console.log('El archivo de cache ya existe. No se sobreescribe.');
-    }
+    // Siempre escribir/sobrescribir el archivo de caché con el contenido actual de cachedProducts
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cachedProducts, null, 2), 'utf-8');
+    console.log('Cache de productos guardado/actualizado en disco.');
   } catch (err) {
     console.error('Error al guardar el cache de productos:', err);
   }
 };
 
-// @desc    Fetch products from webhook and cache them
+// @desc    Fetch products from DB and cache them
 // @route   GET /api/products/fetch
 // @access  Public
 const fetchProducts = async (req, res) => {
   try {
-    const products = await fetchAvailableProducts();
+    const products = await fetchBaseProductsFromDB();
+    
     cachedProducts = products; // Cache the products
     saveCacheToDisk();
-    res.status(200).json({ message: 'Products fetched and cached successfully', products });
+    
+    res.status(200).json({ 
+      message: 'Products fetched from DB and cached successfully',
+      count: products.length,
+      products 
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error in fetchProducts controller:', error);
+    res.status(500).json({ message: error.message || 'Failed to fetch and cache products' });
   }
 };
 
@@ -193,74 +198,32 @@ const getCachedEuroValue = (req, res) => {
   }
 };
 
-// Función para leer productos desde el archivo
-const readProductsFromFile = () => {
-  try {
-    console.log(`Intentando leer archivo: ${CACHE_FILE}`);
-    
-    if (!fs.existsSync(CACHE_FILE)) {
-      console.log(`⚠️ Archivo no encontrado: ${CACHE_FILE}`);
-      return [];
-    }
-    
-    let data = fs.readFileSync(CACHE_FILE, 'utf-8');
-    
-    // Eliminar BOM (Byte Order Mark) si existe
-    if (data.charCodeAt(0) === 0xFEFF) {
-      data = data.substring(1);
-      console.log('BOM detectado y eliminado del archivo JSON');
-    }
-    
-    // Otra forma de eliminar posibles caracteres problemáticos al inicio
-    data = data.replace(/^\uFEFF/, '');
-    data = data.trim();
-    
-    console.log(`✅ Archivo leído correctamente, tamaño: ${data.length} bytes`);
-    console.log(`Primeros 20 caracteres: "${data.substring(0, 20)}"`);
-    
-    try {
-      const products = JSON.parse(data);
-      console.log(`✅ JSON parseado correctamente, contiene ${products.length} productos`);
-      return products;
-    } catch (parseError) {
-      console.error(`❌ Error al parsear JSON: ${parseError.message}`);
-      console.error(`Contenido problemático: "${data.substring(0, 50)}..."`);
-      return [];
-    }
-  } catch (err) {
-    console.error(`❌ Error al leer archivo: ${err.message}`);
-    return [];
-  }
-};
-
-// @desc    Get all cached values
+// @desc    Get all products from cached memory (was getAllProductsAndCache)
 // @route   GET /api/products/cache/all
 // @access  Public
-const getAllCachedValues = (req, res) => {
+const getAllProductsAndCache = (req, res) => { // Ya no necesita ser async
   try {
-    // Leer productos directamente del archivo en cada petición
-    const productsFromFile = readProductsFromFile();
-    
-    // Estructura de respuesta estandarizada
+    // Servir directamente desde el caché en memoria
+    // El caché en memoria (cachedProducts) se actualiza al inicio y por /api/products/fetch o /reset
     const response = {
       success: true,
       data: {
-        currencies: currencyCache,
+        currencies: currencyCache, // currencyCache se actualiza por su propio mecanismo
         products: {
-          total: productsFromFile.length,
-          data: productsFromFile
+          total: cachedProducts.length,
+          data: cachedProducts // Usar la variable cachedProducts
         }
       },
       timestamp: new Date().toISOString()
     };
     
-    console.log(`Enviando respuesta al frontend con ${productsFromFile.length} productos`);
+    console.log(`Servido /api/products/cache/all con ${cachedProducts.length} productos desde caché en memoria.`);
     res.status(200).json(response);
   } catch (error) {
-    console.error('Error al obtener valores del caché:', error);
+    console.error('Error en getAllProductsAndCache (sirviendo desde memoria):', error);
     res.status(500).json({
       success: false,
-      error: 'Error al obtener valores del caché',
+      error: 'Error al obtener todos los productos del caché de memoria',
       message: error.message
     });
   }
@@ -292,7 +255,7 @@ const resetCache = async (req, res) => {
     }
 
     // Obtener nuevos datos de productos
-    const products = await fetchAvailableProducts();
+    const products = await fetchBaseProductsFromDB();
     cachedProducts = products;
     saveCacheToDisk();
     res.status(200).json({
@@ -352,7 +315,7 @@ const getProductDetail = async (req, res) => {
     }
 
     // Primero buscar en el caché
-    const productsFromCache = readProductsFromFile();
+    const productsFromCache = cachedProducts;
     const productFromCache = productsFromCache.find(p => p.codigo_producto === codigo);
 
     if (productFromCache) {
@@ -438,7 +401,7 @@ const getOptionalProducts = async (req, res) => {
       // Intentar con endpoint alternativo si está disponible
       try {
         console.log('Intentando obtener productos del caché como alternativa...');
-        const cachedProducts = readProductsFromFile();
+        const cachedProducts = cachedProducts;
         
         // Filtrar productos relacionados por categoría
         const relatedProducts = cachedProducts.filter(p => p.categoria === categoria);
@@ -471,105 +434,247 @@ const getOptionalProducts = async (req, res) => {
   }
 };
 
-const createIndividualEquipment = async (req, res) => {
+// @desc    Create a new product
+// @route   POST /api/products
+// @access  Public (o Private si implementas autenticación)
+const createProductController = async (req, res) => {
   try {
-    const equipmentData = req.body;
+    const productData = req.body;
 
-    // Validate required fields
+    // --- Validación (existente, la mantenemos) --- 
     const requiredFields = {
       topLevel: [
-        'Codigo_Producto',
-        'categoria',
-        'peso_kg',
-        'clasificacion_easysystems',
-        'codigo_ea',
-        'proveedor',
-        'procedencia'
-        // 'linea_de_producto', // Comentado - ¿Realmente requerido aquí?
-        // 'combustible',       // Comentado - ¿Realmente requerido aquí?
-        // 'hp'                 // Comentado - ¿Realmente requerido aquí?
+        'Codigo_Producto', 'categoria', 'peso_kg', 'clasificacion_easysystems',
+        'codigo_ea', 'proveedor', 'procedencia'
       ],
       caracteristicas: ['nombre_del_producto', 'modelo'],
       dimensiones: ['largo_cm', 'ancho_cm', 'alto_cm']
     };
-
-    // --- Validación Modificada --- 
-    // Validar campos de nivel superior
     for (const field of requiredFields.topLevel) {
-      if (equipmentData[field] === undefined || equipmentData[field] === null || equipmentData[field] === '') {
-        return res.status(400).json({ 
-          message: `El campo ${field} es requerido`,
-          field: field 
-        });
+      if (productData[field] === undefined || productData[field] === null || productData[field] === '') {
+        return res.status(400).json({ message: `El campo ${field} es requerido`, field });
       }
     }
-    
-    // Validar campos anidados en caracteristicas
-    if (!equipmentData.caracteristicas) {
-        return res.status(400).json({ message: 'El objeto caracteristicas es requerido', field: 'caracteristicas' });
+    if (!productData.caracteristicas) {
+      return res.status(400).json({ message: 'El objeto caracteristicas es requerido', field: 'caracteristicas' });
     }
     for (const field of requiredFields.caracteristicas) {
-       if (equipmentData.caracteristicas[field] === undefined || equipmentData.caracteristicas[field] === null || equipmentData.caracteristicas[field] === '') {
-         return res.status(400).json({ 
-           message: `El campo caracteristicas.${field} es requerido`,
-           field: `caracteristicas.${field}` 
-         });
-       }
-     }
-
-    // Validar campos anidados en dimensiones
-    if (!equipmentData.dimensiones) {
-        return res.status(400).json({ message: 'El objeto dimensiones es requerido', field: 'dimensiones' });
+      if (productData.caracteristicas[field] === undefined || productData.caracteristicas[field] === null || productData.caracteristicas[field] === '') {
+        return res.status(400).json({ message: `El campo caracteristicas.${field} es requerido`, field: `caracteristicas.${field}` });
+      }
+    }
+    if (!productData.dimensiones) {
+      return res.status(400).json({ message: 'El objeto dimensiones es requerido', field: 'dimensiones' });
     }
     for (const field of requiredFields.dimensiones) {
-       if (equipmentData.dimensiones[field] === undefined || equipmentData.dimensiones[field] === null || equipmentData.dimensiones[field] === '') {
-         return res.status(400).json({ 
-           message: `El campo dimensiones.${field} es requerido`,
-           field: `dimensiones.${field}` 
-         });
-       }
-     }
-    // --- Fin Validación Modificada --- 
-
-    // Validate numeric fields (adjust paths as needed)
+      if (productData.dimensiones[field] === undefined || productData.dimensiones[field] === null || productData.dimensiones[field] === '') {
+        return res.status(400).json({ message: `El campo dimensiones.${field} es requerido`, field: `dimensiones.${field}` });
+      }
+    }
     const numericFields = {
-        topLevel: ['peso_kg' /*, 'hp'*/ ], // Comentado hp
+        topLevel: ['peso_kg'],
         dimensiones: ['largo_cm', 'ancho_cm', 'alto_cm']
     };
-
-    // Validar números nivel superior
     for (const field of numericFields.topLevel) {
-        if (equipmentData[field] === undefined || isNaN(Number(equipmentData[field]))) {
-            return res.status(400).json({ 
-                message: `El campo ${field} debe ser un número válido`,
-                field: field
-            });
+        if (productData[field] === undefined || isNaN(Number(productData[field]))) {
+            return res.status(400).json({ message: `El campo ${field} debe ser un número válido`, field });
         }
     }
-    // Validar números en dimensiones
-    if (equipmentData.dimensiones) { // Solo si dimensiones existe
+    if (productData.dimensiones) { 
         for (const field of numericFields.dimensiones) {
-            if (equipmentData.dimensiones[field] === undefined || isNaN(Number(equipmentData.dimensiones[field]))) {
-                return res.status(400).json({ 
-                    message: `El campo dimensiones.${field} debe ser un número válido`,
-                    field: `dimensiones.${field}`
-                });
+            if (productData.dimensiones[field] === undefined || isNaN(Number(productData.dimensiones[field]))) {
+                return res.status(400).json({ message: `El campo dimensiones.${field} debe ser un número válido`, field: `dimensiones.${field}` });
             }
         }
     }
+    // --- Fin Validación --- 
 
-    // TODO: Add database integration here (consider using the Mongoose model now?)
-    // For now, just return success
-    console.log('[INFO] Validation passed for:', equipmentData.Codigo_Producto);
+    console.log('[INFO] Validation passed for creating product with Codigo_Producto:', productData.Codigo_Producto);
+    
+    const newProduct = await createProductInDB(productData);
+
+    // Actualizar caché después de crear un nuevo producto
+    // Podríamos simplemente añadir el nuevo producto al caché en memoria y al de disco,
+    // o recargar todo el caché desde la DB para asegurar consistencia total.
+    // Recargar todo es más simple de implementar ahora.
+    console.log('Product created, attempting to refresh cache...');
+    const productsFromDB = await fetchBaseProductsFromDB(); // Esta función ya transforma los datos
+    cachedProducts = productsFromDB;
+    saveCacheToDisk();
+    console.log('Cache refreshed after product creation.');
+
     res.status(201).json({
-      message: 'Equipo creado exitosamente (Validación manual pasada)',
-      data: equipmentData
+      message: 'Producto creado exitosamente y caché actualizado.',
+      data: newProduct // Devolver el producto completo insertado en la DB
     });
 
   } catch (error) {
-    console.error('[ERROR] Error creating equipment (manual validation controller):', error);
+    console.error('[ERROR] Error creating product:', error);
+    // Si el error es por duplicado, el mensaje de createProductInDB será útil
+    if (error.message && error.message.includes('ya existe')) {
+        return res.status(409).json({ message: error.message }); // 409 Conflict
+    }
     res.status(500).json({ 
-      message: 'Error al crear el equipo (manual validation controller)',
+      message: 'Error al crear el producto.',
+      error: error.message 
+    });
+  }
+};
+
+// --- Función para inicializar el caché de productos al inicio de la aplicación ---
+async function initializeProductCache() {
+  try {
+    console.log('Inicializando caché de productos desde DB al arrancar la aplicación...');
+    const productsFromDB = await fetchBaseProductsFromDB();
+    cachedProducts = productsFromDB; // Actualizar caché en memoria
+    saveCacheToDisk(); // Guardar en archivo (saveCacheToDisk ya sobrescribe)
+    console.log(`Caché de productos inicializado con ${cachedProducts.length} productos y guardado en disco.`);
+  } catch (error) {
+    console.error('Error fatal al inicializar el caché de productos desde DB:', error);
+    // Considerar si la aplicación debe continuar si el caché no se puede cargar.
+    // Por ahora, la aplicación continuará con un caché vacío si esto falla.
+    cachedProducts = []; 
+    // No intentar guardar un caché vacío si la carga inicial falló, para no borrar un archivo bueno.
+  }
+}
+
+// Llamar a la inicialización del caché cuando este módulo se carga por primera vez.
+// Esto asegura que se intente poblar el caché tan pronto como el controlador esté listo.
+initializeProductCache();
+
+// --- NUEVO: Handler para el endpoint de prueba de DB ---
+const testGetBaseProductsFromDBController = async (req, res) => {
+  try {
+    console.log('[Controller Test] Attempting to fetch base products directly from DB for testing...');
+    const products = await fetchBaseProductsFromDB();
+    res.status(200).json({
+      message: 'Test successful: Fetched base products directly from DB',
+      count: products.length,
+      products: products
+    });
+  } catch (error) {
+    console.error('[Controller Test] Error fetching base products from DB for testing:', error);
+    res.status(500).json({
+      message: 'Test failed: Error fetching base products from DB',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// --- NUEVO: Handler para obtener un producto por Codigo_Producto ---
+// @desc    Get a single product by its Codigo_Producto
+// @route   GET /api/products/code/:codigoProducto
+// @access  Public
+const getProductByCodeController = async (req, res) => {
+  try {
+    const { codigoProducto } = req.params;
+    if (!codigoProducto) {
+      return res.status(400).json({ message: 'El parámetro codigoProducto es requerido.' });
+    }
+
+    console.log(`[Controller] Attempting to fetch product by Codigo_Producto: ${codigoProducto}`);
+    const product = await getProductByCodeFromDB(codigoProducto);
+
+    if (!product) {
+      return res.status(404).json({ message: `Producto con Codigo_Producto ${codigoProducto} no encontrado.` });
+    }
+
+    res.status(200).json({
+      message: 'Producto encontrado exitosamente.',
+      data: product
+    });
+
+  } catch (error) {
+    console.error(`[Controller] Error fetching product by Codigo_Producto ${req.params.codigoProducto}:`, error);
+    res.status(500).json({ 
+      message: 'Error al obtener el producto.',
+      error: error.message 
+    });
+  }
+};
+
+// --- NUEVO: Handler para actualizar un producto por Codigo_Producto ---
+// @desc    Update a product by its Codigo_Producto
+// @route   PUT /api/products/code/:codigoProducto
+// @access  Public (o Private)
+const updateProductController = async (req, res) => {
+  try {
+    const { codigoProducto } = req.params;
+    const updateData = req.body;
+
+    if (!codigoProducto) {
+      return res.status(400).json({ message: 'El parámetro codigoProducto es requerido.' });
+    }
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'El cuerpo de la solicitud (updateData) no puede estar vacío.' });
+    }
+
+    // Opcional: Validación más exhaustiva de updateData aquí si es necesario
+    // Por ejemplo, verificar que no se intenten pasar campos no permitidos o formatos incorrectos.
+
+    console.log(`[Controller] Attempting to update product with Codigo_Producto: ${codigoProducto}`);
+    const updatedProduct = await updateProductInDB(codigoProducto, updateData);
+
+    if (!updatedProduct) {
+      return res.status(404).json({ message: `Producto con Codigo_Producto ${codigoProducto} no encontrado para actualizar.` });
+    }
+
+    // Actualizar caché después de la modificación
+    console.log('Product updated, attempting to refresh cache...');
+    const productsFromDB = await fetchBaseProductsFromDB();
+    cachedProducts = productsFromDB;
+    saveCacheToDisk();
+    console.log('Cache refreshed after product update.');
+
+    res.status(200).json({
+      message: 'Producto actualizado exitosamente y caché refrescado.',
+      data: updatedProduct
+    });
+
+  } catch (error) {
+    console.error(`[Controller] Error updating product with Codigo_Producto ${req.params.codigoProducto}:`, error);
+    res.status(500).json({ 
+      message: 'Error al actualizar el producto.',
+      error: error.message 
+    });
+  }
+};
+
+// --- NUEVO: Handler para eliminar un producto por Codigo_Producto ---
+// @desc    Delete a product by its Codigo_Producto
+// @route   DELETE /api/products/code/:codigoProducto
+// @access  Public (o Private)
+const deleteProductController = async (req, res) => {
+  try {
+    const { codigoProducto } = req.params;
+
+    if (!codigoProducto) {
+      return res.status(400).json({ message: 'El parámetro codigoProducto es requerido.' });
+    }
+
+    console.log(`[Controller] Attempting to delete product with Codigo_Producto: ${codigoProducto}`);
+    const wasDeleted = await deleteProductFromDB(codigoProducto);
+
+    if (!wasDeleted) {
+      return res.status(404).json({ message: `Producto con Codigo_Producto ${codigoProducto} no encontrado para eliminar.` });
+    }
+
+    // Actualizar caché después de la eliminación
+    console.log('Product deleted, attempting to refresh cache...');
+    const productsFromDB = await fetchBaseProductsFromDB();
+    cachedProducts = productsFromDB;
+    saveCacheToDisk();
+    console.log('Cache refreshed after product deletion.');
+
+    res.status(200).json({
+      message: `Producto con Codigo_Producto ${codigoProducto} eliminado exitosamente y caché refrescado.`
+    });
+
+  } catch (error) {
+    console.error(`[Controller] Error deleting product with Codigo_Producto ${req.params.codigoProducto}:`, error);
+    res.status(500).json({ 
+      message: 'Error al eliminar el producto.',
       error: error.message 
     });
   }
@@ -582,10 +687,14 @@ module.exports = {
   fetchCurrencyValuesController, 
   getCachedDollarValue, 
   getCachedEuroValue,
-  getAllCachedValues,
+  getAllProductsAndCache, 
   resetCache,
   clearCache,
   getProductDetail,
   getOptionalProducts,
-  createIndividualEquipment
+  createProductController,
+  getProductByCodeController,
+  updateProductController,
+  deleteProductController,
+  testGetBaseProductsFromDBController
 };

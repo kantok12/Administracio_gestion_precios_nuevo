@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { UploadCloud, FileText, Download, Plus, X, AlertCircle, CheckCircle } from 'lucide-react';
+import * as XLSX from 'xlsx'; // Importar XLSX para generar el archivo Excel
 
 // Interfaz para una especificación técnica
 interface SpecItem {
@@ -38,6 +39,53 @@ const initialFormData = {
   // No incluimos especificaciones técnicas aquí, se manejarán por separado
   // metadata tampoco se maneja desde el form individual por ahora
 };
+
+// Definición de las cabeceras para la plantilla Excel (ESTRUCTURA PLANA PARA EL USUARIO)
+const excelTemplateHeaders = [
+  'Codigo_Producto', // Raíz
+  'nombre_del_producto', // Raíz
+  'Descripcion', // Raíz (Descripción general)
+  'Modelo', // Raíz
+  'categoria', // Raíz (Categoría principal)
+  
+  // Campos que irán a datos_contables en el backend
+  'fecha_cotizacion',
+  'costo_fabrica_original_eur',
+  
+  // Campos que irán a dimensiones en el backend
+  'largo_cm',
+  'ancho_cm',
+  'alto_cm',
+  'peso_kg',
+  
+  // Campos que irán a detalles en el backend (sin prefijo en el Excel)
+  'detalle_adicional_1',
+  'detalle_adicional_2',
+  'detalle_adicional_3',
+  'combustible',
+  'hp',
+  'diametro_mm',
+  'movilidad',
+  'rotacion',
+  'es_opcional', // Se espera TRUE/FALSE o similar
+  'modelo_compatible_manual',
+  'clasificacion_easysystems',
+  'numero_caracteristicas_tecnicas',
+  'codigo_ea',
+  'proveedor',
+  'procedencia',
+  'familia',
+  'nombre_comercial',
+  'descripcion_detallada', // La descripción más específica
+  'elemento_corte',
+  'garganta_alimentacion_mm',
+  'tipo_motor',
+  'potencia_motor_kw_hp',
+  'tipo_enganche',
+  'tipo_chasis',
+  'capacidad_chasis_velocidad',
+  'tipo_producto_detalles'
+];
 
 export default function CargaEquiposPanel() {
   const [showModal, setShowModal] = useState(false);
@@ -263,13 +311,26 @@ export default function CargaEquiposPanel() {
 
   // --- Descarga Plantilla --- 
   const handleDownloadTemplate = () => {
-    const link = document.createElement('a');
-    // La ruta debe coincidir con la definida en productRoutes.js
-    link.href = 'http://localhost:5001/api/products/download-template'; // <-- Usar URL completa por si acaso
-    link.download = 'Plantilla_Carga_Equipos.xlsx';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Crear la hoja de trabajo con las cabeceras
+    const worksheet = XLSX.utils.aoa_to_sheet([excelTemplateHeaders]);
+
+    // Definir el ancho de las columnas
+    // El objeto !cols es un array de objetos de formato de columna
+    // wch: ancho en número de caracteres "0" del ancho máximo de dígitos
+    const columnWidths = excelTemplateHeaders.map(() => ({ wch: 25 })); // Ajusta 25 al ancho deseado
+    worksheet['!cols'] = columnWidths;
+    
+    // (Opcional) Añadir una fila de ejemplo o notas
+    // XLSX.utils.sheet_add_aoa(worksheet, [
+    //   ['EJEMPLO-001', 'Nombre de Ejemplo', 'Descripción Corta', 'MOD-XYZ', 'Categoría Ejemplo', 100, 50, 60, 120, '2024-01-01', 5000.00, /* ...más datos de ejemplo... */]
+    // ], { origin: 'A2' });
+
+    // Crear el libro de trabajo
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'PlantillaEquipos');
+
+    // Generar el archivo y forzar la descarga
+    XLSX.writeFile(workbook, 'Plantilla_Carga_Equipos.xlsx');
   };
 
   // <<<--- Manejadores para Carga Masiva --->>>

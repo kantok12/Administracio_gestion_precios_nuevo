@@ -509,15 +509,13 @@ const uploadBulkProducts = async (req, res) => {
 
         // Iterar sobre las filas, empezando desde la fila 2 del Excel (índice 0 + 2)
         data.forEach((row, index) => {
-            const rowNumber = index + 2; // Número de fila en el archivo Excel
-            let codigoProducto = 'N/A'; // Para referencia en errores
+            const rowNumber = index + 2; 
+            let codigoProducto = 'N/A'; 
 
             try {
-                // Mapeo robusto
                 const getVal = (key) => row[key]?.toString().trim();
                 const getNum = (key) => {
                     const val = getVal(key);
-                    // Permitir vacío o null, pero fallar si no es número cuando hay valor
                     if (val === undefined || val === null || val === '') return undefined;
                     const num = Number(val);
                     if (isNaN(num)) throw new Error(`Valor no numérico para ${key}`);
@@ -525,84 +523,107 @@ const uploadBulkProducts = async (req, res) => {
                 }
                 const getBool = (key) => {
                     const val = getVal(key)?.toLowerCase();
-                    // Permitir vacío o null como false
-                    if (val === undefined || val === null || val === '') return false;
-                    if (['true', 'verdadero', 'si', '1'].includes(val)) return true;
-                    if (['false', 'falso', 'no', '0'].includes(val)) return false;
-                    throw new Error(`Valor no booleano reconocible para ${key}`);
+                    if (val === undefined || val === null || val === '') return undefined; // Devolver undefined si está vacío para que el schema use su default si lo tiene
+                    if (['true', 'verdadero', 'si', '1', 'TRUE', 'VERDADERO', 'SI'].includes(val)) return true;
+                    if (['false', 'falso', 'no', '0', 'FALSE', 'FALSO', 'NO'].includes(val)) return false;
+                    throw new Error(`Valor no booleano reconocible para ${key}: '${getVal(key)}'`);
                 }
 
-                // --- OBTENER Y VALIDAR Codigo_Producto PRIMERO ---
-                codigoProducto = getVal('Codigo_Producto') || 'N/A';
-                if (!codigoProducto) { // Si es undefined, null o cadena vacía
+                codigoProducto = getVal('Codigo_Producto') || 'N/A_Row_' + rowNumber;
+                if (!getVal('Codigo_Producto')) { // Chequeo más estricto para Codigo_Producto
                     console.warn(`[Bulk Upload] Fila ${rowNumber} omitida: Falta Codigo_Producto.`);
                     errores.push({
                         rowNumber: rowNumber,
                         field: 'Codigo_Producto',
                         message: 'Fila omitida por falta de Codigo_Producto.',
-                        codigo: 'N/A'
+                        codigo: codigoProducto
                     });
-                    return; // Saltar al siguiente ciclo del forEach
+                    return; 
                 }
-                // --------------------------------------------------
 
-                // Ahora que sabemos que hay código, proceder a mapear el resto
+                // Recopilar todos los campos que irán al objeto 'detalles'
+                const camposExcluidosDeDetalles = [
+                    'Codigo_Producto', 'nombre_del_producto', 'Descripcion', 'Modelo', 'categoria', // Campos principales o para caracteristicas
+                    'fecha_cotizacion', 'costo_fabrica_original_eur', // Para datos_contables
+                    'largo_cm', 'ancho_cm', 'alto_cm', 'peso_kg'       // Para dimensiones
+                ];
+                
+                let detallesData = {};
+                for (const key in row) {
+                    if (row.hasOwnProperty(key) && !camposExcluidosDeDetalles.includes(key)) {
+                        if (key === 'es_opcional') {
+                            detallesData[key] = getBool(key);
+                        } else if (key === 'numero_caracteristicas_tecnicas' || key === 'garganta_alimentacion_mm') { // Añadir más campos numéricos de detalles si los hay
+                            detallesData[key] = getNum(key);
+                        } else {
+                            detallesData[key] = getVal(key);
+                        }
+                    }
+                }
+                // Limpiar undefined de detallesData
+                Object.keys(detallesData).forEach(key => {
+                    if (detallesData[key] === undefined) delete detallesData[key];
+                });
+
+                // Construcción del objeto productoData con la estructura anidada correcta
                 let productoData = {
-                    Codigo_Producto: codigoProducto === 'N/A' ? undefined : codigoProducto,
-                    categoria: getVal('categoria'),
-                    peso_kg: getNum('peso_kg'),
+                    Codigo_Producto: getVal('Codigo_Producto'), // Ya validado que existe
+                    Descripcion: getVal('Descripcion'),     // Descripción general a nivel raíz
+                    categoria: getVal('categoria'),         // Categoría principal a nivel raíz
+                    
                     caracteristicas: {
                         nombre_del_producto: getVal('nombre_del_producto'),
-                        modelo: getVal('modelo')
+                        modelo: getVal('Modelo') // Leyendo de la columna 'Modelo' del Excel
                     },
+                    
+                    datos_contables: {
+                        fecha_cotizacion: getVal('fecha_cotizacion'),
+                        costo_fabrica_original_eur: getNum('costo_fabrica_original_eur')
+                    },
+                    
                     dimensiones: {
                         largo_cm: getNum('largo_cm'),
                         ancho_cm: getNum('ancho_cm'),
-                        alto_cm: getNum('alto_cm')
+                        alto_cm: getNum('alto_cm'),
+                        peso_kg: getNum('peso_kg')   // peso_kg ahora en dimensiones
                     },
-                    costo_fabrica_original_eur: getNum('costo_fabrica_original_eur'),
-                    costo_ano_cotizacion: getNum('costo_ano_cotizacion'),
-                    es_opcional: getBool('es_opcional'),
-                    tipo: getVal('tipo'),
-                    familia: getVal('familia'),
-                    proveedor: getVal('proveedor'),
-                    procedencia: getVal('procedencia'),
-                    nombre_comercial: getVal('nombre_comercial'),
-                    descripcion: getVal('descripcion'),
-                    clasificacion_easysystems: getVal('clasificacion_easysystems'),
-                    codigo_ea: getVal('codigo_ea'),
-                    especificaciones_tecnicas: {}, // Inicializar
-                    metadata: {}, // Inicializar
+                    
+                    detalles: detallesData, // Objeto con todos los demás campos
+                    
+                    // MongoDB/Mongoose Schema se encargará de campos opcionales no presentes
+                    // especificaciones_tecnicas y metadata se pueden manejar según la lógica del schema si es necesario
+                    // por ahora, se omiten si no hay un mapeo directo desde columnas planas
+                    especificaciones_tecnicas: {}, 
+                    metadata: {}                  
                 };
 
-                // Limpiar campos undefined (importante para evitar enviar 'undefined' a Mongoose)
+                // Limpieza final de campos y sub-objetos undefined o vacíos antes de la validación
                 Object.keys(productoData).forEach(key => {
                     if (productoData[key] === undefined) {
                         delete productoData[key];
                     }
                 });
-                 // Limpiar subdocumentos si están vacíos o sus campos son undefined
-                if (productoData.caracteristicas && Object.keys(productoData.caracteristicas).every(k => productoData.caracteristicas[k] === undefined)) delete productoData.caracteristicas;
-                if (productoData.dimensiones && Object.keys(productoData.dimensiones).every(k => productoData.dimensiones[k] === undefined)) delete productoData.dimensiones;
-                
-                // Validar con Mongoose (ya no necesitamos verificar Codigo_Producto aquí)
+                if (productoData.caracteristicas && Object.values(productoData.caracteristicas).every(v => v === undefined)) delete productoData.caracteristicas;
+                if (productoData.datos_contables && Object.values(productoData.datos_contables).every(v => v === undefined)) delete productoData.datos_contables;
+                if (productoData.dimensiones && Object.values(productoData.dimensiones).every(v => v === undefined)) delete productoData.dimensiones;
+                if (productoData.detalles && Object.keys(productoData.detalles).length === 0) delete productoData.detalles;
+
+
                 const tempProduct = new Producto(productoData);
                 const validationError = tempProduct.validateSync();
 
                 if (validationError) {
-                    // Extraer errores específicos
                     for (const fieldPath in validationError.errors) {
                         errores.push({
                             rowNumber: rowNumber,
-                            field: fieldPath, // Campo que falló (puede ser anidado)
+                            field: fieldPath,
                             message: validationError.errors[fieldPath].message,
-                            value: validationError.errors[fieldPath].value, // Valor que causó el error
+                            value: validationError.errors[fieldPath].value === undefined ? getVal(fieldPath.split('.').pop()) : validationError.errors[fieldPath].value, // Tratar de obtener valor original
                             codigo: codigoProducto
                         });
                     }
                     console.warn(`[Bulk Upload] Fila ${rowNumber} (Código: ${codigoProducto}) con errores de validación.`);
                 } else {
-                    // Preparar operación si todo está bien (Ya sabemos que hay Codigo_Producto)
                     operaciones.push({
                         updateOne: {
                             filter: { Codigo_Producto: productoData.Codigo_Producto },
@@ -611,18 +632,16 @@ const uploadBulkProducts = async (req, res) => {
                         }
                     });
                 }
-
             } catch (parseError) {
-                // Capturar errores de getNum/getBool
-                console.warn(`[Bulk Upload] Fila ${rowNumber} (Código: ${codigoProducto}) con error de parseo: ${parseError.message}`);
+                console.warn(`[Bulk Upload] Fila ${rowNumber} (Código: ${codigoProducto}) con error de parseo/procesamiento: ${parseError.message}`);
                 errores.push({
                     rowNumber: rowNumber,
-                    field: parseError.message.includes('para') ? parseError.message.split('para ')[1] : 'Desconocido', // Intentar obtener el campo
+                    field: parseError.message.includes('para ') ? parseError.message.substring(parseError.message.indexOf('para ') + 5) : 'Error de Parseo',
                     message: parseError.message,
                     codigo: codigoProducto
                 });
             }
-        }); // Fin del forEach
+        }); 
 
         console.log(`[Bulk Upload] Prepared ${operaciones.length} bulk operations. Found ${errores.length} rows with initial errors.`);
         let resultado = { upsertedCount: 0, modifiedCount: 0, writeErrors: [] };
