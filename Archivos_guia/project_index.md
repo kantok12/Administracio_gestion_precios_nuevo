@@ -73,7 +73,6 @@ frontend/
 ├── node_modules/   # Dependencias del frontend
 ├── public/         # Archivos estáticos públicos
 ├── src/            # Código fuente del frontend
-│   ├── assets/     # Imágenes, fuentes, etc.
 │   ├── components/ # Componentes reutilizables (e.g., ChatWidget.tsx)
 │   ├── pages/      # Componentes de página (vistas principales) (e.g., PerfilesPanel.tsx, PerfilEditForm.tsx)
 │   ├── services/   # Lógica para interactuar con la API backend
@@ -84,12 +83,15 @@ frontend/
 │   ├── main.tsx    # Punto de entrada del frontend (renderiza App y configura rutas)
 │   ├── theme.ts    # Configuración del tema (probablemente Material UI)
 │   └── ...         # Otros archivos de configuración y tipos (tsconfig, vite-env, etc.)
+├── assets/         # Imágenes, fuentes, etc. (Movido aquí desde src/)
 ├── .gitignore      # Archivos ignorados por Git
 ├── index.html      # Archivo HTML principal
 ├── package.json    # Dependencias y scripts del frontend
 ├── package-lock.json # Versiones exactas de dependencias del frontend
 ├── vite.config.ts  # Configuración de Vite
 ├── tsconfig.json   # Configuración de TypeScript
+├── eslint.config.js # Configuración de ESLint (Añadido)
+├── README.md       # README del frontend (Añadido)
 └── ...             # Otros archivos de configuración (eslint, etc.)
 ```
 

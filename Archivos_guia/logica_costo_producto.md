@@ -1,3 +1,6 @@
+# Lógica de Cálculo de Costo de Producto
+
+**Nota Importante:** Este documento describe un modelo detallado para el cálculo de costos. Es crucial verificar que esta lógica se alinea con la implementación actual en el código del backend (revisar `controllers/productController.js`, `controllers/costoPerfilController.js` y modelos relacionados) y con cualquier cambio reciente en los procesos de negocio. La precisión de los tipos de cambio API y los costos fijos también debe ser validada periódicamente.
 
 Este documento describe el proceso paso a paso para calcular el costo final de un producto, desde el costo de fábrica hasta el precio total para el cliente, considerando el IVA dentro del **Landed Cost**.
 

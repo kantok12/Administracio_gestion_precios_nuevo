@@ -1,0 +1,21 @@
+"Instrucciones para la Plantilla de Carga de Especificaciones Técnicas:"
+"1. Encabezados de Producto: En la fila de encabezados (actualmente Fila 6, debajo de estas instrucciones), reemplace 'PRODUCT_CODE_001', 'PRODUCT_CODE_002', etc., con los Codigo_Producto REALES de los equipos. Estos equipos deben existir previamente en el sistema."
+"2. Especificaciones: Cada fila debajo de los encabezados representa una especificación técnica. La columna A ('Especificacion_ID') es el identificador único y consistente de la especificación. La columna B ('Descripcion_Especificacion') es una descripción legible para su referencia."
+"3. Valores: Ingrese el valor de la especificación para cada equipo en la celda de intersección correspondiente. Deje la celda en blanco si la especificación no aplica para ese equipo, si no desea modificarla, o si el equipo no posee dicho opcional."
+"4. Añadir Más: Puede añadir nuevas filas para más especificaciones y nuevas columnas (a la derecha, después de la última columna de producto) para más equipos (usando su Codigo_Producto como encabezado de columna)."
+"--- INICIO DE DATOS DE EJEMPLO (Borrar o modificar según sea necesario) ---"
+Especificacion_ID,Descripcion_Especificacion,PRODUCT_CODE_001,PRODUCT_CODE_002,PRODUCT_CODE_003
+DIMENSIONES_PESO_KG,"Peso del equipo (kg)",750,720,1200
+DIMENSIONES_LARGO_M,"Largo total del equipo (m)",3.45,3.45,
+DIMENSIONES_ANCHO_M,"Ancho total del equipo (m)",1.39,1.39,2.25
+DIMENSIONES_ALTO_M,"Alto total del equipo (m)",2.2,2.2,2.55
+MOTOR_MARCA,"Marca del Motor",Kubota,Vanguard,Kubota
+MOTOR_TIPO_COMBUSTIBLE,"Tipo de Combustible del Motor (Diesel/Bencina)",Diesel,Bencina,Diesel
+MOTOR_POTENCIA_HP,"Potencia del Motor (HP)",23.8,23,35
+SISTEMA_ALIMENTACION_TIPO,"Tipo de Alimentación",Manual,Manual,Manual
+SISTEMA_CORTE_ELEMENTO,"Elemento de Corte",Disco simple,Disco simple,Disco simple
+CARAC_CHASIS_TIPO,"Tipo de Chasis",Galvanizado,Galvanizado,Oruga
+OPCIONAL_COLOR_RAL_61541,"Opcional: Color diferente RAL (código interno 61541)",Naranja RAL 2011,Naranja RAL 2011,
+OPCIONAL_BARRA_TRACCION_61511,"Opcional: Barra de tracción ajustable en altura (código interno 61511)",Sí,No,Sí
+OPCIONAL_ENGANCHE_BOLA_61969,"Opcional: Enganche para remolque tipo bola (código interno 61969)",No,No,Sí
+# --- FIN DE DATOS DE EJEMPLO --- 

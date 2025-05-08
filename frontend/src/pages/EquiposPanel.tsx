@@ -113,8 +113,6 @@ export default function EquiposPanel() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('Todas las categorías');
-  const [categorias, setCategorias] = useState<string[]>(['Todas las categorías']);
   const [totalMostrado, setTotalMostrado] = useState(0);
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
   const [showDetalleModal, setShowDetalleModal] = useState(false);
@@ -251,13 +249,13 @@ export default function EquiposPanel() {
     setLoadingOpcionalesBtn(producto.codigo_producto || null);
 
     try {
-      if (!producto.codigo_producto || !producto.Modelo || !producto.categoria) {
-        throw new Error('Faltan parámetros requeridos (código, modelo o categoría) para obtener opcionales');
+      if (!producto.codigo_producto || !producto.Modelo /* || !producto.categoria */) { // categoria ya no se usa
+        throw new Error('Faltan parámetros requeridos (código, modelo) para obtener opcionales');
       }
       const params = new URLSearchParams();
       params.append('codigo', producto.codigo_producto);
       params.append('modelo', producto.Modelo);
-      params.append('categoria', producto.categoria);
+      // params.append('categoria', producto.categoria); // Eliminado
       const url = `http://localhost:5001/api/products/opcionales?${params.toString()}`;
       console.log('Consultando opcionales (vista simple):', url);
 
@@ -302,13 +300,13 @@ export default function EquiposPanel() {
     setOpcionalesDataModal([]);
 
     try {
-      if (!producto.codigo_producto || !producto.Modelo || !producto.categoria) {
-         throw new Error('Faltan parámetros requeridos (código, modelo o categoría)');
+      if (!producto.codigo_producto || !producto.Modelo /* || !producto.categoria */) { // categoria ya no se usa
+         throw new Error('Faltan parámetros requeridos (código, modelo)');
       }
       const params = new URLSearchParams();
       params.append('codigo', producto.codigo_producto);
       params.append('modelo', producto.Modelo);
-      params.append('categoria', producto.categoria);
+      // params.append('categoria', producto.categoria); // Eliminado
       const url = `http://localhost:5001/api/products/opcionales?${params.toString()}`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -381,13 +379,6 @@ export default function EquiposPanel() {
       }
       // --- FIN: Diagnóstico de duplicados ---
 
-      const todasCategorias = ['Todas las categorías'];
-      productosRecibidos.forEach((producto: Producto) => {
-        if (producto.categoria && !todasCategorias.includes(producto.categoria)) {
-          todasCategorias.push(producto.categoria);
-        }
-      });
-      setCategorias(todasCategorias);
       setProductosOriginales(productosRecibidos);
       setProductos(productosRecibidos); // Inicialmente, antes de filtros, productos es igual a originales
       setTotalMostrado(productosRecibidos.length);
@@ -419,14 +410,9 @@ export default function EquiposPanel() {
           producto.Modelo?.toLowerCase().includes(lowerSearchTerm)
       );
     }
-    if (categoriaSeleccionada !== 'Todas las categorías') {
-      productosFiltrados = productosFiltrados.filter(
-        producto => producto.categoria === categoriaSeleccionada
-      );
-    }
     setProductos(productosFiltrados);
     setTotalMostrado(productosFiltrados.length);
-  }, [searchTerm, categoriaSeleccionada, productosOriginales]);
+  }, [searchTerm, productosOriginales]);
 
   useEffect(() => {
     const handleEscKey = (event: KeyboardEvent) => {
@@ -517,14 +503,14 @@ export default function EquiposPanel() {
       setOpcionalesDataModal([]); // Limpiar datos previos
 
       try {
-        const { codigo_producto, Modelo, categoria } = productoActualConfigurandoOpcionales;
-        if (!codigo_producto || !Modelo || !categoria) {
-          throw new Error('Faltan parámetros (código, modelo o categoría) para obtener opcionales.');
+        const { codigo_producto, Modelo /*, categoria */ } = productoActualConfigurandoOpcionales; // categoria eliminado
+        if (!codigo_producto || !Modelo /* || !categoria */) { // categoria eliminado
+          throw new Error('Faltan parámetros (código, modelo) para obtener opcionales.');
         }
         const params = new URLSearchParams();
         params.append('codigo', codigo_producto);
         params.append('modelo', Modelo);
-        params.append('categoria', categoria);
+        // params.append('categoria', categoria); // Eliminado
         const url = `http://localhost:5001/api/products/opcionales?${params.toString()}`;
         
         const controller = new AbortController();
@@ -848,7 +834,6 @@ export default function EquiposPanel() {
     // Asumimos que la interfaz Producto del frontend tiene al menos los campos aplanados por el backend.
     const formData: EquipoFormData = {
         Codigo_Producto: producto.codigo_producto, // Usar el campo que la interfaz Producto sí tiene
-        categoria: producto.categoria, 
         peso_kg: (producto as any).peso_kg || '', // Acceso seguro si no está en la interfaz Producto
         clasificacion_easysystems: (producto as any).clasificacion_easysystems || '',
         codigo_ea: (producto as any).codigo_ea || '',
@@ -859,7 +844,7 @@ export default function EquiposPanel() {
         caracteristicas: {
             nombre_del_producto: producto.nombre_del_producto,
             modelo: producto.Modelo, 
-            descripcion: producto.Descripcion,
+            descripcion: producto.descripcion,
             categoria: (producto as any).caracteristicas?.categoria || (producto as any).categoria_interna || '' // Ejemplo si hubiera una categoria interna
         },
         dimensiones: {
@@ -1043,14 +1028,6 @@ export default function EquiposPanel() {
                 </button>
               )}
           </div>
-          <div style={{ position: 'relative' }}>
-              <select value={categoriaSeleccionada} onChange={(e) => setCategoriaSeleccionada(e.target.value)} style={{ appearance: 'none', backgroundColor: 'white', border: '1px solid #D1D5DB', padding: '8px 36px 8px 12px', borderRadius: '6px', fontSize: '14px', cursor: 'pointer' }}>
-                {categorias.map((cat, idx) => (<option key={idx} value={cat}>{cat}</option>))}
-              </select>
-              <div style={{ position: 'absolute', top: '50%', right: '12px', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                <ChevronDown size={16}/>
-              </div>
-          </div>
           
           {/* BOTÓN ACTUALIZAR CACHÉ */}
           <button onClick={refreshProductos} className="button-hover" title="Actualizar lista desde el caché" style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'white', border: '1px solid #1e88e5', color: '#1e88e5', padding: '8px 16px', borderRadius: '6px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>
@@ -1116,9 +1093,9 @@ export default function EquiposPanel() {
                       <th style={{ padding: '12px 16px', textAlign: 'left' }}>Nombre</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left' }}>Descripción</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left' }}>Modelo</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Categoría</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Ver Detalle</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'center' }}>Opcionales</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left' }}>Tipo</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center', width: '100px' }}>Ver Detalle</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'center', width: '100px' }}>Opcionales</th>
                       {isSelectionModeActive && (
                         <th style={{ padding: '12px 16px', textAlign: 'center', width: '100px' }}>Seleccionar</th>
                       )}
@@ -1132,13 +1109,15 @@ export default function EquiposPanel() {
                       <tr key={producto.codigo_producto || `prod-${index}-${Math.random()}`} className="table-row" style={{ backgroundColor: index % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
                         <td style={{ padding: '16px', textAlign: 'left' }}>{producto.codigo_producto || '-'}</td>
                         <td style={{ padding: '16px', textAlign: 'left' }}>{producto.nombre_del_producto || '-'}</td>
-                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.Descripcion || '-'}</td>
+                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.descripcion || '-'}</td>
                         <td style={{ padding: '16px', textAlign: 'left' }}>{producto.Modelo || '-'}</td>
-                        <td style={{ padding: '16px', textAlign: 'left' }}>{producto.categoria || '-'}</td>
+                        <td style={{ padding: '16px', textAlign: 'left' }}>
+                          {producto.tipo && producto.tipo.trim() === '// Cambiado para mostrar tipo' ? '-' : (producto.tipo || '-')}
+                        </td>
                         <td style={{ padding: '12px', textAlign: 'center' }}><button title="Ver Detalles" className="button-hover" style={{ padding: '6px', backgroundColor: 'transparent', color: '#1d4ed8', border: 'none', borderRadius: '50%', cursor: 'pointer'}} onClick={() => handleVerDetalle(producto)} disabled={loadingDetail === producto.codigo_producto}>{loadingDetail === producto.codigo_producto ? '...': <Info size={18}/>}</button></td>
                         <td style={{ padding: '12px', textAlign: 'center' }}>
                           <button title="Ver Opcionales" className="button-hover" style={{ padding: '6px', backgroundColor: 'transparent', color: '#059669', border: 'none', borderRadius: '50%', cursor: 'pointer'}} onClick={() => handleOpcionales(producto)} disabled={loadingOpcionalesBtn === producto.codigo_producto}>
-                            {loadingOpcionalesBtn === producto.codigo_producto ? '...' : <Settings2 size={18}/>}
+                            {loadingOpcionalesBtn === producto.codigo_producto ? '...' : <ListFilter size={18}/>}
                           </button>
                         </td>
                         {isSelectionModeActive && (

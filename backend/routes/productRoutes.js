@@ -59,9 +59,30 @@ router.get('/download-template', (req, res) => {
   }
 });
 
+// Nueva ruta para descargar plantilla de ESPECIFICACIONES (CSV)
+router.get('/download-specifications-template', (req, res) => {
+  const templatePath = path.join(__dirname, '../Plantilla_Carga_Especificaciones.csv');
+  if (fs.existsSync(templatePath)) {
+    res.download(templatePath, 'Plantilla_Carga_Especificaciones.csv', (err) => {
+      if (err) {
+        console.error('Error downloading specifications template:', err);
+        res.status(500).json({ message: 'Error downloading specifications template' });
+      }
+    });
+  } else {
+    res.status(404).json({ message: 'Specifications template file not found' });
+  }
+});
+
 // Cargar productos desde Excel (se mantiene si aún es necesaria)
 router.post('/cargar-excel', productoCtrl.cargarProductosDesdeExcel);
-// <<<--- Nueva Ruta para Carga Masiva --->>> (se mantiene si aún es necesaria)
+
+// Endpoint para la carga masiva de productos con plantilla PLANA
 router.post('/upload-bulk', upload.single('archivoExcel'), productoCtrl.uploadBulkProducts);
+
+// NUEVA RUTA para actualizar/cargar especificaciones desde formato MATRICIAL
+router.post('/upload-matrix', upload.single('archivoExcelMatrix'), productoCtrl.uploadBulkProductsMatrix);
+
+// <<<--- Fin de la sección de carga masiva --- >>>
 
 module.exports = router;

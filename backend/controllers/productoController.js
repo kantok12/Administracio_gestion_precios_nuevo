@@ -483,146 +483,269 @@ const clearCache = async (req, res) => {
     }
 };
 
-// <<<--- NUEVA FUNCIÓN PARA CARGA MASIVA DESDE ARCHIVO SUBIDO --->>>
-const uploadBulkProducts = async (req, res) => {
-    console.log('[Bulk Upload] Request received.');
+// <<<--- INICIO: NUEVAS FUNCIONES AUXILIARES Y CONFIGURACIÓN --- >>>
+
+// Objeto de Configuración para Mapeo de Especificaciones
+// Este objeto se podría externalizar a un archivo JSON más adelante.
+const specMappings = {
+  // Nombres de especificación (en minúsculas y trim) como claves
+  "peso": { "targetPath": "dimensiones.peso_kg", "type": "string" }, // Mantener como string para incluir "[kg]"
+  "ancho": { "targetPath": "dimensiones.ancho_cm", "type": "string" }, // Mantener como string para incluir "[m]"
+  "alto con cañón de descarga": { "targetPath": "dimensiones.alto_cm", "type": "string" },
+  "alto sin cañón de descarga": { "targetPath": "dimensiones.alto_sin_canon_cm", "type": "string", "optional": true },
+  "largo": { "targetPath": "dimensiones.largo_cm", "type": "string" },
+  "largo (tolva cerrada)": { "targetPath": "dimensiones.largo_tolva_cerrada_cm", "type": "string", "optional": true },
+  "largo (tolva abierta)": { "targetPath": "dimensiones.largo_tolva_abierta_cm", "type": "string", "optional": true },
+  "alto desde el suelo a tolva": { "targetPath": "dimensiones.alto_suelo_tolva_cm", "type": "string", "optional": true },
+  "motor": { "targetPath": "especificaciones_tecnicas.motor", "type": "string" },
+  "tipo de combustible": { "targetPath": "especificaciones_tecnicas.combustible", "type": "string" },
+  "estanque de combustible": { "targetPath": "especificaciones_tecnicas.capacidad_estanque_combustible_l", "type": "string" },
+  "estanque hidraulico": { "targetPath": "especificaciones_tecnicas.capacidad_estanque_hidraulico_l", "type": "string" },
+  "potencia del motor": { "targetPath": "especificaciones_tecnicas.potencia_motor", "type": "string" }, // Ej: "23.8 [hp]"
+  "requisito máximo de caudal hidráulico": { "targetPath": "especificaciones_tecnicas.caudal_hidraulico_requerido", "type": "string", "optional": true },
+  "sistema de enfriamiento": { "targetPath": "especificaciones_tecnicas.sistema_enfriamiento", "type": "string", "optional": true },
+  "control de operación": { "targetPath": "especificaciones_tecnicas.control_operacion", "type": "string", "optional": true },
+  "nivel de ruido": { "targetPath": "especificaciones_tecnicas.nivel_ruido_db", "type": "string" },
+  "emisiones": { "targetPath": "especificaciones_tecnicas.norma_emisiones", "type": "string" },
+  "producción": { "targetPath": "especificaciones_tecnicas.produccion_m3_hr", "type": "string" },
+  "tipo de alimentacion": { "targetPath": "especificaciones_tecnicas.tipo_alimentacion", "type": "string", "optional": true },
+  "tamaño de tolva de entrada (ancho x alto)": { "targetPath": "especificaciones_tecnicas.tamano_tolva_entrada_mm", "type": "string", "optional": true },
+  "tamaño de garganta de alimentacion": { "targetPath": "especificaciones_tecnicas.tamano_garganta_alimentacion_mm", "type": "string", "optional": true },
+  "diametro de entrada": { "targetPath": "especificaciones_tecnicas.diametro_entrada_mm", "type": "string", "optional": true },
+  // ... añadir más mapeos según sea necesario
+  // Categorías a ignorar (no son especificaciones de valor)
+  "dimensiones": { "isSpecCategory": true },
+  "sistema de potencia": { "isSpecCategory": true },
+  "rotacion de la mesa de chipeadora": { "isSpecCategory": true }, // O mapear si es una spec real con valor
+  "sistema de alimentacion": { "isSpecCategory": true },
+  "emisiones y ruido": { "isSpecCategory": true } // Ejemplo si hay otra categoría
+};
+
+function findHeaderRowIndex(dataAoA, keyword, startRow = 0, columnToSearch = 0) {
+    for (let i = startRow; i < dataAoA.length; i++) {
+        const cellValue = dataAoA[i][columnToSearch]?.toString().trim().toLowerCase();
+        if (cellValue === keyword.toLowerCase()) {
+            return i;
+        }
+    }
+    return -1; // No encontrado
+}
+
+function getSafeCellValue(dataAoA, rowIndex, colIndex) {
+    if (dataAoA && dataAoA[rowIndex] && dataAoA[rowIndex][colIndex] !== undefined && dataAoA[rowIndex][colIndex] !== null) {
+        return dataAoA[rowIndex][colIndex].toString().trim();
+    }
+    return ""; // Devolver cadena vacía si no hay valor o está fuera de límites
+}
+
+// Función para establecer valor en ruta anidada. Ej: setValueByPath(obj, "a.b.c", 10)
+function setValueByPath(obj, path, value) {
+    const keys = path.split('.');
+    let current = obj;
+    for (let i = 0; i < keys.length - 1; i++) {
+        if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
+            current[keys[i]] = {};
+        }
+        current = current[keys[i]];
+    }
+    current[keys[keys.length - 1]] = value;
+}
+
+// Adaptación de funciones de parseo
+const parseStringValue = (value) => value?.toString().trim() || undefined;
+
+const parseNumberValue = (value) => {
+    if (value === undefined || value === null || value.toString().trim() === "") return undefined;
+    // Intentar extraer solo el número, por si viene con unidades como "750 [kg]" -> 750
+    const numericPart = value.toString().match(/^[\d,.]+/);
+    if (numericPart) {
+      const num = Number(numericPart[0].replace(',', '.')); // Reemplazar coma por punto para decimales
+      return isNaN(num) ? undefined : num; // Devolver undefined si no es un número válido
+    }
+    const numVal = Number(value.toString().replace(',', '.'));
+    return isNaN(numVal) ? undefined : numVal;
+};
+
+const parseBooleanValue = (value) => {
+    const val = value?.toString().trim().toLowerCase();
+    if (val === undefined || val === null || val === '') return undefined;
+    if (['true', 'verdadero', 'si', '1'].includes(val)) return true;
+    if (['false', 'falso', 'no', '0'].includes(val)) return false;
+    return undefined; // O lanzar error si se prefiere un booleano estricto
+};
+
+const valueParsers = {
+    "string": parseStringValue,
+    "number": parseNumberValue,
+    "boolean": parseBooleanValue,
+};
+// <<<--- FIN: NUEVAS FUNCIONES AUXILIARES Y CONFIGURACIÓN --- >>>
+
+// <<<--- MODIFICACIÓN DE uploadBulkProducts --- >>>
+// ESTA VERSIÓN SERÁ RENOMBRADA a uploadBulkProductsMatrix
+const uploadBulkProductsMatrix = async (req, res) => {
+    console.log('[Bulk Upload Matrix] Request received.');
     if (!req.file) {
         return res.status(400).json({ message: 'No se subió ningún archivo.' });
     }
-
-    console.log(`[Bulk Upload] Processing file: ${req.file.originalname}, size: ${req.file.size} bytes`);
+    console.log(`[Bulk Upload Matrix] Processing file: ${req.file.originalname}, size: ${req.file.size} bytes`);
 
     try {
         const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        // Usar { raw: true } para fechas si es necesario, { raw: false } para valores formateados
-        const data = xlsx.utils.sheet_to_json(worksheet, { raw: false });
+        // LEER COMO ARRAY DE ARRAYS para estructura matricial
+        const dataAoA = xlsx.utils.sheet_to_json(worksheet, { header: 1, blankrows: false });
 
-        if (!data || data.length === 0) {
-            return res.status(400).json({ message: 'No se encontraron datos en el archivo Excel subido.' });
-        };
+        if (!dataAoA || dataAoA.length < 3) { // Necesita al menos cabeceras y una fila de datos
+            return res.status(400).json({ message: 'No se encontraron suficientes datos o estructura no válida en el archivo Excel subido.' });
+        }
 
-        console.log(`[Bulk Upload] Found ${data.length} rows in uploaded Excel.`);
+        // --- Identificar filas clave y columna de especificaciones ---
+        // Asumimos que la columna de nombres de especificaciones es la primera (índice 0)
+        const specNameColIndex = 0;
+        // Buscar filas de cabecera para Código Fabricante y Modelo
+        // Se puede hacer más robusto permitiendo variaciones o configuración
+        const codigoFabricanteRowKeyword = "Código Fabricante";
+        const modeloRowKeyword = "Modelo";
+
+        let rowIndexCodigoFabricante = findHeaderRowIndex(dataAoA, codigoFabricanteRowKeyword, 0, 0);
+        if (rowIndexCodigoFabricante === -1) rowIndexCodigoFabricante = findHeaderRowIndex(dataAoA, codigoFabricanteRowKeyword, 0, 1); // Intentar en columna 1
+        if (rowIndexCodigoFabricante === -1) {
+             // Fallback: Asumir que está en la segunda fila si no se encuentra la palabra clave
+             if (dataAoA.length > 1) rowIndexCodigoFabricante = 1; else throw new Error(`Fila de '${codigoFabricanteRowKeyword}' no encontrada.`);
+             console.warn(`[Bulk Upload Matrix] Keyword '${codigoFabricanteRowKeyword}' no encontrada, asumiendo fila ${rowIndexCodigoFabricante + 1}`);
+        }
+        
+        let rowIndexModelo = findHeaderRowIndex(dataAoA, modeloRowKeyword, 0, 0);
+         if (rowIndexModelo === -1) rowIndexModelo = findHeaderRowIndex(dataAoA, modeloRowKeyword, 0, 1); // Intentar en columna 1
+        if (rowIndexModelo === -1) {
+            // Fallback: Asumir que está debajo de Codigo Fabricante si no se encuentra
+            if (dataAoA.length > rowIndexCodigoFabricante + 1) rowIndexModelo = rowIndexCodigoFabricante + 1; else throw new Error(`Fila de '${modeloRowKeyword}' no encontrada.`);
+            console.warn(`[Bulk Upload Matrix] Keyword '${modeloRowKeyword}' no encontrada, asumiendo fila ${rowIndexModelo + 1}`);
+        }
+
+
+        const startDataColIndex = 1; // Los datos de modelos empiezan en la segunda columna (después de nombres de spec)
+        // La primera fila de datos de especificaciones reales. Saltar las filas de "Codigo Fabricante" y "Modelo"
+        const startDataRowIndex = Math.max(rowIndexCodigoFabricante, rowIndexModelo) + 1;
+
+        const headerRowCodigos = dataAoA[rowIndexCodigoFabricante];
+        const headerRowModelos = dataAoA[rowIndexModelo];
+
+        if (!headerRowCodigos || !headerRowModelos) {
+            throw new Error("No se pudieron leer las filas de cabecera para códigos y modelos.");
+        }
+
         let operaciones = [];
         let errores = [];
+        let processedModelCount = 0;
 
-        // Iterar sobre las filas, empezando desde la fila 2 del Excel (índice 0 + 2)
-        data.forEach((row, index) => {
-            const rowNumber = index + 2; 
-            let codigoProducto = 'N/A'; 
+        // --- Iterar por Columnas (Modelos) ---
+        for (let colIndex = startDataColIndex; colIndex < headerRowCodigos.length; colIndex++) {
+            const currentCodigoProducto = getSafeCellValue(dataAoA, rowIndexCodigoFabricante, colIndex);
+            if (!currentCodigoProducto) { // Si no hay código de producto en esta columna, saltarla
+                console.warn(`[Bulk Upload Matrix] Columna ${colIndex +1} omitida: Falta Codigo_Producto en fila de cabecera.`);
+                continue;
+            }
 
-            try {
-                const getVal = (key) => row[key]?.toString().trim();
-                const getNum = (key) => {
-                    const val = getVal(key);
-                    if (val === undefined || val === null || val === '') return undefined;
-                    const num = Number(val);
-                    if (isNaN(num)) throw new Error(`Valor no numérico para ${key}`);
-                    return num;
+            processedModelCount++;
+            const currentNombreModelo = getSafeCellValue(dataAoA, rowIndexModelo, colIndex);
+            
+            let productoData = {
+                Codigo_Producto: currentCodigoProducto,
+                caracteristicas: { modelo: currentNombreModelo },
+                especificaciones_tecnicas: {},
+                dimensiones: {},
+                datos_contables: {}, // Estos campos necesitarían otra fuente o se dejan vacíos
+                detalles: {}, // Idem
+                // Se deben añadir otros campos raíz del schema 'Producto' si se conocen
+                // ej. categoria, Descripcion, etc. ¿De dónde vendrán?
+            };
+
+            // --- Iterar por Filas (Especificaciones) para el modelo actual ---
+            for (let rowIndex = startDataRowIndex; rowIndex < dataAoA.length; rowIndex++) {
+                const rawSpecName = getSafeCellValue(dataAoA, rowIndex, specNameColIndex);
+                if (!rawSpecName) continue; // Fila de especificación vacía
+
+                const normalizedSpecName = rawSpecName.toLowerCase().trim();
+                const mappingConfig = specMappings[normalizedSpecName];
+
+                if (!mappingConfig || mappingConfig.isSpecCategory) {
+                    // console.log(`[Bulk Upload Matrix] Saltando fila de categoría o sin mapeo: ${rawSpecName}`);
+                    continue;
                 }
-                const getBool = (key) => {
-                    const val = getVal(key)?.toLowerCase();
-                    if (val === undefined || val === null || val === '') return undefined; // Devolver undefined si está vacío para que el schema use su default si lo tiene
-                    if (['true', 'verdadero', 'si', '1', 'TRUE', 'VERDADERO', 'SI'].includes(val)) return true;
-                    if (['false', 'falso', 'no', '0', 'FALSE', 'FALSO', 'NO'].includes(val)) return false;
-                    throw new Error(`Valor no booleano reconocible para ${key}: '${getVal(key)}'`);
+
+                const rawValue = getSafeCellValue(dataAoA, rowIndex, colIndex);
+                if (rawValue === "" && !mappingConfig.optional) { // Considerar si "" debe ser error o simplemente omitido
+                     errores.push({
+                         rowNumber: rowIndex + 1, // Fila del Excel
+                         field: rawSpecName,
+                         message: `Valor obligatorio faltante para la especificación '${rawSpecName}'.`,
+                         codigo: currentCodigoProducto
+                     });
+                    continue;
+                }
+                if (rawValue === "" && mappingConfig.optional) {
+                    continue; // Si es opcional y vacío, simplemente no lo añadimos
                 }
 
-                codigoProducto = getVal('Codigo_Producto') || 'N/A_Row_' + rowNumber;
-                if (!getVal('Codigo_Producto')) { // Chequeo más estricto para Codigo_Producto
-                    console.warn(`[Bulk Upload] Fila ${rowNumber} omitida: Falta Codigo_Producto.`);
-                    errores.push({
-                        rowNumber: rowNumber,
-                        field: 'Codigo_Producto',
-                        message: 'Fila omitida por falta de Codigo_Producto.',
-                        codigo: codigoProducto
-                    });
-                    return; 
-                }
 
-                // Recopilar todos los campos que irán al objeto 'detalles'
-                const camposExcluidosDeDetalles = [
-                    'Codigo_Producto', 'nombre_del_producto', 'Descripcion', 'Modelo', 'categoria', // Campos principales o para caracteristicas
-                    'fecha_cotizacion', 'costo_fabrica_original_eur', // Para datos_contables
-                    'largo_cm', 'ancho_cm', 'alto_cm', 'peso_kg'       // Para dimensiones
-                ];
+                const parser = valueParsers[mappingConfig.type] || parseStringValue; // Default a string parser
+                let processedValue = parser(rawValue);
                 
-                let detallesData = {};
-                for (const key in row) {
-                    if (row.hasOwnProperty(key) && !camposExcluidosDeDetalles.includes(key)) {
-                        if (key === 'es_opcional') {
-                            detallesData[key] = getBool(key);
-                        } else if (key === 'numero_caracteristicas_tecnicas' || key === 'garganta_alimentacion_mm') { // Añadir más campos numéricos de detalles si los hay
-                            detallesData[key] = getNum(key);
-                        } else {
-                            detallesData[key] = getVal(key);
-                        }
-                    }
+                // Si el tipo es string y el valor procesado es string vacío, convertir a undefined
+                // para que no se guarde como "" a menos que se desee explícitamente.
+                if (mappingConfig.type === 'string' && processedValue === '') {
+                    processedValue = undefined;
                 }
-                // Limpiar undefined de detallesData
-                Object.keys(detallesData).forEach(key => {
-                    if (detallesData[key] === undefined) delete detallesData[key];
-                });
 
-                // Construcción del objeto productoData con la estructura anidada correcta
-                let productoData = {
-                    Codigo_Producto: getVal('Codigo_Producto'), // Ya validado que existe
-                    Descripcion: getVal('Descripcion'),     // Descripción general a nivel raíz
-                    categoria: getVal('categoria'),         // Categoría principal a nivel raíz
-                    
-                    caracteristicas: {
-                        nombre_del_producto: getVal('nombre_del_producto'),
-                        modelo: getVal('Modelo') // Leyendo de la columna 'Modelo' del Excel
-                    },
-                    
-                    datos_contables: {
-                        fecha_cotizacion: getVal('fecha_cotizacion'),
-                        costo_fabrica_original_eur: getNum('costo_fabrica_original_eur')
-                    },
-                    
-                    dimensiones: {
-                        largo_cm: getNum('largo_cm'),
-                        ancho_cm: getNum('ancho_cm'),
-                        alto_cm: getNum('alto_cm'),
-                        peso_kg: getNum('peso_kg')   // peso_kg ahora en dimensiones
-                    },
-                    
-                    detalles: detallesData, // Objeto con todos los demás campos
-                    
-                    // MongoDB/Mongoose Schema se encargará de campos opcionales no presentes
-                    // especificaciones_tecnicas y metadata se pueden manejar según la lógica del schema si es necesario
-                    // por ahora, se omiten si no hay un mapeo directo desde columnas planas
-                    especificaciones_tecnicas: {}, 
-                    metadata: {}                  
-                };
 
-                // Limpieza final de campos y sub-objetos undefined o vacíos antes de la validación
-                Object.keys(productoData).forEach(key => {
-                    if (productoData[key] === undefined) {
-                        delete productoData[key];
+                if (processedValue !== undefined) {
+                     // Limpieza específica para campos numéricos que aún pueden tener la unidad en el string original
+                    if (mappingConfig.type === 'number' && typeof rawValue === 'string') {
+                        const numericOnly = parseFloat(rawValue.replace(/[^\d.-]/g, '').replace(',', '.'));
+                        if (!isNaN(numericOnly)) processedValue = numericOnly;
+                        else processedValue = undefined; // No se pudo parsear un número limpio
                     }
-                });
-                if (productoData.caracteristicas && Object.values(productoData.caracteristicas).every(v => v === undefined)) delete productoData.caracteristicas;
-                if (productoData.datos_contables && Object.values(productoData.datos_contables).every(v => v === undefined)) delete productoData.datos_contables;
-                if (productoData.dimensiones && Object.values(productoData.dimensiones).every(v => v === undefined)) delete productoData.dimensiones;
-                if (productoData.detalles && Object.keys(productoData.detalles).length === 0) delete productoData.detalles;
+                     // Si es string y el valor original tenía [unidad], usar el valor original si el parser no lo hizo.
+                    if (mappingConfig.type === 'string' && typeof rawValue === 'string' && /\s*\[.*\]/.test(rawValue) ) {
+                        processedValue = rawValue;
+                    }
 
+                    setValueByPath(productoData, mappingConfig.targetPath, processedValue);
+                } else if (!mappingConfig.optional) {
+                     errores.push({
+                         rowNumber: rowIndex + 1,
+                         field: rawSpecName,
+                         message: `Valor inválido o no parseable para '${rawSpecName}': '${rawValue}'. Tipo esperado: ${mappingConfig.type}`,
+                         codigo: currentCodigoProducto
+                     });
+                }
+            }
 
-                const tempProduct = new Producto(productoData);
+            // Limpieza final de sub-objetos vacíos antes de la validación
+            ['caracteristicas', 'especificaciones_tecnicas', 'dimensiones', 'datos_contables', 'detalles'].forEach(key => {
+                if (productoData[key] && Object.keys(productoData[key]).length === 0) {
+                    delete productoData[key];
+                }
+            });
+            
+            // Validación del producto individual
+            try {
+                const tempProduct = new Producto(productoData); // Asumiendo que 'Producto' es el modelo Mongoose importado
                 const validationError = tempProduct.validateSync();
-
                 if (validationError) {
                     for (const fieldPath in validationError.errors) {
                         errores.push({
-                            rowNumber: rowNumber,
+                            rowNumber: 'N/A (Modelo completo)', // Difícil de mapear a una sola fila del Excel
                             field: fieldPath,
                             message: validationError.errors[fieldPath].message,
-                            value: validationError.errors[fieldPath].value === undefined ? getVal(fieldPath.split('.').pop()) : validationError.errors[fieldPath].value, // Tratar de obtener valor original
-                            codigo: codigoProducto
+                            value: validationError.errors[fieldPath].value,
+                            codigo: currentCodigoProducto
                         });
                     }
-                    console.warn(`[Bulk Upload] Fila ${rowNumber} (Código: ${codigoProducto}) con errores de validación.`);
+                    console.warn(`[Bulk Upload Matrix] Modelo ${currentCodigoProducto} con errores de validación.`);
                 } else {
                     operaciones.push({
                         updateOne: {
@@ -632,76 +755,326 @@ const uploadBulkProducts = async (req, res) => {
                         }
                     });
                 }
-            } catch (parseError) {
-                console.warn(`[Bulk Upload] Fila ${rowNumber} (Código: ${codigoProducto}) con error de parseo/procesamiento: ${parseError.message}`);
-                errores.push({
-                    rowNumber: rowNumber,
-                    field: parseError.message.includes('para ') ? parseError.message.substring(parseError.message.indexOf('para ') + 5) : 'Error de Parseo',
-                    message: parseError.message,
-                    codigo: codigoProducto
-                });
+            } catch (modelError) {
+                 console.warn(`[Bulk Upload Matrix] Error creando instancia de Producto para ${currentCodigoProducto}: ${modelError.message}`);
+                 errores.push({
+                     rowNumber: 'N/A', field: 'Creación Modelo',
+                     message: modelError.message, codigo: currentCodigoProducto
+                 });
             }
-        }); 
+        } // Fin del bucle por columnas (modelos)
 
-        console.log(`[Bulk Upload] Prepared ${operaciones.length} bulk operations. Found ${errores.length} rows with initial errors.`);
-        let resultado = { upsertedCount: 0, modifiedCount: 0, writeErrors: [] };
-        let finalErrorList = [...errores]; // Copiar errores iniciales
+        console.log(`[Bulk Upload Matrix] Prepared ${operaciones.length} bulk operations for ${processedModelCount} models. Found ${errores.length} initial errors.`);
+        
+        let resultadoBulkWrite = { upsertedCount: 0, modifiedCount: 0, matchedCount:0, upsertedIds: {}, hasWriteErrors: () => false, getWriteErrors: () => [] };
+        let finalErrorList = [...errores];
 
         if (operaciones.length > 0) {
             try {
-                 resultado = await Producto.bulkWrite(operaciones, { ordered: false });
-                 console.log('[Bulk Upload] Bulk write operation result:', resultado);
-                 // Añadir errores específicos del bulkWrite si existen
-                 if (resultado.hasWriteErrors()) {
-                     resultado.getWriteErrors().forEach(err => {
+                resultadoBulkWrite = await Producto.bulkWrite(operaciones, { ordered: false });
+                console.log('[Bulk Upload Matrix] Bulk write operation result:', resultadoBulkWrite);
+                if (resultadoBulkWrite.hasWriteErrors()) {
+                    resultadoBulkWrite.getWriteErrors().forEach(err => {
                         const codigo = err.err.op?.Codigo_Producto || err.err.op?.$set?.Codigo_Producto || 'Desconocido';
-                        finalErrorList.push({ 
-                             rowNumber: 'N/A', // Es difícil saber la fila original exacta desde bulkWriteError
-                             field: 'bulkWrite', // Indicar que es error de escritura DB
-                             message: err.errmsg || 'Error de escritura en Base de Datos',
-                             details: `Código de error: ${err.code}`,
-                             codigo: codigo
-                         });
-                     });
-                 }
+                        finalErrorList.push({
+                            rowNumber: 'N/A (DB)', field: 'bulkWrite',
+                            message: err.errmsg || 'Error de escritura en Base de Datos',
+                            details: `Código de error: ${err.code}`, codigo: codigo
+                        });
+                    });
+                }
             } catch (bulkError) {
-                 console.error('[Bulk Upload] Error executing BulkWrite:', bulkError);
-                 // Error general del bulkWrite
-                 finalErrorList.push({ 
-                    rowNumber: 'N/A',
-                    field: 'bulkWrite',
-                    message: 'Error general durante la operación de escritura masiva.', 
-                    details: bulkError.message, 
-                    codigo: 'N/A' 
-                 });
+                console.error('[Bulk Upload Matrix] Error executing BulkWrite:', bulkError);
+                finalErrorList.push({
+                    rowNumber: 'N/A (DB)', field: 'bulkWrite General',
+                    message: 'Error general durante la operación de escritura masiva.',
+                    details: bulkError.message, codigo: 'N/A'
+                });
+            }
+        }
+
+        const resumen = {
+            totalModelsInExcel: processedModelCount, // Número de columnas de modelo procesadas
+            rowsProcessed: dataAoA.length, // Número de filas leídas del excel (informativo)
+            modelsAttemptedInBulk: operaciones.length,
+            modelsWithErrors: finalErrorList.filter(e => e.codigo !== 'N/A').map(e => e.codigo).filter((v, i, a) => a.indexOf(v) === i).length,
+            inserted: resultadoBulkWrite.upsertedCount || 0,
+            updated: resultadoBulkWrite.modifiedCount || 0,
+            writeErrorsCount: resultadoBulkWrite.getWriteErrors?.().length || 0,
+            errors: finalErrorList
+        };
+        console.log('[Bulk Upload Matrix] Final Summary:', JSON.stringify(resumen, null, 2));
+        
+        const status = finalErrorList.length > 0 ? 207 : 200;
+        const message = finalErrorList.length > 0 ? `Carga completada con ${finalErrorList.length} errores.` : 'Carga masiva (matriz) completada exitosamente.';
+        res.status(status).json({ message, summary: resumen });
+
+    } catch (error) {
+        console.error('[Bulk Upload Matrix] General error processing uploaded file:', error);
+        res.status(500).json({ message: 'Error interno del servidor al procesar el archivo subido (matriz).', error: error.message });
+    }
+};
+// <<<------------------------------------------------------------>>>
+
+// <<<--- INICIO: FUNCIÓN uploadBulkProducts RECREADA PARA CARGA PLANA (fila por producto) --- >>>
+const uploadBulkProducts = async (req, res) => {
+    console.log('[Bulk Upload Plain] Request received.');
+    if (!req.file) {
+        return res.status(400).json({ message: 'No se subió ningún archivo.' });
+    }
+
+    console.log(`[Bulk Upload Plain] Processing file: ${req.file.originalname}, size: ${req.file.size} bytes`);
+
+    try {
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = xlsx.utils.sheet_to_json(worksheet, { raw: false });
+
+        if (!data || data.length === 0) {
+            return res.status(400).json({ message: 'No se encontraron datos en el archivo Excel subido (plantilla plana).' });
+        };
+
+        console.log(`[Bulk Upload Plain] Found ${data.length} rows in uploaded Excel.`);
+        let operaciones = [];
+        let errores = [];
+
+        data.forEach((row, index) => {
+            const rowNumber = index + 2; // Asumiendo que la primera fila de datos en Excel es la fila 2
+            let codigoProductoExcel = row['codigo_producto']?.toString().trim();
+
+            if (!codigoProductoExcel) {
+                console.warn(`[Bulk Upload Plain] Fila ${rowNumber} omitida: Falta 'codigo_producto'.`);
+                errores.push({
+                    rowNumber: rowNumber,
+                    field: 'codigo_producto',
+                    message: "Fila omitida por falta de 'codigo_producto'.",
+                    codigo: `N/A_Row_${rowNumber}`
+                });
+                return; // Saltar esta fila
+            }
+
+            try {
+                const getVal = (key) => row[key]?.toString().trim();
+                const getNum = (key) => {
+                    const val = getVal(key);
+                    if (val === undefined || val === null || val === '') return undefined;
+                    const num = Number(String(val).replace(',', '.'));
+                    return isNaN(num) ? undefined : num;
+                };
+                
+                // Para la fecha, Mongoose intentará convertir el string si es un formato reconocido (ISO, etc.)
+                // Si se necesita un parseo más robusto, se podría usar una librería como 'date-fns' o 'moment' aquí.
+                const getDate = (key) => {
+                    const val = getVal(key);
+                    if (!val) return undefined;
+                    // XLSX puede convertir fechas a números de serie de Excel. Si es número, convertir.
+                    if (typeof val === 'number') {
+                        return xlsx.SSF.parse_date_code(val); // Devuelve un objeto de fecha de JS
+                    }
+                    // Si es string, intentar parsear. Mongoose lo intentará también.
+                    const parsedDate = new Date(val);
+                    return isNaN(parsedDate.getTime()) ? undefined : parsedDate;
+                };
+
+                const largoMM = getNum('largo_mm');
+                const anchoMM = getNum('ancho_mm');
+                const altoMM = getNum('alto_mm');
+
+                let productoData = {
+                    Codigo_Producto: codigoProductoExcel,
+                    caracteristicas: {
+                        nombre_del_producto: getVal('nombre_producto'),
+                        modelo: getVal('Modelo')
+                    },
+                    descripcion: getVal('descripcion'),
+                    tipo: getVal('equipo u opcional'),
+                    datos_contables: {
+                        fecha_cotizacion: getDate('fecha cotizacion'),
+                        costo_fabrica: getNum('costo fabrica'),
+                    },
+                    dimensiones: {
+                        largo_mm: getNum('largo_mm'), // Ya no se divide por 10, se guarda como mm
+                        ancho_mm: getNum('ancho_mm'), // Ya no se divide por 10, se guarda como mm
+                        alto_mm: getNum('alto_mm')   // Ya no se divide por 10, se guarda como mm
+                    },
+                    peso_kg: getNum('peso_kg'),
+                    especificaciones_tecnicas: {},
+                    metadata: {}
+                };
+
+                // Limpieza de campos undefined o sub-objetos vacíos para no enviar $set con undefined
+                // Esta sección es importante para evitar enviar { campo: undefined } a MongoDB
+                // lo que podría interpretarse como una instrucción de $unset si no se maneja con cuidado.
+                // Sin embargo, para la validación de Mongoose, necesitamos que los campos estén presentes si son requeridos.
+                // Por lo tanto, la validación se hace sobre productoData ANTES de una limpieza más agresiva para $set.
+
+                // Primero, asegurar que los campos requeridos en subdocumentos tengan un valor (incluso undefined si no viene del Excel)
+                // para que la validación de Mongoose los detecte si faltan.
+                if (productoData.caracteristicas) {
+                    productoData.caracteristicas.modelo = getVal('Modelo');
+                } else {
+                    productoData.caracteristicas = { modelo: getVal('Modelo') };
+                }
+
+                if (productoData.dimensiones) {
+                    productoData.dimensiones.largo_mm = getNum('largo_mm'); // Mapear a _mm y sin división
+                    productoData.dimensiones.ancho_mm = getNum('ancho_mm'); // Mapear a _mm y sin división
+                    productoData.dimensiones.alto_mm = getNum('alto_mm');   // Mapear a _mm y sin división
+                } else {
+                    productoData.dimensiones = {
+                        largo_mm: getNum('largo_mm'), // Mapear a _mm y sin división
+                        ancho_mm: getNum('ancho_mm'), // Mapear a _mm y sin división
+                        alto_mm: getNum('alto_mm')   // Mapear a _mm y sin división
+                    };
+                }
+                
+                // Los campos requeridos a nivel raíz como peso_kg y categoria ya están siendo asignados.
+                // Si getVal/getNum devuelven undefined, Mongoose los marcará como faltantes.
+
+                const tempProduct = new Producto(productoData); 
+                const validationError = tempProduct.validateSync();
+
+                if (validationError) {
+                    for (const fieldPath in validationError.errors) {
+                        errores.push({
+                            rowNumber: rowNumber,
+                            field: fieldPath,
+                            message: validationError.errors[fieldPath].message,
+                            // Intenta obtener el valor original del Excel para el error si el valor procesado es undefined
+                            value: productoData[fieldPath.split('.')[0]] === undefined ? row[fieldPath.split('.').pop()] : validationError.errors[fieldPath].value,
+                            codigo: codigoProductoExcel
+                        });
+                    }
+                    console.warn(`[Bulk Upload Plain] Fila ${rowNumber} (Código: ${codigoProductoExcel}) con errores de validación.`);
+                } else {
+                    // Si pasa la validación, AHORA podemos limpiar los undefined para el $set
+                    let dataToSet = JSON.parse(JSON.stringify(productoData)); // Clon profundo para no afectar productoData original
+                    Object.keys(dataToSet).forEach(key => {
+                        if (dataToSet[key] === undefined) {
+                            delete dataToSet[key];
+                        } else if (typeof dataToSet[key] === 'object' && dataToSet[key] !== null) {
+                            Object.keys(dataToSet[key]).forEach(subKey => {
+                                if (dataToSet[key][subKey] === undefined) {
+                                    delete dataToSet[key][subKey];
+                                }
+                            });
+                            if (Object.keys(dataToSet[key]).length === 0 && !(key === 'especificaciones_tecnicas' || key === 'metadata')) {
+                                // No eliminar especificaciones_tecnicas o metadata si están vacíos, ya que podrían ser intencionalmente vaciados.
+                                // Para otros subdocumentos, si están vacíos después de limpiar undefined, se pueden eliminar.
+                                // PERO, si el schema los requiere (como caracteristicas, dimensiones), no deberían eliminarse.
+                                // La validación ya pasó, así que aquí es para no enviar objetos vacíos innecesarios.
+                                // Sin embargo, si son requeridos y vacíos, la validación ya habría fallado.
+                                // Esta lógica de limpieza de objetos vacíos es más para subdocumentos opcionales.
+                                // Por seguridad, para los subdocumentos requeridos (`caracteristicas`, `dimensiones`)
+                                // no los eliminaremos aquí incluso si resultaran vacíos de campos no requeridos.
+                                // datos_contables es opcional, podría eliminarse si está vacío.
+                                if (key === 'datos_contables' && Object.keys(dataToSet[key]).length === 0) {
+                                    delete dataToSet[key];
+                                }
+                            }
+                        }
+                    });
+
+                    operaciones.push({
+                        updateOne: {
+                            filter: { Codigo_Producto: codigoProductoExcel },
+                            update: { $set: dataToSet }, // Usar dataToSet limpia para el $set
+                            upsert: true
+                        }
+                    });
+                }
+            } catch (parseError) {
+                console.warn(`[Bulk Upload Plain] Fila ${rowNumber} (Código: ${codigoProductoExcel}) con error de parseo/procesamiento: ${parseError.message}`);
+                errores.push({
+                    rowNumber: rowNumber,
+                    field: 'Error de Parseo General en Fila',
+                    message: parseError.message,
+                    codigo: codigoProductoExcel
+                });
+            }
+        });
+
+        console.log(`[Bulk Upload Plain] Prepared ${operaciones.length} bulk operations. Found ${errores.length} rows with initial errors.`);
+        let resultadoBulkWrite = { upsertedCount: 0, modifiedCount: 0, matchedCount: 0, upsertedIds: {}, hasWriteErrors: () => false, getWriteErrors: () => [] };
+        let finalErrorList = [...errores];
+
+        if (operaciones.length > 0) {
+            try {
+                resultadoBulkWrite = await Producto.bulkWrite(operaciones, { ordered: false });
+                console.log('[Bulk Upload Plain] Bulk write operation result:', resultadoBulkWrite);
+                if (resultadoBulkWrite.hasWriteErrors()) {
+                    resultadoBulkWrite.getWriteErrors().forEach(err => {
+                        const codigo = err.err.op?.Codigo_Producto || err.err.op?.$set?.Codigo_Producto || 'Desconocido';
+                        finalErrorList.push({
+                            rowNumber: 'N/A (DB)', field: 'bulkWrite',
+                            message: err.errmsg || 'Error de escritura en Base de Datos',
+                            details: `Código de error: ${err.code}`, codigo: codigo
+                        });
+                    });
+                }
+            } catch (bulkError) {
+                console.error('[Bulk Upload Plain] Error executing BulkWrite:', bulkError);
+                finalErrorList.push({
+                    rowNumber: 'N/A (DB)', field: 'bulkWrite General',
+                    message: 'Error general durante la operación de escritura masiva.',
+                    details: bulkError.message, codigo: 'N/A'
+                });
             }
         }
 
         const resumen = {
             totalRowsInExcel: data.length,
-            rowsProcessed: data.length, // Se intentan procesar todas las filas
-            rowsAttemptedInBulk: operaciones.length,
-            rowsWithErrors: finalErrorList.length,
-            inserted: resultado.upsertedCount || 0,
-            updated: resultado.modifiedCount || 0,
-            writeErrorsCount: resultado.getWriteErrors?.().length || 0,
-            errors: finalErrorList // Usar la lista final de errores
+            rowsAttemptedForDB: operaciones.length,
+            rowsWithInitialErrors: errores.length, // Errores detectados ANTES de bulkWrite
+            inserted: resultadoBulkWrite.upsertedCount || 0,
+            updated: resultadoBulkWrite.modifiedCount || 0,
+            matchedOnDB: resultadoBulkWrite.matchedCount || 0,
+            dbWriteErrors: resultadoBulkWrite.getWriteErrors ? resultadoBulkWrite.getWriteErrors().length : 0, // Errores DEL bulkWrite
+            detailedErrors: finalErrorList
         };
-        console.log('[Bulk Upload] Final Summary:', JSON.stringify(resumen, null, 2));
         
-        const status = finalErrorList.length > 0 ? 207 : 200; // 207 Multi-Status si hay errores
-        const message = finalErrorList.length > 0 ? `Carga completada con ${finalErrorList.length} errores.` : 'Carga masiva completada exitosamente.';
+        console.log('[Bulk Upload Plain] Summary:', resumen);
+        // Si hay errores iniciales O errores de escritura en BD, el estado es 207 (Multi-Status)
+        const status = (resumen.rowsWithInitialErrors > 0 || resumen.dbWriteErrors > 0) ? 207 : 200;
+        
+        // <<<--- INICIO: Actualizar caché en memoria si la carga fue (al menos parcialmente) exitosa --- >>>
+        if (operaciones.length > 0 && (status === 200 || status === 207)) { // Si se intentó alguna operación y no fue un error total previo
+            try {
+                console.log('[Bulk Upload Plain] Attempting to refresh in-memory cache...');
+                cachedProducts = await Producto.find({}); // Recargar todos los productos
+                // saveCacheToDisk(); // Descomentar si productsCache.json debe actualizarse también aquí
+                console.log(`[Bulk Upload Plain] In-memory cache refreshed. Total products: ${cachedProducts.length}`);
+            } catch (cacheError) {
+                console.error('[Bulk Upload Plain] Error refreshing in-memory cache after bulk upload:', cacheError);
+                // No se devuelve error al cliente por esto, pero se loguea.
+            }
+        }
+        // <<<--- FIN: Actualizar caché en memoria --- >>>
 
-        res.status(status).json({ message, summary: resumen });
+        res.status(status).json({ 
+            message: `Carga completada ${status === 207 ? 'con errores/advertencias' : 'exitosamente'}.`, 
+            summary: resumen 
+        });
 
     } catch (error) {
-        console.error('[Bulk Upload] General error processing uploaded file:', error);
-        res.status(500).json({ message: 'Error interno del servidor al procesar el archivo subido.', error: error.message });
+        console.error('[Bulk Upload Plain] General error processing Excel file:', error);
+        if (error.code === 'ENOENT') {
+             res.status(404).json({ message: `Archivo Excel no encontrado.` });
+        } else if (error instanceof mongoose.Error.ValidationError) { // Aunque la validación por fila ya debería haberlo capturado
+             res.status(400).json({ message: 'Error de validación de datos durante la carga masiva.', error: error.message, details: error.errors });
+        } else if (error instanceof mongoose.Error) {
+             res.status(500).json({ message: 'Error de base de datos durante la carga masiva.', error: error.message });
+        } else if (error.name === 'BulkWriteError') { // Esto no debería ocurrir aquí si se maneja bien arriba
+             res.status(500).json({ message: 'Error durante la escritura masiva en la base de datos.', error: error.message, details: error.writeErrors });
+        } else {
+            res.status(500).json({ message: 'Error interno del servidor al procesar el archivo Excel.', error: error.message });
+        }
     }
 };
-// <<<------------------------------------------------------------>>>
+// <<<--- FIN: FUNCIÓN uploadBulkProducts RECREADA PARA CARGA PLANA --- >>>
 
-// --- Exportaciones (asegurar que todas las necesarias estén aquí) ---
+// --- Exportaciones (asegurar que todas las necesarias estén aquí) ---\
 module.exports = {
     cargarProductosDesdeExcel,
     createIndividualEquipment,
@@ -720,5 +1093,6 @@ module.exports = {
     // updateCurrencyValues, // Si es llamada externamente (aunque parece interna con setInterval)
     // saveCacheToDisk, // Si es llamada externamente
     // readProductsFromFile // Si es llamada externamente
-    uploadBulkProducts,
+    uploadBulkProducts, // Esta es la de carga PLANA
+    uploadBulkProductsMatrix, // Esta es la de carga MATRICIAL
 }; 

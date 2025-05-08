@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { UploadCloud, FileText, Download, Plus, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { UploadCloud, FileText, Download, Plus, X, AlertCircle, CheckCircle, FileSpreadsheet, Table2 } from 'lucide-react';
 import * as XLSX from 'xlsx'; // Importar XLSX para generar el archivo Excel
 
 // Interfaz para una especificación técnica
@@ -87,6 +87,12 @@ const excelTemplateHeaders = [
   'tipo_producto_detalles'
 ];
 
+interface UploadStatus {
+  type: 'idle' | 'uploading' | 'success' | 'error';
+  message: string;
+  summary?: any; // Para mantener el resumen de la carga
+}
+
 export default function CargaEquiposPanel() {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
@@ -97,8 +103,13 @@ export default function CargaEquiposPanel() {
 
   // <<<--- Estados para Carga Masiva --->>>
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<{ type: 'idle' | 'uploading' | 'success' | 'error'; message: string; summary?: any }>({ type: 'idle', message: '' });
-  // <<<-------------------------------->>>
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ type: 'idle', message: '' });
+  // <<<--- INICIO: Nuevo estado para el tipo de carga --- >>>
+  type UploadType = 'plain' | 'matrix';
+  const [uploadType, setUploadType] = useState<UploadType>('plain');
+  // <<<--- FIN: Nuevo estado para el tipo de carga --- >>>
+
+  const [searchTerm, setSearchTerm] = useState('');
 
   // --- Manejadores de Input --- 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -309,28 +320,18 @@ export default function CargaEquiposPanel() {
     }
   };
 
-  // --- Descarga Plantilla --- 
+  // --- Lógica para descargar la plantilla de carga masiva PLANA (Equipos) ---
   const handleDownloadTemplate = () => {
-    // Crear la hoja de trabajo con las cabeceras
-    const worksheet = XLSX.utils.aoa_to_sheet([excelTemplateHeaders]);
+    // Asume que tienes una forma de obtener la URL base de la API, ej. process.env.REACT_APP_API_URL
+    // o si el frontend y backend están en el mismo dominio, puedes usar una ruta relativa.
+    const templateUrl = `/api/products/download-template`;
+    window.location.href = templateUrl; // Inicia la descarga
+  };
 
-    // Definir el ancho de las columnas
-    // El objeto !cols es un array de objetos de formato de columna
-    // wch: ancho en número de caracteres "0" del ancho máximo de dígitos
-    const columnWidths = excelTemplateHeaders.map(() => ({ wch: 25 })); // Ajusta 25 al ancho deseado
-    worksheet['!cols'] = columnWidths;
-    
-    // (Opcional) Añadir una fila de ejemplo o notas
-    // XLSX.utils.sheet_add_aoa(worksheet, [
-    //   ['EJEMPLO-001', 'Nombre de Ejemplo', 'Descripción Corta', 'MOD-XYZ', 'Categoría Ejemplo', 100, 50, 60, 120, '2024-01-01', 5000.00, /* ...más datos de ejemplo... */]
-    // ], { origin: 'A2' });
-
-    // Crear el libro de trabajo
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'PlantillaEquipos');
-
-    // Generar el archivo y forzar la descarga
-    XLSX.writeFile(workbook, 'Plantilla_Carga_Equipos.xlsx');
+  // --- Lógica para descargar la plantilla de carga masiva MATRICIAL (Especificaciones CSV) ---
+  const handleDownloadSpecificationsTemplate = () => {
+    const templateUrl = `/api/products/download-specifications-template`;
+    window.location.href = templateUrl; // Inicia la descarga
   };
 
   // <<<--- Manejadores para Carga Masiva --->>>
@@ -353,10 +354,27 @@ export default function CargaEquiposPanel() {
     setUploadStatus({ type: 'uploading', message: 'Subiendo y procesando archivo...' });
 
     const formData = new FormData();
-    formData.append('archivoExcel', selectedFile); // El nombre 'archivoExcel' debe coincidir con upload.single() en backend
+    // <<<--- INICIO: Ajustar endpoint y nombre de archivo según el tipo de carga --- >>>
+    let endpoint = '';
+    let fileNameInForm = '';
+
+    if (uploadType === 'plain') {
+      endpoint = 'http://localhost:5001/api/products/upload-bulk';
+      fileNameInForm = 'archivoExcel';
+      console.log('Iniciando carga PLANA al endpoint:', endpoint);
+    } else if (uploadType === 'matrix') {
+      endpoint = 'http://localhost:5001/api/products/upload-matrix';
+      fileNameInForm = 'archivoExcelMatrix';
+      console.log('Iniciando carga MATRICIAL al endpoint:', endpoint);
+    } else {
+      setUploadStatus({ type: 'error', message: 'Tipo de carga no reconocido.' });
+      return;
+    }
+    formData.append(fileNameInForm, selectedFile);
+    // <<<--- FIN: Ajustar endpoint y nombre de archivo según el tipo de carga --- >>>
 
     try {
-      const response = await fetch('http://localhost:5001/api/products/upload-bulk', {
+      const response = await fetch(endpoint, { // Usar el endpoint dinámico
         method: 'POST',
         body: formData,
         // ¡No establecer Content-Type manualmente para FormData!
@@ -770,19 +788,64 @@ export default function CargaEquiposPanel() {
             La columna 'es_opcional' acepta valores como SI/NO, VERDADERO/FALSO, 1/0.
           </p>
 
-          {/* Botón Descargar Plantilla */}
-          <button 
-            style={{...buttonStyle, marginBottom: '20px'}} 
-            onClick={handleDownloadTemplate}
-          >
-            <Download size={16} />
-            Descargar Plantilla
-          </button>
+          {/* Grupo de Botones para Descargar Plantillas */}
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+            {/* Botón Descargar Plantilla de Equipos (XLSX) - Estilo Azul Principal */}
+            <button 
+              style={{...buttonStyle, backgroundColor: '#3b82f6'}} // Azul, sin flexGrow
+              onClick={handleDownloadTemplate}
+            >
+              <Download size={16} />
+              Descargar Plantilla Equipos (XLSX)
+            </button>
+
+            {/* NUEVO Botón Descargar Plantilla de Especificaciones (CSV) - Estilo Verde o similar */}
+            <button 
+              style={{...buttonStyle, backgroundColor: '#10b981'}} // Verde, sin flexGrow
+              onClick={handleDownloadSpecificationsTemplate}
+            >
+              <FileSpreadsheet size={16} />
+              Descargar Plantilla Especificaciones (CSV)
+            </button>
+          </div>
           
           {/* Zona de Carga */}
           <div style={uploadZoneStyle}>
-            <UploadCloud size={48} style={{ marginBottom: '16px', color: '#94a3b8' }} />
-            <p style={{...descriptionStyle, marginBottom: '24px'}}>
+            <h4 style={{ marginTop: 0, marginBottom: '10px', fontWeight: 600, fontSize: '15px' }}>1. Seleccione el tipo de carga:</h4>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding:'8px', borderRadius:'4px', backgroundColor: uploadType === 'plain' ? '#e0f2fe' : 'transparent'}}>
+                <input 
+                  type="radio" 
+                  name="uploadType" 
+                  value="plain" 
+                  checked={uploadType === 'plain'}
+                  onChange={() => setUploadType('plain')} 
+                  style={{ marginRight: '8px' }}
+                />
+                <FileSpreadsheet size={18} style={{marginRight: '5px'}}/>
+                Cargar Nuevos Equipos (Plantilla General)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding:'8px', borderRadius:'4px', backgroundColor: uploadType === 'matrix' ? '#e0f2fe' : 'transparent' }}>
+                <input 
+                  type="radio" 
+                  name="uploadType" 
+                  value="matrix" 
+                  checked={uploadType === 'matrix'}
+                  onChange={() => setUploadType('matrix')} 
+                  style={{ marginRight: '8px' }}
+                />
+                <Table2 size={18} style={{marginRight: '5px'}}/>
+                Actualizar Especificaciones (Formato Matricial)
+              </label>
+            </div>
+             <p style={{fontSize: '12px', color: '#64748b', marginTop: '10px'}}>
+              {uploadType === 'plain' 
+                ? "Use esta opción para crear nuevos equipos o actualizar su información básica según la plantilla estándar."
+                : "Use esta opción para añadir o actualizar especificaciones técnicas detalladas y dimensiones a equipos existentes, usando un formato de tabla con modelos en columnas y especificaciones en filas."
+              }
+            </p>
+            <UploadCloud size={38} style={{ marginBottom: '12px', color: '#94a3b8' }} />
+            <p style={{...descriptionStyle, marginBottom: '18px'}}>
               {selectedFile ? `Archivo seleccionado: ${selectedFile.name}` : 'Arrastre aquí su archivo Excel o haga clic para seleccionarlo.'}
               <br />
               Formatos soportados: .xlsx, .xls

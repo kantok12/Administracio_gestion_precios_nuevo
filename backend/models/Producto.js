@@ -9,11 +9,20 @@ const caracteristicasSchema = new mongoose.Schema({
 
 // Esquema de Dimensiones (Subdocumento)
 const dimensionesSchema = new mongoose.Schema({
-    largo_cm: { type: Number, required: [true, 'El largo es obligatorio.'] },
-    ancho_cm: { type: Number, required: [true, 'El ancho es obligatorio.'] },
-    alto_cm: { type: Number, required: [true, 'El alto es obligatorio.'] },
+    largo_mm: { type: Number, required: [true, 'El largo en mm es obligatorio.'] },
+    ancho_mm: { type: Number, required: [true, 'El ancho en mm es obligatorio.'] },
+    alto_mm: { type: Number, required: [true, 'El alto en mm es obligatorio.'] },
     // Añade otros campos si existen dentro de dimensiones
 }, { _id: false });
+
+// <<<--- NUEVO: Esquema de Datos Contables (Subdocumento) --- >>>
+const datosContablesSchema = new mongoose.Schema({
+    costo_fabrica: { type: Number },
+    divisa_costo: { type: String, trim: true, default: 'EUR' },
+    fecha_cotizacion: { type: Date },
+    costo_ano_cotizacion: { type: Number } // Se mantiene por si es usado, aunque fecha_cotizacion es más específico
+}, { _id: false });
+// <<<------------------------------------------------------->>>
 
 // Esquema Principal del Producto
 const productoSchema = new mongoose.Schema({
@@ -23,11 +32,13 @@ const productoSchema = new mongoose.Schema({
         // unique: true,
         trim: true 
     },
+    /* // Eliminando el campo categoria
     categoria: { 
         type: String, 
         required: [true, 'La categoría es obligatoria.'], 
         trim: true 
     },
+    */
     peso_kg: { 
         type: Number, 
         required: [true, 'El peso es obligatorio.'] 
@@ -55,9 +66,13 @@ const productoSchema = new mongoose.Schema({
     descripcion: { type: String, trim: true },
     clasificacion_easysystems: { type: String, trim: true },
     codigo_ea: { type: String, trim: true },
-    // <<<--- NUEVOS CAMPOS DE COSTO --->>>
-    costo_fabrica_original_eur: { type: Number },
-    costo_ano_cotizacion: { type: Number },
+    // <<<--- NUEVOS CAMPOS DE COSTO --- >>>
+    // Se mueven a datosContablesSchema
+    // costo_fabrica_original_eur: { type: Number },
+    // costo_ano_cotizacion: { type: Number },
+    datos_contables: { // Reemplaza los campos de costo individuales
+        type: datosContablesSchema 
+    },
     es_opcional: { type: Boolean, default: false },
     // <<<------------------------------>>>
      // Campos JSON embebidos originales (mantener por compatibilidad con carga masiva si aún se usan)
@@ -74,13 +89,13 @@ const productoSchema = new mongoose.Schema({
 });
 
 // Índice para búsquedas comunes
-productoSchema.index({ Codigo_Producto: 1 });
-productoSchema.index({ categoria: 1 });
-productoSchema.index({ "caracteristicas.nombre_del_producto": 1 });
+// productoSchema.index({ Codigo_Producto: 1 });
+// productoSchema.index({ categoria: 1 }); // Ya estaba comentado, pero se confirma su eliminación lógica
+// productoSchema.index({ "caracteristicas.nombre_del_producto": 1 });
 // <<<--- NUEVOS ÍNDICES --->>>
-productoSchema.index({ "caracteristicas.modelo": 1 });
-productoSchema.index({ proveedor: 1 });
-productoSchema.index({ es_opcional: 1 });
+// productoSchema.index({ "caracteristicas.modelo": 1 });
+// productoSchema.index({ proveedor: 1 });
+// productoSchema.index({ es_opcional: 1 });
 // <<<---------------------->>>
 
 // Crear y exportar el modelo. Mongoose se encargará de no recompilarlo.

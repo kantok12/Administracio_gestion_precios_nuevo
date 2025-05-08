@@ -1,12 +1,21 @@
 export interface Producto {
   codigo_producto?: string;
   nombre_del_producto?: string;
-  Descripcion?: string;
+  descripcion?: string;
   Modelo?: string;
-  categoria?: string;
+  tipo?: string;
   pf_eur?: string | number;
-  dimensiones?: string;
-  PESO?: string | null;
+  dimensiones?: any;
+  peso_kg?: number | string;
   transporte_nacional?: string;
   ay?: string;
+  caracteristicas?: {
+    nombre_del_producto?: string;
+    modelo?: string;
+  };
+  datos_contables?: {
+     costo_fabrica?: number;
+     divisa_costo?: string;
+     fecha_cotizacion?: string | Date;
+  };
 }
