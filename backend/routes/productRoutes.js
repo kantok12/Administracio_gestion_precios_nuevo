@@ -4,9 +4,10 @@ const multer = require('multer');
 
 // --- Importar controladores ---
 // Controlador para operaciones con Mongoose (crear, cargar excel)
-const productoCtrl = require('../controllers/productoController.js'); // Con 'o'
+// const productoCtrl = require('../controllers/productoController.js'); // Comentando la importación duplicada o con 'o'
+const productController = require('../controllers/productController.js'); // Usaremos este nombre consistentemente
 // Controlador para operaciones con caché y llamadas a webhook (sin 'o')
-const productCtrl = require('../controllers/productController.js');
+// const productCtrl = require('../controllers/productController.js');
 
 const path = require('path');
 const fs = require('fs');
@@ -16,32 +17,33 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 // --- Rutas que usan productController (sin 'o' - caché/webhook) ---
-router.get('/fetch', productCtrl.fetchProducts);
-router.get('/', productCtrl.getCachedProducts); // Lista todos los productos (del caché)
-router.post('/', productCtrl.createProductController); // Crea un nuevo producto
+router.get('/fetch', productController.fetchProducts);
+router.get('/', productController.getCachedProducts); // Lista todos los productos (del caché)
+// router.post('/', productController.createProductController); // Comentado para evitar conflicto con productoCtrl si se usara abajo. Asegurar que el controller correcto se usa.
+// Es probable que createProductController sea parte de productController.js y no necesite el alias productoCtrl
 
 // --- NUEVA RUTA para obtener un producto por Codigo_Producto ---
-router.get('/code/:codigoProducto', productCtrl.getProductByCodeController);
+router.get('/code/:codigoProducto', productController.getProductByCodeController);
 
 // --- NUEVA RUTA para actualizar un producto por Codigo_Producto ---
-router.put('/code/:codigoProducto', productCtrl.updateProductController);
+router.put('/code/:codigoProducto', productController.updateProductController);
 
 // --- NUEVA RUTA para eliminar un producto por Codigo_Producto ---
-router.delete('/code/:codigoProducto', productCtrl.deleteProductController);
+router.delete('/code/:codigoProducto', productController.deleteProductController);
 
-router.get('/filter', productCtrl.fetchFilteredProductsController);
-router.get('/cache/all', productCtrl.getAllProductsAndCache);
-router.post('/cache/reset', productCtrl.resetCache);
-router.delete('/cache', productCtrl.clearCache); // Corregido DELETE
-router.get('/detail', productCtrl.getProductDetail);
-router.get('/opcionales', productCtrl.getOptionalProducts);
+router.get('/filter', productController.fetchFilteredProductsController);
+router.get('/cache/all', productController.getAllProductsAndCache);
+router.post('/cache/reset', productController.resetCache);
+router.delete('/cache', productController.clearCache); // Corregido DELETE
+router.get('/detail', productController.getProductDetail);
+router.get('/opcionales', productController.getOptionalProducts);
 
 // --- NUEVA RUTA DE PRUEBA PARA DB ---
-router.get('/test/db-base-products', productCtrl.testGetBaseProductsFromDBController);
+router.get('/test/db-base-products', productController.testGetBaseProductsFromDBController);
 
 // <<<--- Añadir Rutas para Divisas Cacheadas --->>>
-router.get('/currency/dollar', productCtrl.getCachedDollarValue);
-router.get('/currency/euro', productCtrl.getCachedEuroValue);
+router.get('/currency/dollar', productController.getCachedDollarValue);
+router.get('/currency/euro', productController.getCachedEuroValue);
 // <<<------------------------------------------->>>
 
 // Ruta para descargar plantilla (lógica local)
@@ -75,13 +77,16 @@ router.get('/download-specifications-template', (req, res) => {
 });
 
 // Cargar productos desde Excel (se mantiene si aún es necesaria)
-router.post('/cargar-excel', productoCtrl.cargarProductosDesdeExcel);
+// router.post('/cargar-excel', productoCtrl.cargarProductosDesdeExcel); // Comentado temporalmente, usa el alias 'productoCtrl'
 
 // Endpoint para la carga masiva de productos con plantilla PLANA
-router.post('/upload-bulk', upload.single('archivoExcel'), productoCtrl.uploadBulkProducts);
+// router.post('/upload-bulk', upload.single('archivoExcel'), productoCtrl.uploadBulkProducts); // Comentado. Esta era la función que fue refactorizada/renombrada.
 
-// NUEVA RUTA para actualizar/cargar especificaciones desde formato MATRICIAL
-router.post('/upload-matrix', upload.single('archivoExcelMatrix'), productoCtrl.uploadBulkProductsMatrix);
+// Ruta para la carga general de productos (Plantilla General)
+router.post('/upload-matrix', upload.single('archivoExcelMatrix'), productController.uploadBulkProductsMatrix);
+
+// Nueva ruta para actualizar especificaciones técnicas (Formato Matricial)
+router.post('/upload-specifications', upload.single('archivoEspecificaciones'), productController.uploadTechnicalSpecifications);
 
 // <<<--- Fin de la sección de carga masiva --- >>>
 

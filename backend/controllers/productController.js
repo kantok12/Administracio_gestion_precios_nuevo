@@ -680,6 +680,17 @@ const deleteProductController = async (req, res) => {
   }
 };
 
+// Añadir las funciones de carga de Excel que faltaban
+const uploadTechnicalSpecifications = (req, res) => {
+  // Implementación de la función uploadTechnicalSpecifications
+  res.status(501).json({ message: 'Function not implemented' });
+};
+
+const uploadBulkProductsMatrix = (req, res) => {
+  // Implementación de la función uploadBulkProductsMatrix
+  res.status(501).json({ message: 'Function not implemented' });
+};
+
 module.exports = { 
   fetchProducts, 
   getCachedProducts, 
@@ -696,5 +707,7 @@ module.exports = {
   getProductByCodeController,
   updateProductController,
   deleteProductController,
-  testGetBaseProductsFromDBController
+  testGetBaseProductsFromDBController,
+  uploadTechnicalSpecifications,
+  uploadBulkProductsMatrix
 };
