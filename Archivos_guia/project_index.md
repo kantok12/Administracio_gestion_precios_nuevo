@@ -17,15 +17,17 @@ El proyecto consiste en una aplicación web para la administración y gestión d
 ├── Archivos_guia/  # Carpeta con documentación y archivos guía del proyecto
 │   ├── project_index.md    # Este archivo
 │   ├── AI_PROJECT_GUIDE.md # Guía del proyecto AI
-│   └── Costo de Producto.docx # Documento relacionado
+│   ├── logica_costo_producto.md # Lógica de cálculo de costos (Confirmado)
+│   └── Costo de Producto.docx # Documento relacionado con costos (Confirmado)
 ├── backend/        # Código del servidor backend (Node.js/Express)
 ├── frontend/       # Código de la aplicación frontend (React/Vite)
 ├── node_modules/   # Dependencias de Node.js (nivel raíz, posiblemente para scripts)
 ├── .git/           # Repositorio Git
-├── .gitignore      # Archivos ignorados por Git
-├── .gitattributes  # Atributos de Git
-├── package.json    # Dependencias y scripts (nivel raíz)
-└── package-lock.json # Versiones exactas de dependencias (nivel raíz)
+├── .gitignore      # Archivos ignorados por Git (Confirmado)
+├── .gitattributes  # Atributos de Git (Confirmado)
+├── package.json    # Dependencias y scripts (nivel raíz) (Confirmado)
+├── package-lock.json # Versiones exactas de dependencias (nivel raíz) (Confirmado)
+└── nodemon.json    # Configuración de Nodemon (Confirmado)
 ```
 
 ## Backend (`./backend/`)
@@ -43,11 +45,13 @@ backend/
 ├── models/         # Modelos de datos (probablemente Mongoose) (e.g., CostoPerfil.js)
 ├── node_modules/   # Dependencias del backend
 ├── routes/         # Definición de rutas API (e.g., costoPerfilRoutes.js, productRoutes.js)
+├── src/            # Código fuente adicional del backend (Añadido)
 ├── utils/          # Funciones de utilidad
 ├── server.js       # Punto de entrada principal del servidor
 ├── package.json    # Dependencias y scripts del backend
-└── package-lock.json # Versiones exactas de dependencias del backend
-└── Plantilla_Carga_Equipos.xlsx # Plantilla Excel
+├── package-lock.json # Versiones exactas de dependencias del backend
+├── Plantilla_Carga_Equipos.xlsx # Plantilla Excel para carga de equipos (Confirmado)
+└── Plantilla_Carga_Especificaciones.csv # Plantilla CSV para carga de especificaciones (Añadido)
 ```
 
 ### Puntos Clave del Backend
@@ -83,15 +87,17 @@ frontend/
 │   ├── main.tsx    # Punto de entrada del frontend (renderiza App y configura rutas)
 │   ├── theme.ts    # Configuración del tema (probablemente Material UI)
 │   └── ...         # Otros archivos de configuración y tipos (tsconfig, vite-env, etc.)
-├── assets/         # Imágenes, fuentes, etc. (Movido aquí desde src/)
-├── .gitignore      # Archivos ignorados por Git
-├── index.html      # Archivo HTML principal
-├── package.json    # Dependencias y scripts del frontend
-├── package-lock.json # Versiones exactas de dependencias del frontend
-├── vite.config.ts  # Configuración de Vite
-├── tsconfig.json   # Configuración de TypeScript
-├── eslint.config.js # Configuración de ESLint (Añadido)
-├── README.md       # README del frontend (Añadido)
+├── assets/         # Imágenes, fuentes, etc. (Confirmado)
+├── .gitignore      # Archivos ignorados por Git (Confirmado)
+├── index.html      # Archivo HTML principal (Confirmado)
+├── package.json    # Dependencias y scripts del frontend (Confirmado)
+├── package-lock.json # Versiones exactas de dependencias del frontend (Confirmado)
+├── vite.config.ts  # Configuración de Vite (Confirmado)
+├── tsconfig.json   # Configuración de TypeScript (Confirmado)
+├── tsconfig.app.json # Configuración específica de TypeScript para la app (Confirmado)
+├── tsconfig.node.json # Configuración específica de TypeScript para el entorno Node en Vite (Confirmado)
+├── eslint.config.js # Configuración de ESLint (Confirmado)
+├── README.md       # README del frontend (Confirmado)
 └── ...             # Otros archivos de configuración (eslint, etc.)
 ```
 

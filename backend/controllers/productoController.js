@@ -835,48 +835,72 @@ const uploadTechnicalSpecifications = async (req, res) => {
         const dataAoA = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: null });
 
         if (!dataAoA || dataAoA.length < 2) { 
-            return res.status(400).json({ message: 'El archivo Excel no contiene suficientes datos (mínimo 2 filas). Formato esperado: primera fila códigos de producto, primera columna nombres de especificación.' });
+            return res.status(400).json({ message: 'El archivo Excel/CSV no contiene suficientes datos (mínimo 2 filas para cabecera y datos).' });
         }
 
-        const productCodesRow = dataAoA[0];
+        // 1. Find Header Row
+        let headerRowIndex = -1;
+        for (let i = 0; i < dataAoA.length; i++) {
+            if (dataAoA[i] && dataAoA[i][0] && typeof dataAoA[i][0] === 'string' && dataAoA[i][0].trim().toUpperCase() === 'ESPECIFICACION_ID') {
+                headerRowIndex = i;
+                break;
+            }
+        }
+
+        if (headerRowIndex === -1) {
+            return res.status(400).json({ message: 'No se encontró la fila de cabecera con "Especificacion_ID" en la primera columna. Verifique el formato del archivo.' });
+        }
+        
+        if (dataAoA.length < headerRowIndex + 2) { // Need at least one data row below header
+             return res.status(400).json({ message: 'El archivo no contiene filas de datos debajo de la fila de cabecera.' });
+        }
+
+        const productCodesHeaderRow = dataAoA[headerRowIndex];
         const productHeaderCodes = []; 
         
-        for (let j = 1; j < productCodesRow.length; j++) {
-            const code = productCodesRow[j] ? productCodesRow[j].toString().trim() : null;
+        // 2. Parse Product Codes from Header (starting from 3rd column, index 2)
+        // Col 0: Especificacion_ID, Col 1: Descripcion_Especificacion, Col 2 onwards: Product Codes
+        for (let j = 2; j < productCodesHeaderRow.length; j++) {
+            const code = productCodesHeaderRow[j] ? productCodesHeaderRow[j].toString().trim() : null;
             if (code) {
                 productHeaderCodes.push(code);
             } else {
-                console.warn(`[Bulk Upload Specs] Columna ${xlsx.utils.encode_col(j)} en la fila de códigos no tiene un código de producto o está vacía. Se ignorará esta columna.`);
+                console.warn(`[Bulk Upload Specs] Columna ${xlsx.utils.encode_col(j)} en la fila de cabecera de códigos de producto está vacía o no es un código válido. Se ignorará esta columna.`);
             }
         }
 
         if (productHeaderCodes.length === 0) {
-            return res.status(400).json({ message: 'No se encontraron códigos de producto válidos en la primera fila (a partir de la segunda columna) del Excel.' });
+            return res.status(400).json({ message: 'No se encontraron códigos de producto válidos en la fila de cabecera (a partir de la tercera columna) del archivo.' });
         }
         
         console.log(`[Bulk Upload Specs] Códigos de producto encontrados en cabecera: ${productHeaderCodes.join(', ')}`);
 
         let updatesByProduct = {}; 
-        let parseErrors = []; 
+        let parseErrors = []; // Though not currently populated, keep for future
         
         let currentSectionKey = null; 
 
-        for (let i = 1; i < dataAoA.length; i++) {
-            const rowValues = dataAoA[i];
-            if (!rowValues) continue; 
+        // 3. Parse Specification Data Rows (starting from headerRowIndex + 1)
+        for (let i = headerRowIndex + 1; i < dataAoA.length; i++) {
+            const currentRow = dataAoA[i];
+            if (!currentRow || currentRow.length === 0) { // Skip empty rows
+                currentSectionKey = null; // Reset section on empty row
+                continue; 
+            }
 
-            const rawSpecNameOrSection = rowValues[0];
-            const specNameOrSection = rawSpecNameOrSection ? rawSpecNameOrSection.toString().trim() : null;
+            const especificacionID = currentRow[0] ? currentRow[0].toString().trim() : null;
+            // const descripcionEspecificacion = currentRow[1] ? currentRow[1].toString().trim() : null; // Available if needed later
 
-            if (!specNameOrSection) {
-                console.log(`[Bulk Upload Specs] Fila ${i + 1} omitida: nombre de especificación/sección vacío en columna A.`);
+            if (!especificacionID) {
+                console.log(`[Bulk Upload Specs] Fila ${i + 1} omitida: Especificacion_ID (columna A) está vacía.`);
                 currentSectionKey = null; 
                 continue;
             }
 
             for (let k = 0; k < productHeaderCodes.length; k++) {
                 const codigoProducto = productHeaderCodes[k];
-                const productColExcelIndex = k + 1; 
+                // Values for products start at column index 2 in data rows, corresponding to productHeaderCodes[k]
+                const productValueColIndex = k + 2; 
 
                 if (!updatesByProduct[codigoProducto]) {
                     updatesByProduct[codigoProducto] = {
@@ -885,33 +909,82 @@ const uploadTechnicalSpecifications = async (req, res) => {
                     };
                 }
                 
-                const rawValue = rowValues[productColExcelIndex];
+                const rawValue = currentRow[productValueColIndex];
                 const specValue = (rawValue !== null && rawValue !== undefined && rawValue.toString().trim() !== '') ? rawValue.toString().trim() : null;
 
-                const isSectionTitle = specNameOrSection.toUpperCase() === specNameOrSection && (specValue === null || specValue === specNameOrSection);
+                // Section logic: if Especificacion_ID is all caps and cell value for this product is null or same as ID
+                // Note: specValue here is for a specific product column, not the "Descripcion_Especificacion" column.
+                // A section usually spans all products or has no specific values in product columns for that row.
+                // For simplicity, we check if the *especificacionID itself* is all caps.
+                // And if the value cell for THIS product under THIS ID is empty, it might just be a section header row.
+                // This section logic might need further refinement based on exact CSV layout conventions for sections.
+                const isPotentiallySectionTitle = especificacionID.toUpperCase() === especificacionID;
 
-                if (isSectionTitle) {
-                    currentSectionKey = specNameOrSection;
-                    if (!updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
-                        updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey] = {};
+                if (isPotentiallySectionTitle && (specValue === null || specValue === especificacionID)) {
+                    // Check if all product columns for this ID row are empty or same as ID to confirm section
+                    let allProductCellsIndicateSection = true;
+                    for(let m=0; m < productHeaderCodes.length; m++) {
+                        const val = currentRow[m+2];
+                        if(val !== null && val.toString().trim() !== '' && val.toString().trim() !== especificacionID) {
+                            allProductCellsIndicateSection = false;
+                            break;
+                        }
                     }
-                } else if (specNameOrSection.toUpperCase() === "MODELO") {
+                    if(allProductCellsIndicateSection) {
+                        currentSectionKey = especificacionID;
+                        if (!updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
+                             updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey] = {};
+                        }
+                        // Since it's a section header for this product, break from product loop for this row.
+                        // The section is set for all products.
+                        // This assignment to currentSectionKey will be used by subsequent rows for this product.
+                    } else {
+                        // It looked like a section by ID, but has distinct values under products, so treat as regular spec
+                        if (specValue !== null) {
+                             if (currentSectionKey && updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
+                                updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey][especificacionID] = specValue;
+                            } else {
+                                updatesByProduct[codigoProducto].especificaciones_tecnicas[especificacionID] = specValue;
+                            }
+                        }
+                    }
+                } else if (especificacionID.toUpperCase() === "MODELO") {
                     if (specValue !== null) { 
                         updatesByProduct[codigoProducto].modelo = specValue;
                     }
                 } else { 
                     if (specValue !== null) { 
                         if (currentSectionKey && updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
-                            updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey][specNameOrSection] = specValue;
+                            updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey][especificacionID] = specValue;
                         } else {
-                            updatesByProduct[codigoProducto].especificaciones_tecnicas[specNameOrSection] = specValue;
+                            updatesByProduct[codigoProducto].especificaciones_tecnicas[especificacionID] = specValue;
                         }
                     }
                 }
             }
+             // If the row was a section title valid for all products, reset currentSectionKey only if it was exclusively a section.
+            // This needs to be outside the product loop (k)
+            let allCellsEmptyOrSection = true;
+            for(let m=0; m < productHeaderCodes.length; m++) {
+                const val = currentRow[m+2];
+                 if(val !== null && val.toString().trim() !== '' && val.toString().trim() !== especificacionID) {
+                    allCellsEmptyOrSection = false;
+                    break;
+                }
+            }
+            if(especificacionID.toUpperCase() === especificacionID && allCellsEmptyOrSection) {
+                 // it was a global section for all products
+                 // currentSectionKey is already set globally from the first product pass
+            } else {
+                // it was a data row, or a "MODELO" row, reset currentSectionKey so next normal spec is not nested
+                // unless the next row explicitly defines a new section.
+                // This part is tricky: if the section key is meant to persist across multiple spec lines,
+                // it should not be nulled here. The original code nulled it on empty first column.
+                // Let's keep original behavior: currentSectionKey persists until a new section or empty first cell.
+            }
         }
         
-        console.log('[Bulk Upload Specs] Datos parseados del Excel:', JSON.stringify(updatesByProduct, null, 2));
+        console.log('[Bulk Upload Specs] Datos parseados del Excel/CSV:', JSON.stringify(updatesByProduct, null, 2));
 
         if (Object.keys(updatesByProduct).length === 0 && parseErrors.length === 0) {
             return res.status(400).json({ message: 'No se encontraron datos de productos procesables en el archivo Excel según el formato esperado.' });

@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const mongoose = require('mongoose');
+const xlsx = require('xlsx');
+const Producto = require('../models/Producto.js');
 
 let cachedProducts = [];
 let currencyCache = {
@@ -681,9 +683,277 @@ const deleteProductController = async (req, res) => {
 };
 
 // Añadir las funciones de carga de Excel que faltaban
-const uploadTechnicalSpecifications = (req, res) => {
-  // Implementación de la función uploadTechnicalSpecifications
-  res.status(501).json({ message: 'Function not implemented' });
+const uploadTechnicalSpecifications = async (req, res) => {
+    console.log('[Bulk Upload Specs] Request received for technical specifications update.');
+    if (!req.file) {
+        return res.status(400).json({ message: 'No se subió ningún archivo.' });
+    }
+
+    console.log(`[Bulk Upload Specs] Processing file: ${req.file.originalname}, size: ${req.file.size} bytes`);
+
+    try {
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        const dataAoA = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+
+        if (!dataAoA || dataAoA.length < 2) { 
+            return res.status(400).json({ message: 'El archivo Excel/CSV no contiene suficientes datos (mínimo 2 filas para cabecera y datos).' });
+        }
+
+        // 1. Find Header Row
+        let headerRowIndex = -1;
+        for (let i = 0; i < dataAoA.length; i++) {
+            if (dataAoA[i] && dataAoA[i][0] && typeof dataAoA[i][0] === 'string' && dataAoA[i][0].trim().toUpperCase() === 'ESPECIFICACION_ID') {
+                headerRowIndex = i;
+                break;
+            }
+        }
+
+        if (headerRowIndex === -1) {
+            return res.status(400).json({ message: 'No se encontró la fila de cabecera con "Especificacion_ID" en la primera columna. Verifique el formato del archivo.' });
+        }
+        
+        if (dataAoA.length < headerRowIndex + 2) { // Need at least one data row below header
+             return res.status(400).json({ message: 'El archivo no contiene filas de datos debajo de la fila de cabecera.' });
+        }
+
+        const productCodesHeaderRow = dataAoA[headerRowIndex];
+        const productHeaderCodes = []; 
+        
+        // 2. Parse Product Codes from Header (starting from 3rd column, index 2)
+        // Col 0: Especificacion_ID, Col 1: Descripcion_Especificacion, Col 2 onwards: Product Codes
+        for (let j = 2; j < productCodesHeaderRow.length; j++) {
+            const code = productCodesHeaderRow[j] ? productCodesHeaderRow[j].toString().trim() : null;
+            if (code) {
+                productHeaderCodes.push(code);
+            } else {
+                console.warn(`[Bulk Upload Specs] Columna ${xlsx.utils.encode_col(j)} en la fila de cabecera de códigos de producto está vacía o no es un código válido. Se ignorará esta columna.`);
+            }
+        }
+
+        if (productHeaderCodes.length === 0) {
+            return res.status(400).json({ message: 'No se encontraron códigos de producto válidos en la fila de cabecera (a partir de la tercera columna) del archivo.' });
+        }
+        
+        console.log(`[Bulk Upload Specs] Códigos de producto encontrados en cabecera: ${productHeaderCodes.join(', ')}`);
+
+        let updatesByProduct = {}; 
+        let parseErrors = []; // Though not currently populated, keep for future
+        
+        let currentSectionKey = null; 
+
+        // 3. Parse Specification Data Rows (starting from headerRowIndex + 1)
+        for (let i = headerRowIndex + 1; i < dataAoA.length; i++) {
+            const currentRow = dataAoA[i];
+            if (!currentRow || currentRow.length === 0) { // Skip empty rows
+                currentSectionKey = null; // Reset section on empty row
+                continue; 
+            }
+
+            const especificacionID = currentRow[0] ? currentRow[0].toString().trim() : null;
+            // const descripcionEspecificacion = currentRow[1] ? currentRow[1].toString().trim() : null; // Available if needed later
+
+            if (!especificacionID) {
+                console.log(`[Bulk Upload Specs] Fila ${i + 1} omitida: Especificacion_ID (columna A) está vacía.`);
+                currentSectionKey = null; 
+                continue;
+            }
+
+            for (let k = 0; k < productHeaderCodes.length; k++) {
+                const codigoProducto = productHeaderCodes[k];
+                // Values for products start at column index 2 in data rows, corresponding to productHeaderCodes[k]
+                const productValueColIndex = k + 2; 
+
+                if (!updatesByProduct[codigoProducto]) {
+                    updatesByProduct[codigoProducto] = {
+                        especificaciones_tecnicas: {},
+                        modelo: null 
+                    };
+                }
+                
+                const rawValue = currentRow[productValueColIndex];
+                const specValue = (rawValue !== null && rawValue !== undefined && rawValue.toString().trim() !== '') ? rawValue.toString().trim() : null;
+
+                const isPotentiallySectionTitle = especificacionID.toUpperCase() === especificacionID;
+
+                if (isPotentiallySectionTitle && (specValue === null || specValue === especificacionID)) {
+                    let allProductCellsIndicateSection = true;
+                    for(let m=0; m < productHeaderCodes.length; m++) {
+                        const val = currentRow[m+2];
+                        if(val !== null && val.toString().trim() !== '' && val.toString().trim() !== especificacionID) {
+                            allProductCellsIndicateSection = false;
+                            break;
+                        }
+                    }
+                    if(allProductCellsIndicateSection) {
+                        currentSectionKey = especificacionID;
+                        if (!updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
+                             updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey] = {};
+                        }
+                    } else {
+                        if (specValue !== null) {
+                             if (currentSectionKey && updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
+                                updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey][especificacionID] = specValue;
+                            } else {
+                                updatesByProduct[codigoProducto].especificaciones_tecnicas[especificacionID] = specValue;
+                            }
+                        }
+                    }
+                } else if (especificacionID.toUpperCase() === "MODELO") {
+                    if (specValue !== null) { 
+                        updatesByProduct[codigoProducto].modelo = specValue;
+                    }
+                } else { 
+                    if (specValue !== null) { 
+                        if (currentSectionKey && updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
+                            updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey][especificacionID] = specValue;
+                        } else {
+                            updatesByProduct[codigoProducto].especificaciones_tecnicas[especificacionID] = specValue;
+                        }
+                    }
+                }
+            }
+            let allCellsEmptyOrSection = true;
+            for(let m=0; m < productHeaderCodes.length; m++) {
+                const val = currentRow[m+2];
+                 if(val !== null && val.toString().trim() !== '' && val.toString().trim() !== especificacionID) {
+                    allCellsEmptyOrSection = false;
+                    break;
+                }
+            }
+            if(especificacionID.toUpperCase() === especificacionID && allCellsEmptyOrSection) {
+                // Placeholder for future logic if needed
+            } else {
+                // Placeholder for future logic if needed
+            }
+        }
+        
+        console.log('[Bulk Upload Specs] Datos parseados del Excel/CSV:', JSON.stringify(updatesByProduct, null, 2));
+
+        if (Object.keys(updatesByProduct).length === 0 && parseErrors.length === 0) {
+            return res.status(400).json({ message: 'No se encontraron datos de productos procesables en el archivo Excel según el formato esperado.' });
+        }
+
+        let operaciones = [];
+        let productosNoEncontrados = [];
+        let productosActualizados = 0;
+        let productosConErroresDB = [];
+
+        for (const codigoProducto of Object.keys(updatesByProduct)) {
+            const updateData = updatesByProduct[codigoProducto];
+            
+            try {
+                const productoExistente = await Producto.findOne({ Codigo_Producto: codigoProducto });
+
+                if (productoExistente) {
+                    let fieldsToUpdate = {
+                        especificaciones_tecnicas: updateData.especificaciones_tecnicas 
+                    };
+                    if (updateData.modelo !== null) {
+                        fieldsToUpdate['caracteristicas.modelo'] = updateData.modelo; 
+                    }
+                    
+                    if (fieldsToUpdate.especificaciones_tecnicas) {
+                        Object.keys(fieldsToUpdate.especificaciones_tecnicas).forEach(key => {
+                            if (typeof fieldsToUpdate.especificaciones_tecnicas[key] === 'object' &&
+                                Object.keys(fieldsToUpdate.especificaciones_tecnicas[key]).length === 0) {
+                                delete fieldsToUpdate.especificaciones_tecnicas[key];
+                            }
+                        });
+                    }
+
+                    operaciones.push({
+                        updateOne: {
+                            filter: { Codigo_Producto: codigoProducto },
+                            update: { $set: fieldsToUpdate }
+                        }
+                    });
+                } else {
+                    productosNoEncontrados.push(codigoProducto);
+                }
+            } catch (dbError) {
+                console.error(`[Bulk Upload Specs] Error de DB al buscar producto ${codigoProducto}:`, dbError);
+                productosConErroresDB.push({ codigo: codigoProducto, error: dbError.message });
+            }
+        }
+
+        let resultadoBulkWrite = null;
+        if (operaciones.length > 0) {
+            try {
+                resultadoBulkWrite = await Producto.bulkWrite(operaciones, { ordered: false });
+                console.log('[Bulk Upload Specs] Resultado de BulkWrite:', resultadoBulkWrite);
+                productosActualizados = resultadoBulkWrite.modifiedCount || 0;
+                
+                if (resultadoBulkWrite.hasWriteErrors()) {
+                    resultadoBulkWrite.getWriteErrors().forEach(err => {
+                        const codigo = err.err.op?.filter?.Codigo_Producto || err.err.op?.$set?.Codigo_Producto || 'Desconocido';
+                        productosConErroresDB.push({
+                            codigo: codigo,
+                            message: err.errmsg || 'Error de escritura en BD',
+                            details: `Código de error: ${err.code}`
+                        });
+                    });
+                }
+            } catch (bulkError) {
+                console.error('[Bulk Upload Specs] Error en BulkWrite:', bulkError);
+                operaciones.forEach(op => {
+                    if (op.updateOne && op.updateOne.filter && op.updateOne.filter.Codigo_Producto) {
+                         productosConErroresDB.push({ codigo: op.updateOne.filter.Codigo_Producto, error: bulkError.message || "Error general en bulkWrite" });
+                    }
+                });
+            }
+        }
+        
+        const resumen = {
+            totalProductsInExcelHeader: productHeaderCodes.length,
+            productsForUpdateAttempt: Object.keys(updatesByProduct).length,
+            productsSuccessfullyUpdated: productosActualizados,
+            productsNotFound: productosNoEncontrados,
+            productsWithParseErrors: parseErrors, 
+            productsWithDbErrors: productosConErroresDB
+        };
+        
+        console.log('[Bulk Upload Specs] Resumen de la operación:', resumen);
+
+        // Refrescar caché después de la actualización masiva
+        if (productosActualizados > 0) {
+            console.log('[Bulk Upload Specs] Products updated, attempting to refresh cache...');
+            try {
+                const productsFromDB = await fetchBaseProductsFromDB(); // Asegúrate que esta función exista y esté disponible
+                cachedProducts = productsFromDB;
+                saveCacheToDisk(); // Asegúrate que esta función exista y esté disponible
+                console.log('[Bulk Upload Specs] Cache refreshed after bulk update.');
+            } catch (cacheError) {
+                console.error('[Bulk Upload Specs] Error refreshing cache after bulk update:', cacheError);
+                // No devolver error al cliente por esto, pero loggearlo.
+            }
+        }
+        
+        if (productosNoEncontrados.length > 0 || productosConErroresDB.length > 0 || parseErrors.length > 0) {
+             return res.status(207).json({ 
+                message: 'Carga de especificaciones completada con errores o advertencias.', 
+                summary: resumen 
+            });
+        }
+
+        return res.status(200).json({ 
+            message: 'Especificaciones técnicas actualizadas exitosamente para todos los productos encontrados.', 
+            summary: resumen 
+        });
+
+    } catch (error) {
+        console.error('[Bulk Upload Specs] Error general procesando el archivo de especificaciones:', error);
+        // Asegurarse de que no se envíe información sensible en producción
+        const errorMessage = process.env.NODE_ENV === 'development' ? error.message : 'Error interno del servidor al procesar el archivo.';
+        const errorStack = process.env.NODE_ENV === 'development' ? error.stack : undefined;
+        
+        if (error.name === 'MongoError' || error instanceof mongoose.Error) {
+            return res.status(500).json({ message: 'Error de base de datos durante la actualización de especificaciones.', error: errorMessage, stack: errorStack });
+        }
+        return res.status(500).json({ message: 'Error interno del servidor al procesar el archivo de especificaciones.', error: errorMessage, stack: errorStack });
+    }
 };
 
 const uploadBulkProductsMatrix = (req, res) => {

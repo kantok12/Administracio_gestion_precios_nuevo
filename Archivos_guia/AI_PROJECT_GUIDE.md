@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Guía del Proyecto para Asistente AI
 
+**Nota Importante:** Todas las respuestas y comunicaciones relacionadas con este proyecto deben ser en **español**.
+
 Este archivo sirve como una referencia rápida sobre la estructura, tecnologías y cómo el Asistente AI puede colaborar en el proyecto.
 
 ## Descripción General
