@@ -684,281 +684,477 @@ const deleteProductController = async (req, res) => {
 
 // Añadir las funciones de carga de Excel que faltaban
 const uploadTechnicalSpecifications = async (req, res) => {
-    console.log('[Bulk Upload Specs] Request received for technical specifications update.');
-    if (!req.file) {
-        return res.status(400).json({ message: 'No se subió ningún archivo.' });
+  console.log('[Bulk Upload Specs - New Format] Request received.');
+  if (!req.file) {
+    return res.status(400).json({ message: 'No se subió ningún archivo.' });
+  }
+  console.log(`[Bulk Upload Specs - New Format] Processing file: ${req.file.originalname}`);
+
+  const summary = {
+    totalProductsInFile: 0,
+    productsForUpdateAttempt: 0,
+    productsSuccessfullyUpdated: 0,
+    productsNotFound: [],
+    productsWithDbErrors: [],
+    parseErrors: [] 
+  };
+
+  try {
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const dataAoA = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+
+    if (!dataAoA || dataAoA.length < 3) { // Mínimo: Fila Códigos, Fila Modelos, Fila 1 de Spec
+      summary.parseErrors.push({ general: 'El archivo no contiene suficientes filas (mínimo 3: Códigos, Modelos, 1 de Specs).' });
+      return res.status(400).json({ message: 'El archivo no contiene suficientes datos o estructura no válida.', summary });
     }
 
-    console.log(`[Bulk Upload Specs] Processing file: ${req.file.originalname}, size: ${req.file.size} bytes`);
+    // --- 1. Extraer Códigos de Producto y Modelos --- 
+    const productCodesRow = dataAoA[0]; // Fila 1 del Excel
+    const modelsRow = dataAoA[1];     // Fila 2 del Excel
 
-    try {
-        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        
-        const dataAoA = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+    if (!productCodesRow || !modelsRow) {
+      summary.parseErrors.push({ general: 'Faltan las filas de cabecera para Códigos de Producto o Modelos.' });
+      return res.status(400).json({ message: 'Faltan filas de cabecera esenciales.', summary });
+    }
 
-        if (!dataAoA || dataAoA.length < 2) { 
-            return res.status(400).json({ message: 'El archivo Excel/CSV no contiene suficientes datos (mínimo 2 filas para cabecera y datos).' });
+    // Validar etiquetas de cabecera (opcional pero bueno para robustez)
+    // if (String(productCodesRow[0]).trim().toLowerCase() !== 'código fabricante') { ... error ... }
+    // if (String(modelsRow[0]).trim().toLowerCase() !== 'modelo') { ... error ... }
+
+    const productHeaders = []; // { codigo: 'XYZ', modelo: 'ABC', columnIndex: 1 }
+    for (let j = 1; j < productCodesRow.length; j++) { // Empezar desde columna B (índice 1)
+      const code = productCodesRow[j] ? String(productCodesRow[j]).trim() : null;
+      const model = modelsRow[j] ? String(modelsRow[j]).trim() : null;
+      if (code) {
+        productHeaders.push({ codigo: code, modelo: model, columnIndex: j });
+      } else if (j > 1 && (productCodesRow[j-1] || modelsRow[j-1])) { // Si la columna anterior tenía datos, pero esta no tiene código, es un hueco.
+         console.warn(`[Bulk Upload Specs - New Format] Columna ${j+1} sin Código Producto, pero con posible modelo o specs. Se ignorará.`);
+      }
+    }
+
+    summary.totalProductsInFile = productHeaders.length;
+    if (productHeaders.length === 0) {
+      summary.parseErrors.push({ general: 'No se encontraron Códigos de Producto en la primera fila (a partir de la columna B).' });
+      return res.status(400).json({ message: 'No se encontraron códigos de producto en la cabecera.', summary });
+    }
+
+    console.log(`[Bulk Upload Specs - New Format] Productos en cabecera: ${productHeaders.map(p => p.codigo).join(', ')}`);
+
+    // --- 2. Procesar Especificaciones --- 
+    const updatesByProduct = {}; // { 'CODIGO1': { modelo: 'M1', especificaciones_tecnicas: {...} }, ... }
+
+    productHeaders.forEach(p => {
+      updatesByProduct[p.codigo] = { 
+        modelo: p.modelo, // Asignar modelo desde la fila de modelos
+        especificaciones_tecnicas: {} 
+      };
+    });
+
+    let currentSectionKey = null;
+    for (let i = 2; i < dataAoA.length; i++) { // Empezar desde Fila 3 del Excel (índice 2)
+      const currentRow = dataAoA[i];
+      if (!currentRow || currentRow.length === 0 || currentRow[0] === null || String(currentRow[0]).trim() === '') {
+        currentSectionKey = null; // Resetear sección en fila vacía o sin nombre de spec
+        continue;
+      }
+
+      const specName = String(currentRow[0]).trim();
+
+      // Heurística simple para detectar secciones: TODO EN MAYÚSCULAS y sin valores en las celdas de producto para esa fila
+      let isSection = specName === specName.toUpperCase();
+      if (isSection) {
+        let sectionHasValues = false;
+        for (const pHeader of productHeaders) {
+          if (currentRow[pHeader.columnIndex] !== null && String(currentRow[pHeader.columnIndex]).trim() !== '') {
+            sectionHasValues = true;
+            break;
+          }
         }
+        if (sectionHasValues) isSection = false; // Si tiene valores, no es solo una sección
+      }
 
-        // 1. Find Header Row
-        let headerRowIndex = -1;
-        for (let i = 0; i < dataAoA.length; i++) {
-            if (dataAoA[i] && dataAoA[i][0] && typeof dataAoA[i][0] === 'string' && dataAoA[i][0].trim().toUpperCase() === 'ESPECIFICACION_ID') {
-                headerRowIndex = i;
-                break;
-            }
-        }
-
-        if (headerRowIndex === -1) {
-            return res.status(400).json({ message: 'No se encontró la fila de cabecera con "Especificacion_ID" en la primera columna. Verifique el formato del archivo.' });
-        }
-        
-        if (dataAoA.length < headerRowIndex + 2) { // Need at least one data row below header
-             return res.status(400).json({ message: 'El archivo no contiene filas de datos debajo de la fila de cabecera.' });
-        }
-
-        const productCodesHeaderRow = dataAoA[headerRowIndex];
-        const productHeaderCodes = []; 
-        
-        // 2. Parse Product Codes from Header (starting from 3rd column, index 2)
-        // Col 0: Especificacion_ID, Col 1: Descripcion_Especificacion, Col 2 onwards: Product Codes
-        for (let j = 2; j < productCodesHeaderRow.length; j++) {
-            const code = productCodesHeaderRow[j] ? productCodesHeaderRow[j].toString().trim() : null;
-            if (code) {
-                productHeaderCodes.push(code);
-            } else {
-                console.warn(`[Bulk Upload Specs] Columna ${xlsx.utils.encode_col(j)} en la fila de cabecera de códigos de producto está vacía o no es un código válido. Se ignorará esta columna.`);
-            }
-        }
-
-        if (productHeaderCodes.length === 0) {
-            return res.status(400).json({ message: 'No se encontraron códigos de producto válidos en la fila de cabecera (a partir de la tercera columna) del archivo.' });
-        }
-        
-        console.log(`[Bulk Upload Specs] Códigos de producto encontrados en cabecera: ${productHeaderCodes.join(', ')}`);
-
-        let updatesByProduct = {}; 
-        let parseErrors = []; // Though not currently populated, keep for future
-        
-        let currentSectionKey = null; 
-
-        // 3. Parse Specification Data Rows (starting from headerRowIndex + 1)
-        for (let i = headerRowIndex + 1; i < dataAoA.length; i++) {
-            const currentRow = dataAoA[i];
-            if (!currentRow || currentRow.length === 0) { // Skip empty rows
-                currentSectionKey = null; // Reset section on empty row
-                continue; 
-            }
-
-            const especificacionID = currentRow[0] ? currentRow[0].toString().trim() : null;
-            // const descripcionEspecificacion = currentRow[1] ? currentRow[1].toString().trim() : null; // Available if needed later
-
-            if (!especificacionID) {
-                console.log(`[Bulk Upload Specs] Fila ${i + 1} omitida: Especificacion_ID (columna A) está vacía.`);
-                currentSectionKey = null; 
-                continue;
-            }
-
-            for (let k = 0; k < productHeaderCodes.length; k++) {
-                const codigoProducto = productHeaderCodes[k];
-                // Values for products start at column index 2 in data rows, corresponding to productHeaderCodes[k]
-                const productValueColIndex = k + 2; 
-
-                if (!updatesByProduct[codigoProducto]) {
-                    updatesByProduct[codigoProducto] = {
-                        especificaciones_tecnicas: {},
-                        modelo: null 
-                    };
-                }
-                
-                const rawValue = currentRow[productValueColIndex];
-                const specValue = (rawValue !== null && rawValue !== undefined && rawValue.toString().trim() !== '') ? rawValue.toString().trim() : null;
-
-                const isPotentiallySectionTitle = especificacionID.toUpperCase() === especificacionID;
-
-                if (isPotentiallySectionTitle && (specValue === null || specValue === especificacionID)) {
-                    let allProductCellsIndicateSection = true;
-                    for(let m=0; m < productHeaderCodes.length; m++) {
-                        const val = currentRow[m+2];
-                        if(val !== null && val.toString().trim() !== '' && val.toString().trim() !== especificacionID) {
-                            allProductCellsIndicateSection = false;
-                            break;
-                        }
-                    }
-                    if(allProductCellsIndicateSection) {
-                        currentSectionKey = especificacionID;
-                        if (!updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
-                             updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey] = {};
-                        }
-                    } else {
-                        if (specValue !== null) {
-                             if (currentSectionKey && updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
-                                updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey][especificacionID] = specValue;
-                            } else {
-                                updatesByProduct[codigoProducto].especificaciones_tecnicas[especificacionID] = specValue;
-                            }
-                        }
-                    }
-                } else if (especificacionID.toUpperCase() === "MODELO") {
-                    if (specValue !== null) { 
-                        updatesByProduct[codigoProducto].modelo = specValue;
-                    }
-                } else { 
-                    if (specValue !== null) { 
-                        if (currentSectionKey && updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey]) {
-                            updatesByProduct[codigoProducto].especificaciones_tecnicas[currentSectionKey][especificacionID] = specValue;
-                        } else {
-                            updatesByProduct[codigoProducto].especificaciones_tecnicas[especificacionID] = specValue;
-                        }
-                    }
-                }
-            }
-            let allCellsEmptyOrSection = true;
-            for(let m=0; m < productHeaderCodes.length; m++) {
-                const val = currentRow[m+2];
-                 if(val !== null && val.toString().trim() !== '' && val.toString().trim() !== especificacionID) {
-                    allCellsEmptyOrSection = false;
-                    break;
-                }
-            }
-            if(especificacionID.toUpperCase() === especificacionID && allCellsEmptyOrSection) {
-                // Placeholder for future logic if needed
-            } else {
-                // Placeholder for future logic if needed
-            }
-        }
-        
-        console.log('[Bulk Upload Specs] Datos parseados del Excel/CSV:', JSON.stringify(updatesByProduct, null, 2));
-
-        if (Object.keys(updatesByProduct).length === 0 && parseErrors.length === 0) {
-            return res.status(400).json({ message: 'No se encontraron datos de productos procesables en el archivo Excel según el formato esperado.' });
-        }
-
-        let operaciones = [];
-        let productosNoEncontrados = [];
-        let productosActualizados = 0;
-        let productosConErroresDB = [];
-
-        for (const codigoProducto of Object.keys(updatesByProduct)) {
-            const updateData = updatesByProduct[codigoProducto];
-            
-            try {
-                const productoExistente = await Producto.findOne({ Codigo_Producto: codigoProducto });
-
-                if (productoExistente) {
-                    let fieldsToUpdate = {
-                        especificaciones_tecnicas: updateData.especificaciones_tecnicas 
-                    };
-                    if (updateData.modelo !== null) {
-                        fieldsToUpdate['caracteristicas.modelo'] = updateData.modelo; 
-                    }
-                    
-                    if (fieldsToUpdate.especificaciones_tecnicas) {
-                        Object.keys(fieldsToUpdate.especificaciones_tecnicas).forEach(key => {
-                            if (typeof fieldsToUpdate.especificaciones_tecnicas[key] === 'object' &&
-                                Object.keys(fieldsToUpdate.especificaciones_tecnicas[key]).length === 0) {
-                                delete fieldsToUpdate.especificaciones_tecnicas[key];
-                            }
-                        });
-                    }
-
-                    operaciones.push({
-                        updateOne: {
-                            filter: { Codigo_Producto: codigoProducto },
-                            update: { $set: fieldsToUpdate }
-                        }
-                    });
-                } else {
-                    productosNoEncontrados.push(codigoProducto);
-                }
-            } catch (dbError) {
-                console.error(`[Bulk Upload Specs] Error de DB al buscar producto ${codigoProducto}:`, dbError);
-                productosConErroresDB.push({ codigo: codigoProducto, error: dbError.message });
-            }
-        }
-
-        let resultadoBulkWrite = null;
-        if (operaciones.length > 0) {
-            try {
-                resultadoBulkWrite = await Producto.bulkWrite(operaciones, { ordered: false });
-                console.log('[Bulk Upload Specs] Resultado de BulkWrite:', resultadoBulkWrite);
-                productosActualizados = resultadoBulkWrite.modifiedCount || 0;
-                
-                if (resultadoBulkWrite.hasWriteErrors()) {
-                    resultadoBulkWrite.getWriteErrors().forEach(err => {
-                        const codigo = err.err.op?.filter?.Codigo_Producto || err.err.op?.$set?.Codigo_Producto || 'Desconocido';
-                        productosConErroresDB.push({
-                            codigo: codigo,
-                            message: err.errmsg || 'Error de escritura en BD',
-                            details: `Código de error: ${err.code}`
-                        });
-                    });
-                }
-            } catch (bulkError) {
-                console.error('[Bulk Upload Specs] Error en BulkWrite:', bulkError);
-                operaciones.forEach(op => {
-                    if (op.updateOne && op.updateOne.filter && op.updateOne.filter.Codigo_Producto) {
-                         productosConErroresDB.push({ codigo: op.updateOne.filter.Codigo_Producto, error: bulkError.message || "Error general en bulkWrite" });
-                    }
-                });
-            }
-        }
-        
-        const resumen = {
-            totalProductsInExcelHeader: productHeaderCodes.length,
-            productsForUpdateAttempt: Object.keys(updatesByProduct).length,
-            productsSuccessfullyUpdated: productosActualizados,
-            productsNotFound: productosNoEncontrados,
-            productsWithParseErrors: parseErrors, 
-            productsWithDbErrors: productosConErroresDB
-        };
-        
-        console.log('[Bulk Upload Specs] Resumen de la operación:', resumen);
-
-        // Refrescar caché después de la actualización masiva
-        if (productosActualizados > 0) {
-            console.log('[Bulk Upload Specs] Products updated, attempting to refresh cache...');
-            try {
-                const productsFromDB = await fetchBaseProductsFromDB(); // Asegúrate que esta función exista y esté disponible
-                cachedProducts = productsFromDB;
-                saveCacheToDisk(); // Asegúrate que esta función exista y esté disponible
-                console.log('[Bulk Upload Specs] Cache refreshed after bulk update.');
-            } catch (cacheError) {
-                console.error('[Bulk Upload Specs] Error refreshing cache after bulk update:', cacheError);
-                // No devolver error al cliente por esto, pero loggearlo.
-            }
-        }
-        
-        if (productosNoEncontrados.length > 0 || productosConErroresDB.length > 0 || parseErrors.length > 0) {
-             return res.status(207).json({ 
-                message: 'Carga de especificaciones completada con errores o advertencias.', 
-                summary: resumen 
-            });
-        }
-
-        return res.status(200).json({ 
-            message: 'Especificaciones técnicas actualizadas exitosamente para todos los productos encontrados.', 
-            summary: resumen 
+      if (isSection) {
+        currentSectionKey = specName;
+        // Crear la sección en todos los productos si aún no existe
+        productHeaders.forEach(pHeader => {
+          if (!updatesByProduct[pHeader.codigo].especificaciones_tecnicas[currentSectionKey]) {
+            updatesByProduct[pHeader.codigo].especificaciones_tecnicas[currentSectionKey] = {};
+          }
         });
+        continue; // Pasar a la siguiente fila
+      }
 
-    } catch (error) {
-        console.error('[Bulk Upload Specs] Error general procesando el archivo de especificaciones:', error);
-        // Asegurarse de que no se envíe información sensible en producción
-        const errorMessage = process.env.NODE_ENV === 'development' ? error.message : 'Error interno del servidor al procesar el archivo.';
-        const errorStack = process.env.NODE_ENV === 'development' ? error.stack : undefined;
-        
-        if (error.name === 'MongoError' || error instanceof mongoose.Error) {
-            return res.status(500).json({ message: 'Error de base de datos durante la actualización de especificaciones.', error: errorMessage, stack: errorStack });
+      // Es una especificación normal, asignar valores
+      for (const pHeader of productHeaders) {
+        const productData = updatesByProduct[pHeader.codigo];
+        const specValue = currentRow[pHeader.columnIndex] !== null ? String(currentRow[pHeader.columnIndex]).trim() : null;
+
+        if (specValue !== null) {
+          if (currentSectionKey) {
+            if (!productData.especificaciones_tecnicas[currentSectionKey]) { // Asegurar que la sección existe
+                 productData.especificaciones_tecnicas[currentSectionKey] = {};
+            }
+            productData.especificaciones_tecnicas[currentSectionKey][specName] = specValue;
+          } else {
+            productData.especificaciones_tecnicas[specName] = specValue;
+          }
         }
-        return res.status(500).json({ message: 'Error interno del servidor al procesar el archivo de especificaciones.', error: errorMessage, stack: errorStack });
+      }
     }
+    
+    console.log('[Bulk Upload Specs - New Format] Datos parseados:', JSON.stringify(updatesByProduct, null, 2));
+    summary.productsForUpdateAttempt = Object.keys(updatesByProduct).length;
+
+    // --- 3. Construir y Ejecutar Operaciones de DB --- 
+    const operations = [];
+    for (const codigoProducto of Object.keys(updatesByProduct)) {
+      const updatePayload = updatesByProduct[codigoProducto];
+      let fieldsToUpdate = {};
+
+      if (updatePayload.modelo !== null && updatePayload.modelo !== '') {
+        fieldsToUpdate['caracteristicas.modelo'] = updatePayload.modelo;
+      }
+
+      // Limpiar especificaciones_tecnicas de secciones vacías o specs vacías
+      Object.keys(updatePayload.especificaciones_tecnicas).forEach(key => {
+        if (typeof updatePayload.especificaciones_tecnicas[key] === 'object') {
+          Object.keys(updatePayload.especificaciones_tecnicas[key]).forEach(subKey => {
+            if (updatePayload.especificaciones_tecnicas[key][subKey] === null || updatePayload.especificaciones_tecnicas[key][subKey] === '') {
+              delete updatePayload.especificaciones_tecnicas[key][subKey];
+            }
+          });
+          if (Object.keys(updatePayload.especificaciones_tecnicas[key]).length === 0) {
+            delete updatePayload.especificaciones_tecnicas[key];
+          }
+        } else if (updatePayload.especificaciones_tecnicas[key] === null || updatePayload.especificaciones_tecnicas[key] === '') {
+          delete updatePayload.especificaciones_tecnicas[key];
+        }
+      });
+
+      if (Object.keys(updatePayload.especificaciones_tecnicas).length > 0) {
+        fieldsToUpdate['especificaciones_tecnicas'] = updatePayload.especificaciones_tecnicas;
+      }
+
+      if (Object.keys(fieldsToUpdate).length > 0) {
+          const productoExistente = await Producto.findOne({ Codigo_Producto: codigoProducto });
+          if (productoExistente) {
+            operations.push({
+                updateOne: {
+                    filter: { Codigo_Producto: codigoProducto },
+                    update: { $set: fieldsToUpdate }
+                }
+            });
+          } else {
+            summary.productsNotFound.push(codigoProducto);
+          }
+      } else {
+          console.log(`[Bulk Upload Specs - New Format] Producto ${codigoProducto} sin campos válidos para actualizar.`);
+      }
+    }
+
+    if (operations.length > 0) {
+      const result = await Producto.bulkWrite(operations, { ordered: false });
+      summary.productsSuccessfullyUpdated = result.modifiedCount || 0;
+      if (result.hasWriteErrors()) {
+        result.getWriteErrors().forEach(err => {
+          const codigo = err.err.op?.updateOne?.filter?.Codigo_Producto || 'Desconocido';
+          summary.productsWithDbErrors.push({ codigo, message: err.errmsg, details: `Código de error: ${err.code}` });
+        });
+      }
+    } else {
+        console.log('[Bulk Upload Specs - New Format] No hay operaciones de DB para ejecutar.')
+    }
+
+    if (summary.productsSuccessfullyUpdated > 0) {
+        console.log('[Bulk Upload Specs - New Format] Products updated, attempting to refresh cache...');
+        try { await initializeProductCache(); console.log('[Bulk Upload Specs - New Format] Cache refreshed.'); }
+        catch (cacheError) { 
+            console.error('[Bulk Upload Specs - New Format] Error refreshing cache:', cacheError);
+            summary.parseErrors.push({ general: 'Error al refrescar caché: ' + cacheError.message });
+        }
+    }
+
+    const status = (summary.productsNotFound.length > 0 || summary.productsWithDbErrors.length > 0 || summary.parseErrors.length > 0) ? 207 : 200;
+    let message = `Carga completada. Actualizados: ${summary.productsSuccessfullyUpdated}.`;
+    if(summary.productsNotFound.length > 0) message += ` No encontrados: ${summary.productsNotFound.length}.`;
+    if(summary.productsWithDbErrors.length > 0) message += ` Errores DB: ${summary.productsWithDbErrors.length}.`;
+    if(summary.parseErrors.length > 0) message += ` Errores de parseo: ${summary.parseErrors.length}.`;
+    
+    console.log('[Bulk Upload Specs - New Format] Final Summary:', JSON.stringify(summary, null, 2));
+    res.status(status).json({ message, summary });
+
+  } catch (error) {
+    console.error('[Bulk Upload Specs - New Format] General error processing uploaded file:', error);
+    summary.parseErrors.push({ general: error.message, stack: error.stack });
+    res.status(500).json({ 
+        message: 'Error interno del servidor al procesar el archivo (nuevo formato especificaciones).', 
+        summary, 
+        error: error.message 
+    });
+  }
 };
 
-const uploadBulkProductsMatrix = (req, res) => {
-  // Implementación de la función uploadBulkProductsMatrix
-  res.status(501).json({ message: 'Function not implemented' });
+const uploadBulkProductsMatrixDetailed = async (req, res) => {
+    console.log('[Bulk Upload Matrix] Request received.');
+    // ... el resto de la implementación larga de la función matricial ...
+};
+
+// Helper para normalizar cabeceras (opcional pero recomendado)
+const normalizeHeader = (header) => {
+  if (!header) return '';
+  // Convertir a string, trim, lowerCase, reemplazar espacios y caracteres especiales por guion bajo
+  return header.toString().trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '');
+};
+
+// Mapeo de cabeceras normalizadas a rutas del modelo Producto
+// Basado en excelTemplateHeaders del frontend y la estructura inferida del modelo Producto
+const headerToModelPath = {
+  'codigo_producto': { path: 'Codigo_Producto', type: 'string', required: true },
+  'nombre_del_producto': { path: 'caracteristicas.nombre_del_producto', type: 'string' },
+  'descripcion': { path: 'descripcion', type: 'string' },
+  'modelo': { path: 'caracteristicas.modelo', type: 'string', required: true },
+  'categoria': { path: 'categoria', type: 'string', required: true },
+  'fecha_cotizacion': { path: 'datos_contables.fecha_cotizacion', type: 'date' },
+  'costo_fabrica_original_eur': { path: 'datos_contables.costo_fabrica_original_eur', type: 'number' },
+  'largo_cm': { path: 'dimensiones.largo_cm', type: 'number' },
+  'ancho_cm': { path: 'dimensiones.ancho_cm', type: 'number' },
+  'alto_cm': { path: 'dimensiones.alto_cm', type: 'number' },
+  'peso_kg': { path: 'peso_kg', type: 'number', required: true },
+  'detalle_adicional_1': { path: 'detalles.detalle_adicional_1', type: 'string' },
+  'detalle_adicional_2': { path: 'detalles.detalle_adicional_2', type: 'string' },
+  'detalle_adicional_3': { path: 'detalles.detalle_adicional_3', type: 'string' },
+  'combustible': { path: 'detalles.combustible', type: 'string' },
+  'hp': { path: 'detalles.hp', type: 'string' },
+  'diametro_mm': { path: 'detalles.diametro_mm', type: 'string' },
+  'movilidad': { path: 'detalles.movilidad', type: 'string' },
+  'rotacion': { path: 'detalles.rotacion', type: 'string' },
+  'es_opcional': { path: 'es_opcional', type: 'boolean' },
+  'modelo_compatible_manual': { path: 'detalles.modelo_compatible_manual', type: 'string' },
+  'clasificacion_easysystems': { path: 'clasificacion_easysystems', type: 'string' },
+  'numero_caracteristicas_tecnicas': { path: 'detalles.numero_caracteristicas_tecnicas', type: 'string' },
+  'codigo_ea': { path: 'codigo_ea', type: 'string' },
+  'proveedor': { path: 'proveedor', type: 'string' },
+  'procedencia': { path: 'procedencia', type: 'string' },
+  'familia': { path: 'familia', type: 'string' },
+  'nombre_comercial': { path: 'nombre_comercial', type: 'string' },
+  'descripcion_detallada': { path: 'detalles.descripcion_detallada', type: 'string' },
+  'elemento_corte': { path: 'detalles.elemento_corte', type: 'string' },
+  'garganta_alimentacion_mm': { path: 'detalles.garganta_alimentacion_mm', type: 'string' },
+  'tipo_motor': { path: 'detalles.tipo_motor', type: 'string' },
+  'potencia_motor_kw_hp': { path: 'detalles.potencia_motor_kw_hp', type: 'string' },
+  'tipo_enganche': { path: 'detalles.tipo_enganche', type: 'string' },
+  'tipo_chasis': { path: 'detalles.tipo_chasis', type: 'string' },
+  'capacidad_chasis_velocidad': { path: 'detalles.capacidad_chasis_velocidad', type: 'string' },
+  'tipo_producto_detalles': { path: 'detalles.tipo_producto_detalles', type: 'string' }
+};
+
+// Helper para parsear valores
+const parseValue = (value, type) => {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    return undefined;
+  }
+  switch (type) {
+    case 'string':
+      return String(value).trim();
+    case 'number':
+      const numStr = String(value).replace(/\./g, '').replace(',', '.');
+      const num = parseFloat(numStr);
+      return isNaN(num) ? undefined : num;
+    case 'boolean':
+      const lowerVal = String(value).trim().toLowerCase();
+      if (['true', 'verdadero', 'si', '1', 'yes'].includes(lowerVal)) return true;
+      if (['false', 'falso', 'no', '0'].includes(lowerVal)) return false;
+      return undefined;
+    case 'date':
+      if (value instanceof Date) { // Si cellDates:true funcionó
+        return value;
+      }
+      if (typeof value === 'number') { // Fecha de Excel (número de serie)
+        const d = xlsx.SSF.parse_date_code(value); // Usar xlsx (minúscula) como se importó
+        if (d) return new Date(Date.UTC(d.y, d.m - 1, d.d, d.H, d.M, d.S));
+      }
+      const dateStr = String(value).trim();
+      if (/^\d{4}$/.test(dateStr)) {
+        return new Date(Date.UTC(parseInt(dateStr), 0, 1));
+      }
+      const parsedDate = Date.parse(dateStr);
+      return isNaN(parsedDate) ? undefined : new Date(parsedDate);
+    default:
+      return String(value).trim();
+  }
+};
+
+// Helper para setear valor en un path anidado
+function setValueByPath(obj, path, value) {
+  const keys = path.split('.');
+  let current = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
+      current[keys[i]] = {};
+    }
+    current = current[keys[i]];
+  }
+  if (value !== undefined) {
+    current[keys[keys.length - 1]] = value;
+  } else { // Si el valor es undefined, asegurar que la ruta exista para evitar errores, pero no setear el valor final
+    // Esto es útil si se quiere que Mongoose aplique defaults para campos no provistos explícitamente.
+    // Opcionalmente, se podría decidir eliminar el campo si es undefined.
+     current[keys[keys.length - 1]] = undefined; 
+  }
+}
+
+const uploadBulkProductsPlain = async (req, res) => {
+  console.log('[Bulk Upload Plain] Request received.');
+  if (!req.file) {
+    return res.status(400).json({ message: 'No se subió ningún archivo.' });
+  }
+  console.log(`[Bulk Upload Plain] Processing file: ${req.file.originalname}`);
+
+  const summary = {
+    totalRowsInExcel: 0,
+    rowsProcessed: 0,
+    inserted: 0,
+    updated: 0,
+    rowsWithErrors: 0,
+    errors: []
+  };
+
+  try {
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = xlsx.utils.sheet_to_json(worksheet, { defval: undefined }); // undefined para celdas vacias
+
+    summary.totalRowsInExcel = jsonData.length;
+    if (jsonData.length === 0) {
+      return res.status(400).json({ message: 'El archivo Excel está vacío o no tiene datos procesables.' });
+    }
+
+    const operations = [];
+
+    for (let i = 0; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      summary.rowsProcessed++;
+      let productData = {};
+      let currentProductCodigo = null;
+      let rowErrorMessages = [];
+
+      const excelHeaders = Object.keys(row);
+
+      for (const excelHeader of excelHeaders) {
+        const normalizedHeaderKey = normalizeHeader(excelHeader);
+        const mapping = headerToModelPath[normalizedHeaderKey];
+        
+        if (mapping) {
+          const rawValue = row[excelHeader];
+          const parsedVal = parseValue(rawValue, mapping.type);
+
+          if (mapping.required && (parsedVal === undefined || String(parsedVal).trim() === '')) {
+            rowErrorMessages.push(`Campo obligatorio '${excelHeader}' está vacío o es inválido.`);
+          }
+          
+          setValueByPath(productData, mapping.path, parsedVal);
+
+          if (mapping.path === 'Codigo_Producto') {
+            currentProductCodigo = parsedVal;
+          }
+        }
+      }
+      
+      if (!currentProductCodigo) {
+        rowErrorMessages.push('Codigo_Producto no encontrado o inválido en la fila.');
+      }
+
+      if (rowErrorMessages.length > 0) {
+        summary.rowsWithErrors++;
+        summary.errors.push({ 
+          rowNumberExcel: i + 2, 
+          codigoProducto: currentProductCodigo || 'N/A',
+          messages: rowErrorMessages
+        });
+        continue; 
+      }
+      
+      // Limpieza de campos undefined explícitos para que Mongoose aplique defaults si existen
+      // o para evitar enviar { campo: undefined }
+      function removeUndefinedFields(obj) {
+        if (typeof obj !== 'object' || obj === null) return obj;
+        Object.keys(obj).forEach(key => {
+          if (obj[key] === undefined) {
+            delete obj[key];
+          } else if (typeof obj[key] === 'object') {
+            removeUndefinedFields(obj[key]);
+            if (Object.keys(obj[key]).length === 0) {
+              delete obj[key]; // Eliminar sub-objetos vacíos
+            }
+          }
+        });
+        return obj;
+      }
+      productData = removeUndefinedFields(productData);
+
+      operations.push({
+        updateOne: {
+          filter: { Codigo_Producto: currentProductCodigo },
+          update: { $set: productData },
+          upsert: true
+        }
+      });
+    }
+
+    if (operations.length > 0) {
+      const result = await Producto.bulkWrite(operations, { ordered: false });
+      summary.inserted = result.upsertedCount || 0;
+      summary.updated = result.modifiedCount || 0;
+      
+      if (result.hasWriteErrors()) {
+        result.getWriteErrors().forEach(err => {
+          const codigo = err.err.op?.updateOne?.filter?.Codigo_Producto || 'Desconocido';
+          summary.rowsWithErrors++; // Incrementar por cada producto con error de DB
+          summary.errors.push({
+            rowNumberExcel: `Error DB (Producto: ${codigo})`,
+            codigoProducto: codigo,
+            messages: [err.errmsg || 'Error de escritura en Base de Datos', `Código Mongoose: ${err.code}`]
+          });
+        });
+      }
+    } else if (summary.totalRowsInExcel > 0 && summary.rowsWithErrors === summary.totalRowsInExcel) {
+      // Todas las filas tuvieron errores de parsing, no se intentó ninguna operación de DB
+      console.log('[Bulk Upload Plain] No operations to perform due to parsing errors in all rows.');
+    }
+    
+    console.log('[Bulk Upload Plain] Summary:', JSON.stringify(summary, null, 2));
+    const status = summary.errors.length > 0 ? 207 : 200;
+    let message = summary.errors.length > 0 ? 
+        `Carga completada con errores. Filas procesadas: ${summary.rowsProcessed}, Errores en filas: ${summary.rowsWithErrors}.` : 
+        'Carga masiva (plana) completada exitosamente.';
+    if (summary.inserted > 0) message += ` Insertados: ${summary.inserted}.`;
+    if (summary.updated > 0) message += ` Actualizados: ${summary.updated}.`;
+
+    if (summary.inserted > 0 || summary.updated > 0) {
+        console.log('[Bulk Upload Plain] Products changed, attempting to refresh cache...');
+        try {
+            await initializeProductCache();
+            console.log('[Bulk Upload Plain] Cache refreshed.');
+        } catch (cacheError) {
+            console.error('[Bulk Upload Plain] Error refreshing cache:', cacheError);
+            summary.errors.push({ rowNumberExcel: 'N/A', codigoProducto: 'Cache', messages: ['Error al refrescar el caché: ' + cacheError.message] });
+        }
+    }
+
+    res.status(status).json({ message, summary });
+
+  } catch (error) {
+    console.error('[Bulk Upload Plain] General error processing uploaded file:', error);
+    summary.errors.push({ rowNumberExcel: 'General', codigoProducto: 'N/A', messages: [error.message, error.stack] });
+    res.status(500).json({ 
+      message: 'Error interno del servidor al procesar el archivo subido (plano).', 
+      summary,
+      error: error.message 
+    });
+  }
 };
 
 module.exports = { 
@@ -979,5 +1175,6 @@ module.exports = {
   deleteProductController,
   testGetBaseProductsFromDBController,
   uploadTechnicalSpecifications,
-  uploadBulkProductsMatrix
+  uploadBulkProductsMatrix: uploadBulkProductsMatrixDetailed,
+  uploadBulkProductsPlain
 };

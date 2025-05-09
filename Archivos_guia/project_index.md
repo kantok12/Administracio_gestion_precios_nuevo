@@ -18,7 +18,8 @@ El proyecto consiste en una aplicación web para la administración y gestión d
 │   ├── project_index.md    # Este archivo
 │   ├── AI_PROJECT_GUIDE.md # Guía del proyecto AI
 │   ├── logica_costo_producto.md # Lógica de cálculo de costos (Confirmado)
-│   └── Costo de Producto.docx # Documento relacionado con costos (Confirmado)
+│   ├── Costo de Producto.docx # Documento relacionado con costos (Confirmado)
+│   └── solucion_problemas_comunes_extendido.md # Guía extendida para solución de problemas comunes
 ├── backend/        # Código del servidor backend (Node.js/Express)
 ├── frontend/       # Código de la aplicación frontend (React/Vite)
 ├── node_modules/   # Dependencias de Node.js (nivel raíz, posiblemente para scripts)
@@ -51,7 +52,7 @@ backend/
 ├── package.json    # Dependencias y scripts del backend
 ├── package-lock.json # Versiones exactas de dependencias del backend
 ├── Plantilla_Carga_Equipos.xlsx # Plantilla Excel para carga de equipos (Confirmado)
-└── Plantilla_Carga_Especificaciones.csv # Plantilla CSV para carga de especificaciones (Añadido)
+└── Plantilla_Carga_Especificaciones.xlsx # Plantilla XLSX para carga de especificaciones (Actualizado)
 ```
 
 ### Puntos Clave del Backend
@@ -133,6 +134,10 @@ frontend/
 Este índice debería facilitar la navegación y modificación del código. Lo usaré como referencia en nuestras próximas interacciones. 
 
 ## Solución de Problemas Comunes
+
+Para problemas comunes como la falta de módulos (`bcryptjs`, `multer`) o errores de `Vite` en el frontend, consulta las soluciones básicas directamente en este documento.
+
+**Para una guía más detallada y pasos adicionales de solución de problemas, incluyendo los que hemos cubierto interactivamente, por favor revisa el archivo:** `Archivos_guia/solucion_problemas_comunes_extendido.md`.
 
 ### Error: `Cannot find module 'bcryptjs'` (Backend)
 

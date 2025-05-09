@@ -354,24 +354,22 @@ export default function CargaEquiposPanel() {
     setUploadStatus({ type: 'uploading', message: 'Subiendo y procesando archivo...' });
 
     const formData = new FormData();
-    // <<<--- INICIO: Ajustar endpoint y nombre de archivo según el tipo de carga --- >>>
     let endpoint = '';
     let fileNameInForm = '';
 
     if (uploadType === 'plain') {
-      endpoint = 'http://localhost:5001/api/products/upload-bulk';
-      fileNameInForm = 'archivoExcel';
-      console.log('Iniciando carga PLANA al endpoint:', endpoint);
+      endpoint = 'http://localhost:5001/api/products/upload-plain'; 
+      fileNameInForm = 'archivoExcelPlain'; 
+      console.log('Iniciando carga PLANA (Nuevos Equipos) al endpoint:', endpoint);
     } else if (uploadType === 'matrix') {
-      endpoint = 'http://localhost:5001/api/products/upload-matrix';
-      fileNameInForm = 'archivoExcelMatrix';
-      console.log('Iniciando carga MATRICIAL al endpoint:', endpoint);
+      endpoint = 'http://localhost:5001/api/products/upload-specifications';
+      fileNameInForm = 'archivoEspecificaciones'; // Coincide con la ruta /upload-specifications
+      console.log('Iniciando carga MATRICIAL (Actualizar Especificaciones) al endpoint:', endpoint);
     } else {
       setUploadStatus({ type: 'error', message: 'Tipo de carga no reconocido.' });
       return;
     }
     formData.append(fileNameInForm, selectedFile);
-    // <<<--- FIN: Ajustar endpoint y nombre de archivo según el tipo de carga --- >>>
 
     try {
       const response = await fetch(endpoint, { // Usar el endpoint dinámico
